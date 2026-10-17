@@ -14,7 +14,7 @@ import {
   useProgress,
 } from '@react-three/drei';
 
-const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=4';
+const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=5';
 
 export const PAINT_FINISHES = [
   {
@@ -240,7 +240,8 @@ function createShowroomMaterials(selectedPaint) {
 
 /**
  * Authentic Padova Vintage Black License Plates ("463880 PD")
- * mounted under the front-right bumper and centered on the rear Kamm tail panel.
+ * Mounted dead-center under the front chrome bumper (as in alfa-raduno.jpeg)
+ * and centered on the rear Kamm tail panel between the taillights.
  */
 function VintageLicensePlates() {
   const plateTexture = useMemo(() => {
@@ -249,40 +250,58 @@ function VintageLicensePlates() {
     canvas.height = 128;
     const ctx = canvas.getContext('2d');
 
-    ctx.fillStyle = '#0f1012';
+    // Matte black vintage Italian license plate background
+    ctx.fillStyle = '#0c0d0f';
     ctx.fillRect(0, 0, 512, 128);
 
+    // Subtle raised white/silver rim
     ctx.strokeStyle = '#d8dee6';
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 4;
     ctx.strokeRect(6, 6, 500, 116);
 
+    // Authentic 1976 Italian typography: "463880" + Republic Star + "PD"
     ctx.fillStyle = '#f4f6f8';
-    ctx.font = 'bold 74px "JetBrains Mono", monospace';
+    ctx.font = 'bold 72px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('463880 PD', 256, 68);
+    ctx.fillText('463880', 194, 68);
+    ctx.fillText('PD', 418, 68);
+
+    // Small Italian Republic emblem star circle between digits and province
+    ctx.strokeStyle = '#cfd6df';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.arc(338, 66, 13, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText('★', 338, 67);
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
     tex.needsUpdate = true;
     return tex;
   }, []);
 
   return (
     <>
-      {/* Front bumper plate (offset on driver's side as in real photo) */}
-      <mesh
-        position={[-0.952, -0.102, 0.088]}
-        rotation={[0, -Math.PI / 2, 0]}
-        castShadow
-      >
-        <boxGeometry args={[0.145, 0.036, 0.006]} />
-        <meshStandardMaterial
-          map={plateTexture}
-          roughness={0.38}
-          metalness={0.12}
-        />
-      </mesh>
+      {/* Front bumper plate — DEAD CENTER (z = 0.0) under the front Scudetto & bumper */}
+      <group position={[-0.962, -0.098, 0.0]} rotation={[0, -Math.PI / 2, 0]}>
+        {/* Matte black plate holder bracket (portatarga) */}
+        <mesh position={[0, 0, -0.002]} castShadow>
+          <boxGeometry args={[0.164, 0.042, 0.005]} />
+          <meshStandardMaterial color="#121316" roughness={0.75} metalness={0.15} />
+        </mesh>
+        {/* Enameled black license plate */}
+        <mesh position={[0, 0, 0.001]} castShadow>
+          <boxGeometry args={[0.156, 0.037, 0.004]} />
+          <meshStandardMaterial
+            map={plateTexture}
+            roughness={0.34}
+            metalness={0.14}
+          />
+        </mesh>
+      </group>
 
       {/* Rear Kamm tail centered plate between taillights */}
       <mesh
@@ -293,8 +312,291 @@ function VintageLicensePlates() {
         <boxGeometry args={[0.155, 0.042, 0.006]} />
         <meshStandardMaterial
           map={plateTexture}
-          roughness={0.38}
-          metalness={0.12}
+          roughness={0.34}
+          metalness={0.14}
+        />
+      </mesh>
+    </>
+  );
+}
+
+/**
+ * High-Definition Enameled "ALFA ROMEO - MILANO" Circular Crest (Stemma Storico)
+ * Renders a 1024x1024 procedural cloisonné enamel texture with:
+ * - Outer metallic gold & chrome bezel rings
+ * - Deep navy/sapphire blue enamel border with curved gold "ALFA - ROMEO" (top)
+ *   and "MILANO" (bottom) + two Savoy figure-8 knots (nodi sabaudi)
+ * - Left half: Red Cross of Milan (Croce Rossa su campo bianco)
+ * - Right half: Crowned Visconti Serpent (Biscione verde coronato d'oro con fanciullo rosso)
+ */
+function AlfaRomeoEmblems() {
+  const emblemTexture = useMemo(() => {
+    const size = 1024;
+    const cx = size / 2;
+    const cy = size / 2;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    // 1. Outer Gold / Chrome Metallic Rim
+    const outerGrad = ctx.createLinearGradient(0, 0, size, size);
+    outerGrad.addColorStop(0, '#f7e7b4');
+    outerGrad.addColorStop(0.5, '#c89d42');
+    outerGrad.addColorStop(1, '#fff2c6');
+    ctx.fillStyle = outerGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 496, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. Deep Sapphire / Navy Blue Cloisonné Enamel Outer Ring
+    const blueGrad = ctx.createRadialGradient(cx - 80, cy - 80, 120, cx, cy, 480);
+    blueGrad.addColorStop(0, '#163868');
+    blueGrad.addColorStop(0.65, '#0b2144');
+    blueGrad.addColorStop(1, '#06152d');
+    ctx.fillStyle = blueGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 474, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 3. Inner Gold Divider Ring separating the blue border from the central heraldic shield
+    const innerR = 324;
+    ctx.strokeStyle = '#dfbd69';
+    ctx.lineWidth = 14;
+    ctx.beginPath();
+    ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 4. Inner Heraldic Circle: White Enamel Base
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, innerR - 7, 0, Math.PI * 2);
+    ctx.clip();
+
+    const whiteGrad = ctx.createRadialGradient(cx - 50, cy - 60, 40, cx, cy, innerR);
+    whiteGrad.addColorStop(0, '#ffffff');
+    whiteGrad.addColorStop(0.85, '#f2efe9');
+    whiteGrad.addColorStop(1, '#dcd6ca');
+    ctx.fillStyle = whiteGrad;
+    ctx.fillRect(0, 0, size, size);
+
+    // Subtle sky-tinted right half for the Visconti field
+    ctx.fillStyle = '#edf3f7';
+    ctx.fillRect(cx, 0, size / 2, size);
+
+    // LEFT HEMISPHERE: Red Cross of Milan (Croce Rossa su campo bianco)
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, cx - 5, size);
+    ctx.clip();
+
+    ctx.fillStyle = '#c8102e';
+    // Vertical bar of the Red Cross centered in the left hemisphere (or spanning symmetrically)
+    const crossCenterX = cx - 142;
+    ctx.fillRect(crossCenterX - 44, cy - 320, 88, 640);
+    // Horizontal bar of the Red Cross
+    ctx.fillRect(cx - 330, cy - 44, 330, 88);
+
+    // Subtle gold cloisonné outline on the Red Cross
+    ctx.strokeStyle = '#d4af53';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(crossCenterX - 44, cy - 320, 88, 640);
+    ctx.strokeRect(cx - 330, cy - 44, 330, 88);
+    ctx.restore();
+
+    // RIGHT HEMISPHERE: Crowned Visconti Biscione Serpent + Red Figure
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(cx + 5, 0, size / 2, size);
+    ctx.clip();
+
+    const bx = cx + 132;
+
+    // Red human figure emerging from the serpent's jaws (top-left of Biscione)
+    ctx.strokeStyle = '#c8102e';
+    ctx.fillStyle = '#c8102e';
+    ctx.lineWidth = 16;
+    ctx.lineCap = 'round';
+    // Head
+    ctx.beginPath();
+    ctx.arc(bx - 64, cy - 196, 15, 0, Math.PI * 2);
+    ctx.fill();
+    // Torso & outstretched arms
+    ctx.beginPath();
+    ctx.moveTo(bx - 22, cy - 170);
+    ctx.lineTo(bx - 56, cy - 182);
+    ctx.moveTo(bx - 74, cy - 218);
+    ctx.lineTo(bx - 48, cy - 176);
+    ctx.lineTo(bx - 82, cy - 160);
+    ctx.stroke();
+
+    // Golden Ducal Crown atop the serpent's head
+    ctx.fillStyle = '#e0b854';
+    ctx.strokeStyle = '#9c7420';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(bx - 6, cy - 216);
+    ctx.lineTo(bx - 14, cy - 248);
+    ctx.lineTo(bx + 6, cy - 232);
+    ctx.lineTo(bx + 22, cy - 254);
+    ctx.lineTo(bx + 36, cy - 232);
+    ctx.lineTo(bx + 54, cy - 246);
+    ctx.lineTo(bx + 44, cy - 216);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Green Visconti Serpent (Biscione) — sinuous 3-coil S-curve body + open jaws
+    ctx.strokeStyle = '#0d6b52';
+    ctx.lineWidth = 38;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    // Head & jaws
+    ctx.moveTo(bx - 20, cy - 198);
+    ctx.quadraticCurveTo(bx + 36, cy - 208, bx + 38, cy - 162);
+    // Coil 1 (upper)
+    ctx.bezierCurveTo(bx + 40, cy - 118, bx - 48, cy - 110, bx - 44, cy - 62);
+    // Coil 2 (middle)
+    ctx.bezierCurveTo(bx - 40, cy - 12, bx + 58, cy - 8, bx + 52, cy + 46);
+    // Coil 3 (lower)
+    ctx.bezierCurveTo(bx + 46, cy + 98, bx - 44, cy + 96, bx - 34, cy + 148);
+    ctx.stroke();
+
+    // Tapering serpent tail loop at bottom
+    ctx.lineWidth = 24;
+    ctx.beginPath();
+    ctx.moveTo(bx - 34, cy + 148);
+    ctx.bezierCurveTo(bx - 24, cy + 194, bx + 42, cy + 186, bx + 18, cy + 236);
+    ctx.stroke();
+
+    // Gold cloisonné highlight along the serpent spine
+    ctx.strokeStyle = '#dfbd69';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(bx + 18, cy - 188);
+    ctx.bezierCurveTo(bx + 38, cy - 122, bx - 42, cy - 110, bx - 38, cy - 62);
+    ctx.bezierCurveTo(bx - 34, cy - 12, bx + 54, cy - 8, bx + 48, cy + 46);
+    ctx.bezierCurveTo(bx + 42, cy + 98, bx - 40, cy + 96, bx - 30, cy + 148);
+    ctx.stroke();
+    ctx.restore();
+
+    // Central Vertical Gold Cloisonné Divider Line
+    ctx.fillStyle = '#dfbd69';
+    ctx.fillRect(cx - 6, cy - innerR, 12, innerR * 2);
+
+    ctx.restore();
+
+    // 5. Curved Gold Typography on Navy Border: "ALFA - ROMEO" (top) & "MILANO" (bottom)
+    const textRadius = 398;
+    ctx.fillStyle = '#f3d88c';
+    ctx.font = 'bold 64px "Cormorant Garamond", Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Helper for top arc text ("ALFA - ROMEO")
+    const topText = 'ALFA - ROMEO';
+    const topStartAngle = -Math.PI / 2 - 0.98;
+    const topEndAngle = -Math.PI / 2 + 0.98;
+    for (let i = 0; i < topText.length; i++) {
+      const charAngle =
+        topStartAngle +
+        (i / (topText.length - 1)) * (topEndAngle - topStartAngle);
+      ctx.save();
+      ctx.translate(
+        cx + Math.cos(charAngle) * textRadius,
+        cy + Math.sin(charAngle) * textRadius
+      );
+      ctx.rotate(charAngle + Math.PI / 2);
+      ctx.fillText(topText[i], 0, 0);
+      ctx.restore();
+    }
+
+    // Helper for bottom arc text ("MILANO")
+    const botText = 'MILANO';
+    const botStartAngle = Math.PI / 2 + 0.56;
+    const botEndAngle = Math.PI / 2 - 0.56;
+    for (let i = 0; i < botText.length; i++) {
+      const charAngle =
+        botStartAngle +
+        (i / (botText.length - 1)) * (botEndAngle - botStartAngle);
+      ctx.save();
+      ctx.translate(
+        cx + Math.cos(charAngle) * textRadius,
+        cy + Math.sin(charAngle) * textRadius
+      );
+      ctx.rotate(charAngle - Math.PI / 2);
+      ctx.fillText(botText[i], 0, 0);
+      ctx.restore();
+    }
+
+    // 6. Two Gold Savoy Figure-8 Knots (Nodi Sabaudi) at Left (9 o'clock) and Right (3 o'clock)
+    ctx.strokeStyle = '#e8c872';
+    ctx.lineWidth = 10;
+    [-1, 1].forEach((side) => {
+      const kx = cx + side * textRadius;
+      const ky = cy + 12;
+      ctx.beginPath();
+      ctx.arc(kx - 16, ky, 15, 0, Math.PI * 2);
+      ctx.arc(kx + 16, ky, 15, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+
+    // 7. Subtle Clearcoat Gloss Highlight across upper-left dome
+    const glossGrad = ctx.createRadialGradient(
+      cx - 140,
+      cy - 160,
+      20,
+      cx - 100,
+      cy - 120,
+      360
+    );
+    glossGrad.addColorStop(0, 'rgba(255, 255, 255, 0.26)');
+    glossGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.06)');
+    glossGrad.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+    ctx.fillStyle = glossGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 480, 0, Math.PI * 2);
+    ctx.fill();
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    tex.needsUpdate = true;
+    return tex;
+  }, []);
+
+  return (
+    <>
+      {/* Front Scudetto Top-Center Alfa Romeo - Milano Enameled Emblem */}
+      <mesh
+        position={[-0.9685, 0.020, 0.0]}
+        rotation={[0, -Math.PI / 2, 0]}
+      >
+        <circleGeometry args={[0.0138, 64]} />
+        <meshPhysicalMaterial
+          map={emblemTexture}
+          metalness={0.22}
+          roughness={0.14}
+          clearcoat={1.0}
+          clearcoatRoughness={0.04}
+          envMapIntensity={1.4}
+        />
+      </mesh>
+
+      {/* Rear Kamm Tail Trunk Center Alfa Romeo - Milano Enameled Emblem */}
+      <mesh
+        position={[0.941, 0.068, 0.0]}
+        rotation={[0, Math.PI / 2, 0]}
+      >
+        <circleGeometry args={[0.014, 64]} />
+        <meshPhysicalMaterial
+          map={emblemTexture}
+          metalness={0.22}
+          roughness={0.14}
+          clearcoat={1.0}
+          clearcoatRoughness={0.04}
+          envMapIntensity={1.4}
         />
       </mesh>
     </>
@@ -421,6 +723,7 @@ function AlfaRomeoModel({ activePaintId }) {
       <group rotation={[0, Math.PI / 2, 0]}>
         <primitive object={preparedScene} />
         <VintageLicensePlates />
+        <AlfaRomeoEmblems />
       </group>
     </Center>
   );

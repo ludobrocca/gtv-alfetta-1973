@@ -468,12 +468,18 @@ def build_alfetta_gtv():
     m_chrome.add_box([-0.115, 0.125, 0.392], [0.014, 0.024, 0.028])
     m_chrome.add_box([-0.110, 0.138, 0.408], [0.044, 0.028, 0.022])
 
-    # Twin Chrome Windshield Wipers
+    # Twin Chrome Windshield Wipers + Hood Cowl Louvers + Washer Nozzles (from alfa-raduno.jpeg)
     for z_wiper in (-0.11, 0.11):
         m_chrome.add_box([-0.285, 0.120, z_wiper], [0.010, 0.005, 0.175], rotation_y=0.18)
+    for side in (-1.0, 1.0):
+        # Cowl air intake grille slots at base of windshield
+        m_rubber.add_box([-0.335, 0.114, side * 0.125], [0.032, 0.004, 0.145], rotation_z=0.04)
+        # Tiny black hood windshield washer nozzles
+        m_rubber.add_box([-0.465, 0.104, side * 0.145], [0.009, 0.006, 0.006])
 
     # Front grille recess, lower valence, chin spoiler & rear Kamm tail panel
-    m_rubber.add_box([-0.942, -0.002, 0.0], [0.025, 0.072, 0.635])
+    m_rubber.add_box([-0.942, 0.002, 0.0], [0.025, 0.066, 0.635])
+    m_paint.add_box([-0.946, -0.038, 0.0], [0.024, 0.022, 0.630])
     m_paint.add_box([-0.915, -0.122, 0.0], [0.035, 0.055, 0.590], rotation_z=0.22)
     m_rubber.add_box([-0.902, -0.158, 0.0], [0.028, 0.028, 0.550], rotation_z=0.15)
     m_paint.add_box([0.924, 0.018, 0.0], [0.024, 0.210, 0.630], rotation_z=-0.06)
@@ -485,41 +491,101 @@ def build_alfetta_gtv():
             m_rubber.add_cylinder_z(ax, AXLE_Y, side * 0.20, side * 0.34, ARCH_RADIUS * 0.97, r_inner=0.0, segs=40)
 
     # =========================================================================
-    # 3. FRONT CALANDRA, SCUDETTO ALFA ROMEO, TWIN CHROME BARS & 4 CARELLO HEADLIGHTS
+    # 3. FRONT CALANDRA, SCUDETTO ALFA ROMEO, CHROME BAFFO & 4 CARELLO HEADLIGHTS
     # =========================================================================
-    for y_slat in np.linspace(-0.028, 0.026, 6):
-        m_rubber.add_box([-0.950, y_slat, 0.0], [0.012, 0.004, 0.620])
+    # Horizontal black slats across the recessed upper grille
+    for y_slat in np.linspace(-0.024, 0.026, 7):
+        m_rubber.add_box([-0.950, y_slat, 0.0], [0.012, 0.0035, 0.620])
 
+    # Signature single horizontal chrome bar ("baffo cromato") on left & right of Scudetto
     for side in (-1.0, 1.0):
-        for y_bar in (-0.008, 0.008):
-            m_chrome.add_box([-0.954, y_bar, side * 0.105], [0.012, 0.0055, 0.105])
+        m_chrome.add_box([-0.955, 0.002, side * 0.098], [0.012, 0.0065, 0.098])
+        # Lower front valence horizontal air slots (between grille and bumper) with chrome surround
+        m_rubber.add_box([-0.954, -0.038, side * 0.096], [0.014, 0.011, 0.106])
+        m_chrome.add_box([-0.956, -0.032, side * 0.096], [0.014, 0.0025, 0.108])
+        m_chrome.add_box([-0.956, -0.044, side * 0.096], [0.014, 0.0025, 0.108])
 
-    # Central 3D Chrome Alfa Romeo Scudetto Shield
-    m_chrome.add_box([-0.958, 0.024, 0.0], [0.014, 0.008, 0.092])
-    for side in (-1.0, 1.0):
-        for k in range(7):
-            t = k / 6.0
-            yk = 0.024 - t * 0.072
-            zk = side * (0.044 * (1.0 - t * 0.88))
-            m_chrome.add_box([-0.958, yk, zk], [0.015, 0.015, 0.009])
-    m_chrome.add_cylinder_x(-0.966, -0.955, 0.016, 0.0, 0.013, segs=24)
+    # Central 3D Chrome Alfa Romeo Scudetto Shield (Smooth 64-segment swept tubular frame + inner slats)
+    scud_segs = 64
+    scud_r_tube = 0.0052
+    t_segs = 14
+    scud_grid = np.zeros((scud_segs, t_segs, 3), dtype=np.float32)
 
-    # 4 Circular Carello Headlights
+    # Parametric heart-shield contour in (y, z) from top-center -> top-right corner -> bottom point -> top-left corner -> top-center
+    spine_pts = []
+    for i in range(scud_segs):
+        u = i / scud_segs
+        ang = u * 2.0 * math.pi
+        # Classic Alfa Scudetto: wide flat top at y=+0.030 (|z| up to 0.048), tapering V-sides down to rounded point at y=-0.055, z=0
+        s = math.sin(ang)
+        c = math.cos(ang)
+        if c >= 0:
+            # Upper half / top bar with rounded corners
+            y_p = 0.030 - 0.012 * (1.0 - (c ** 0.35))
+            z_p = 0.048 * math.copysign(abs(s) ** 0.65, s)
+        else:
+            # Lower V-taper down to rounded tip at y = -0.055 (reaching down toward the chrome bumper)
+            t_low = abs(c)
+            y_p = 0.018 - 0.073 * (t_low ** 0.85)
+            z_p = 0.048 * s * ((1.0 - t_low) ** 0.58 + 0.08 * (1.0 - t_low))
+        # Forward rake following the shark-nose angle
+        x_p = -0.962 + (0.030 - y_p) * 0.075
+        spine_pts.append(np.array([x_p, y_p, z_p], dtype=np.float64))
+
+    spine_pts = np.array(spine_pts)
+    for i in range(scud_segs):
+        p_prev = spine_pts[(i - 1) % scud_segs]
+        p_curr = spine_pts[i]
+        p_next = spine_pts[(i + 1) % scud_segs]
+        tang = p_next - p_prev
+        tang /= np.linalg.norm(tang) + 1e-9
+        n1 = np.array([-1.0, 0.0, 0.0], dtype=np.float64)
+        n2 = np.cross(tang, n1)
+        n2 /= np.linalg.norm(n2) + 1e-9
+        for j in range(t_segs):
+            phi = (j / t_segs) * 2.0 * math.pi
+            offset = scud_r_tube * (math.cos(phi) * n1 + math.sin(phi) * n2)
+            scud_grid[i, j] = p_curr + offset
+
+    m_chrome.add_grid(scud_grid, flip=False, close_u=True, close_v=True)
+
+    # Dark recessed backing inside Scudetto + 5 horizontal chrome slats + central vertical chrome spine
+    for y_s in [-0.040, -0.028, -0.016, -0.004, 0.008]:
+        w_slat = max(0.012, 0.018 + (y_s + 0.046) * 0.96)
+        x_s = -0.959 + (0.030 - y_s) * 0.075
+        m_chrome.add_box([x_s, y_s, 0.0], [0.006, 0.0028, w_slat])
+        m_rubber.add_box([x_s + 0.003, y_s, 0.0], [0.004, 0.009, w_slat * 0.96])
+
+    # Central vertical chrome spine inside Scudetto below the circular badge
+    m_chrome.add_box([-0.958, -0.018, 0.0], [0.007, 0.062, 0.0040], rotation_z=0.075)
+
+    # Sculpted Circular Chrome Bezel at top center of Scudetto for the Alfa Romeo Milano Enameled Badge
+    m_chrome.add_cylinder_x(-0.968, -0.957, 0.020, 0.0, 0.0160, r_inner=0.0136, segs=48, bevel=0.0012)
+    m_chrome.add_cylinder_x(-0.966, -0.957, 0.020, 0.0, 0.0140, r_inner=0.0, segs=48)
+
+    # 4 Circular Carello Headlights with deep chrome bezels
     for side in (-1.0, 1.0):
         for z_pos, radius in [(0.258, 0.033), (0.180, 0.030)]:
             cz = side * z_pos
-            cy = 0.000
+            cy = 0.004
             m_chrome.add_cylinder_x(-0.962, -0.942, cy, cz, radius + 0.0045, r_inner=radius - 0.002, segs=36, bevel=0.001)
             m_headlight.add_cylinder_x(-0.960, -0.948, cy, cz, radius - 0.001, r_inner=0.0, segs=36, bevel=0.002)
 
     # =========================================================================
-    # 4. FRONT & REAR CHROME BLADE BUMPERS + RUBBER OVERRIDERS + TURN SIGNALS
+    # 4. FRONT & REAR CHROME BLADE BUMPERS + RUBBER OVERRIDERS + BICOLOR TURN SIGNALS
     # =========================================================================
-    m_chrome.add_box([-0.962, -0.068, 0.0], [0.032, 0.026, 0.660])
+    # Bicolor Front Turn Signals / Parking Lights mounted ABOVE the bumper (amber outer, clear inner)
     for side in (-1.0, 1.0):
-        m_chrome.add_box([-0.915, -0.068, side * 0.342], [0.095, 0.025, 0.028], rotation_y=side * 0.22)
-        m_rubber.add_box([-0.968, -0.066, side * 0.168], [0.038, 0.046, 0.034])
-        m_amber.add_box([-0.956, -0.068, side * 0.258], [0.026, 0.018, 0.068])
+        m_chrome.add_box([-0.955, -0.038, side * 0.224], [0.016, 0.016, 0.096])
+        m_amber.add_box([-0.958, -0.038, side * 0.246], [0.016, 0.013, 0.048])
+        m_headlight.add_box([-0.958, -0.038, side * 0.198], [0.016, 0.013, 0.044])
+
+    # Front Chrome Blade Bumper with black rubber insert strip & rubber overriders (rostri)
+    m_chrome.add_box([-0.966, -0.068, 0.0], [0.034, 0.025, 0.665])
+    m_rubber.add_box([-0.980, -0.068, 0.0], [0.008, 0.010, 0.655])
+    for side in (-1.0, 1.0):
+        m_chrome.add_box([-0.918, -0.068, side * 0.342], [0.098, 0.024, 0.028], rotation_y=side * 0.22)
+        m_rubber.add_box([-0.974, -0.066, side * 0.162], [0.042, 0.044, 0.036])
 
     m_chrome.add_box([0.948, -0.055, 0.0], [0.032, 0.028, 0.650])
     for side in (-1.0, 1.0):

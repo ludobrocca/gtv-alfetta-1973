@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import {
   Camera,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Eye,
   EyeOff,
   FileText,
@@ -25,22 +27,62 @@ import CarViewer, {
 const DEDICATION_STORAGE_KEY = 'alfa_romeo_1973_dedication';
 const DEFAULT_DEDICATION = 'Per Papà — Passione senza tempo';
 
+const REAL_PHOTOS = [
+  {
+    src: '/images/alfa-profilo.jpeg',
+    title: 'Profilo Laterale • Linea Giugiaro',
+    location: 'Colli Veneti • Vista Ortogonale',
+    caption:
+      'Profilo fastback puro senza spoiler, presa d’aria sul montante C con scritta GTV, tappo serbatoio nero, cerchi a 16 fori e adesivi storici ASI / Club Alfetta.',
+  },
+  {
+    src: '/images/alfa-raduno.jpeg',
+    title: 'Raduno Storico • Scheda Ufficiale N. 27',
+    location: 'Circolo Patavino Auto Storiche',
+    caption:
+      'Scheda espositiva N. 27: Alfa Romeo Alfetta GTV (Cat. B2 • 2000 cc), calandra nera con doppi baffi cromati, 4 proiettori Carello e targa 463880 PD.',
+  },
+  {
+    src: '/images/alfa-originale.jpeg',
+    title: 'Grand Hotel Trieste & Victoria (3/4)',
+    location: 'Abano Terme (PD)',
+    caption:
+      'Riflessi cielo sul cofano in Grigio Chiaro Metallizzato AR 727, paraurti a lama cromati con rostri in gomma nera e indicatori ambra.',
+  },
+  {
+    src: '/images/alfa-hotel.jpeg',
+    title: 'Piazzale Storico • Vista Anteriore Sinistra',
+    location: 'Abano Terme (PD)',
+    caption:
+      'Dettaglio dello specchietto cromato, tergicristalli, guarnizioni inox dei cristalli verdi e volante con corona in legno.',
+  },
+  {
+    src: '/images/alfa-parco.jpeg',
+    title: 'Viale Alberato • 3/4 Anteriore',
+    location: 'Abano Terme (PD)',
+    caption:
+      'Proporzioni da coupé Gran Turismo firmate da Giorgetto Giugiaro (Italdesign) con ripartizione dei pesi 50:50 Transaxle.',
+  },
+];
+
 const HISTORICAL_SPECS = [
   {
     label: 'Esemplare & Targa Storica',
-    value: 'Targa Nera Originale 463880 PD (Padova)',
-    detail: 'Grigio Chiaro Metallizzato (Codice Alfa Romeo AR 727)',
+    value: 'Targa Nera Originale 463880 PD • Scheda N. 27',
+    detail:
+      'Grigio Chiaro Metallizzato (AR 727) • Circolo Patavino Auto Storiche / ASI',
   },
   {
     label: 'Frontale & Gruppi Ottici',
     value: 'Quattro Proiettori Circolari Carello',
     detail:
-      'Calandra nera con baffi cromati, Scudetto Alfa Romeo e paraurti a lama con rostri in gomma',
+      'Calandra nera con doppi baffi cromati GTV, Scudetto Alfa Romeo e paraurti con rostri in gomma',
   },
   {
-    label: 'Motore',
-    value: 'Bialbero Alfa Romeo 4 cilindri in linea',
-    detail: '1.779 cc • Basamento e testata in lega leggera • 122 CV a 5.500 giri/min',
+    label: 'Motore Bialbero Alfa Romeo',
+    value: '4 cilindri in linea • Doppio albero a camme in testa',
+    detail:
+      'Basamento e testata in lega leggera • 2 carburatori doppio corpo Dell’Orto / Weber',
   },
   {
     label: 'Architettura Transaxle',
@@ -50,24 +92,27 @@ const HISTORICAL_SPECS = [
   {
     label: 'Sospensioni & Freni',
     value: 'Ponte De Dion con parallelogramma di Watt',
-    detail: '4 freni a disco (posteriori entrobordo all’uscita del differenziale)',
+    detail:
+      '4 freni a disco (posteriori entrobordo all’uscita del differenziale)',
   },
   {
-    label: 'Stile & Carrozzeria',
+    label: 'Stile & Dettagli Carrozzeria',
     value: 'Giorgetto Giugiaro • Italdesign',
-    detail: 'Coupé Fastback con coda tronca • Cerchi argento con coprimozzo cromato',
+    detail:
+      'Coupé Fastback coda tronca • Montante C con fregio GTV • Cerchi a 16 fori con coprimozzo cromato',
   },
 ];
 
 export default function App() {
   const [autoRotate, setAutoRotate] = useState(true);
   const [lightingMode, setLightingMode] = useState('night'); // 'night' | 'studio'
-  const [activePaintId, setActivePaintId] = useState('argento');
+  const [activePaintId, setActivePaintId] = useState('ar727-reale');
   const [activePresetId, setActivePresetId] = useState('hero');
   const [cameraRequest, setCameraRequest] = useState(null);
 
   const [showSpecs, setShowSpecs] = useState(false);
   const [showRealPhoto, setShowRealPhoto] = useState(false);
+  const [photoIndex, setPhotoIndex] = useState(0);
   const [hudHidden, setHudHidden] = useState(false);
 
   // Dedication state persisted in localStorage
@@ -124,6 +169,7 @@ export default function App() {
 
   const currentPaint =
     PAINT_FINISHES.find((p) => p.id === activePaintId) || PAINT_FINISHES[0];
+  const currentPhoto = REAL_PHOTOS[photoIndex] || REAL_PHOTOS[0];
 
   return (
     <main
@@ -257,7 +303,7 @@ export default function App() {
             }`}
           >
             <ImageIcon className="w-4 h-4 text-alfa-gold" />
-            <span>Foto Originale</span>
+            <span>Foto Reali (5)</span>
           </button>
 
           <button
@@ -275,7 +321,7 @@ export default function App() {
             }`}
           >
             <FileText className="w-4 h-4 text-alfa-gold" />
-            <span>Scheda Tecnica 1973</span>
+            <span>Scheda Tecnica</span>
           </button>
 
           <button
@@ -305,45 +351,92 @@ export default function App() {
         </button>
       )}
 
-      {/* FOTO ORIGINALE ESEMPLARE REALE (463880 PD) DRAWER / LIGHTBOX */}
+      {/* GALLERIA FOTO REALI ESEMPLARE (463880 PD) DRAWER / CAROUSEL */}
       {showRealPhoto && !hudHidden && (
         <aside
-          className={`pointer-events-auto fixed top-24 right-4 sm:right-6 lg:right-8 z-30 w-[calc(100vw-2rem)] sm:w-[420px] rounded-2xl p-4 sm:p-5 transition-all duration-300 ${glassClass}`}
+          className={`pointer-events-auto fixed top-24 right-4 sm:right-6 lg:right-8 z-30 w-[calc(100vw-2rem)] sm:w-[440px] rounded-2xl p-4 sm:p-5 transition-all duration-300 ${glassClass}`}
         >
           <div className="flex items-start justify-between gap-4 pb-3 mb-3 border-b border-current/10">
             <div>
               <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-alfa-gold block">
-                ESEMPLARE REALE • TARGA 463880 PD
+                GALLERIA REALE ({photoIndex + 1}/{REAL_PHOTOS.length}) • TARGA 463880 PD
               </span>
               <h2 className="font-serif text-xl font-semibold">
-                La Vera Alfetta di Papà
+                {currentPhoto.title}
               </h2>
             </div>
             <button
               type="button"
               onClick={() => setShowRealPhoto(false)}
               className="p-1.5 rounded-lg opacity-70 hover:opacity-100 transition"
-              aria-label="Chiudi foto originale"
+              aria-label="Chiudi galleria foto"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="relative rounded-xl overflow-hidden border border-white/15 shadow-lg mb-3 bg-black/30">
+          <div className="relative rounded-xl overflow-hidden border border-white/15 shadow-lg mb-3 bg-black/40 group">
             <img
-              src="/images/alfa-originale.jpeg"
-              alt="Alfa Romeo Alfetta GT/GTV Targa 463880 PD in Grigio Chiaro Metallizzato"
-              className="w-full h-56 sm:h-64 object-cover object-center"
+              src={currentPhoto.src}
+              alt={currentPhoto.title}
+              className="w-full h-60 sm:h-64 object-cover object-center transition-all duration-300"
             />
+
+            {/* Prev / Next Navigation Buttons */}
+            <button
+              type="button"
+              onClick={() =>
+                setPhotoIndex(
+                  (prev) => (prev - 1 + REAL_PHOTOS.length) % REAL_PHOTOS.length
+                )
+              }
+              aria-label="Foto precedente"
+              className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-black/65 text-white hover:bg-black/85 transition"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setPhotoIndex((prev) => (prev + 1) % REAL_PHOTOS.length)
+              }
+              aria-label="Foto successiva"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-black/65 text-white hover:bg-black/85 transition"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
             <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-black/75 backdrop-blur-md text-zinc-100 text-[11px] font-mono">
-              <span className="inline-flex items-center gap-1">
-                <MapPin className="w-3 h-3 text-alfa-gold" />
-                Abano Terme • Hotel Trieste &amp; Victoria
+              <span className="inline-flex items-center gap-1 truncate">
+                <MapPin className="w-3 h-3 text-alfa-gold shrink-0" />
+                {currentPhoto.location}
               </span>
-              <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-600 font-bold">
+              <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-600 font-bold shrink-0">
                 463880 PD
               </span>
             </div>
+          </div>
+
+          {/* Thumbnail selector strip */}
+          <div className="grid grid-cols-5 gap-1.5 mb-3">
+            {REAL_PHOTOS.map((photo, idx) => (
+              <button
+                key={photo.src}
+                type="button"
+                onClick={() => setPhotoIndex(idx)}
+                className={`relative h-11 rounded-lg overflow-hidden border transition-all ${
+                  idx === photoIndex
+                    ? 'border-alfa-gold ring-1 ring-alfa-gold scale-[1.03]'
+                    : 'border-white/10 opacity-65 hover:opacity-100'
+                }`}
+              >
+                <img
+                  src={photo.src}
+                  alt={photo.title}
+                  className="w-full h-full object-cover"
+                />
+              </button>
+            ))}
           </div>
 
           <p
@@ -351,18 +444,12 @@ export default function App() {
               isLight ? 'text-zinc-700' : 'text-zinc-300'
             }`}
           >
-            Finitura originale{' '}
-            <strong className="text-alfa-gold font-medium">
-              Grigio Chiaro Metallizzato (AR 727)
-            </strong>
-            , calandra a quattro proiettori circolari Carello con baffi cromati
-            e Scudetto Alfa Romeo centrale, paraurti a lama con rostri in gomma
-            nera e targa storica originale di Padova.
+            {currentPhoto.caption}
           </p>
         </aside>
       )}
 
-      {/* SCHEDA TECNICA 1973 DRAWER / MODAL */}
+      {/* SCHEDA TECNICA DRAWER / MODAL */}
       {showSpecs && !hudHidden && (
         <aside
           className={`pointer-events-auto fixed top-24 right-4 sm:right-6 lg:right-8 z-30 w-[calc(100vw-2rem)] sm:w-96 rounded-2xl p-5 transition-all duration-300 ${glassClass}`}
@@ -373,7 +460,7 @@ export default function App() {
                 OMOLOGAZIONE STORICA • ARESE
               </span>
               <h2 className="font-serif text-xl font-semibold">
-                Specifiche Tecniche (1973)
+                Specifiche Esemplare (463880 PD)
               </h2>
             </div>
             <button
@@ -463,7 +550,7 @@ export default function App() {
               </div>
 
               <span
-                className={`hidden sm:inline-block text-xs font-serif italic truncate max-w-[220px] ${
+                className={`hidden sm:inline-block text-xs font-serif italic truncate max-w-[230px] ${
                   isLight ? 'text-zinc-700' : 'text-zinc-300'
                 }`}
               >

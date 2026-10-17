@@ -19,5 +19,9 @@ yarn-error.log*
 .idea/
 .vscode/
 
+# Python cache
+__pycache__/
+*.py[cod]
+
 # Note: public/models/*.glb is intentionally NOT ignored so the 3D model is tracked in Git.
 !public/models/*.glb

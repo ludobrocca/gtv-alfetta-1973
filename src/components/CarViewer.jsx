@@ -1375,7 +1375,7 @@ function ShowroomAtmosphere({ lightingMode, sceneMode }) {
         color={isLight ? '#fffdf8' : '#f4f7ff'}
         castShadow
         shadow-mapSize={[2048, 2048]}
-        shadow-bias={-0.00015}
+        shadow-bias={0.00005}
         shadow-camera-near={0.5}
         shadow-camera-far={isDrive ? 60 : 20}
         shadow-camera-left={isDrive ? -15 : -4}
@@ -1469,7 +1469,6 @@ export default function CarViewer({
               <mesh
                 rotation={[-Math.PI / 2, 0, 0]}
                 position={[0, -0.015, 0]}
-                receiveShadow
               >
                 <circleGeometry args={[12, 64]} />
                 <MeshReflectorMaterial

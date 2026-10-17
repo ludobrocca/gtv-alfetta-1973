@@ -928,28 +928,30 @@ def build_alfetta_gtv():
 
     # Slim matte-black underbody floor pan, tucked inside the sills and kept clear of the tyres:
     # - central section between the wheel arches spans the full width up to the rocker sills
-    # - nose & tail sections stay narrower than the tyres' inner faces (|z| = 0.235)
+    # - nose & tail sections stay narrower than the tyres' inner faces (|z| = 0.235) and never protrude past the valence
     FLOOR_Y = -0.172
     m_rubber.add_box([-0.003, FLOOR_Y, 0.0], [0.770, 0.010, 0.660])            # between the arches
-    m_rubber.add_box([-0.655, FLOOR_Y + 0.010, 0.0], [0.520, 0.010, 0.420])    # front, between the wheels
-    m_rubber.add_box([0.650, FLOOR_Y + 0.010, 0.0], [0.520, 0.010, 0.420])     # rear, between the wheels
+    m_rubber.add_box([-0.575, FLOOR_Y + 0.010, 0.0], [0.360, 0.010, 0.400])    # front, between the wheels (stops at x=-0.755)
+    m_rubber.add_box([-0.815, -0.136, 0.0], [0.130, 0.010, 0.380], rotation_z=0.18) # front angled splash guard behind valence
+    m_rubber.add_box([0.570, FLOOR_Y + 0.010, 0.0], [0.360, 0.010, 0.400])     # rear, between the wheels (stops at x=0.750)
+    m_rubber.add_box([0.795, -0.142, 0.0], [0.120, 0.010, 0.380], rotation_z=-0.16) # rear angled splash guard behind Kamm tail
 
-    # Open wheel-arch liners: thin curved shells ABOVE the tyres (never solid discs) + an inner wall
-    # that only fills the arch region above the floor, so nothing pokes out below the tyres.
-    LINER_R = 0.180
+    # Open wheel-arch liners: thin curved shells ABOVE the tyres tucked safely inside the wheel wells
+    # (r = 0.176, z_out = 0.310, well clear of the outer painted fender arch at z = 0.380+) + inner wall.
+    LINER_R = 0.176
     LINER_Z_IN = 0.212
     a_floor = math.asin(max(-1.0, min(1.0, (FLOOR_Y - AXLE_Y) / LINER_R)))
-    liner_angles = np.linspace(a_floor, math.pi - a_floor, 40)
+    liner_angles = np.linspace(a_floor, math.pi - a_floor, 36)
     for ax in (FRONT_AXLE_X, REAR_AXLE_X):
         for side in (-1.0, 1.0):
-            z_out = float(f_z_bot(ax)) - 0.004
+            z_out = side * 0.310
             shell = np.zeros((len(liner_angles), 2, 3), dtype=np.float32)
             wall = np.zeros((len(liner_angles), 2, 3), dtype=np.float32)
             for i, a in enumerate(liner_angles):
                 px = ax + LINER_R * math.cos(a)
                 py = AXLE_Y + LINER_R * math.sin(a)
                 shell[i, 0] = [px, py, side * LINER_Z_IN]
-                shell[i, 1] = [px, py, side * z_out]
+                shell[i, 1] = [px, py, z_out]
                 wall[i, 0] = [px, py, side * LINER_Z_IN]
                 wall[i, 1] = [px, FLOOR_Y, side * LINER_Z_IN]
             m_rubber.add_grid(shell, flip=(side < 0))

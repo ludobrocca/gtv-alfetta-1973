@@ -706,21 +706,29 @@ def build_alfetta_gtv():
     m_chrome.add_cylinder_x(0.930, 0.940, 0.068, 0.0, 0.015, segs=24)
 
     # =========================================================================
-    # 5. FOUR TRUE 3D CAMPAGNOLO / ALFA 16-SLOT WHEELS & PIRELLI TIRES
+    # 5. FOUR TRUE 3D CAMPAGNOLO / FPS ALFA ROMEO ALLOY WHEELS & PIRELLI TIRES
+    # Matching alfa-parco.jpeg & alfa-profilo.jpeg:
+    # - Stepped deep-dish machined outer rim lip (canale esterno a gradini) + chrome valve stem
+    # - 20 true open rectangular radial cooling slots (20 feritoie rettangolari passanti)
+    #   with 20 raised 3D radial alloy spokes over a dark brake/hub backing
+    # - Sculpted inner dome ring & recessed central lug bowl
+    # - 4x98 PCD: 4 recessed lug pockets with 4 chrome hexagonal lug bolts (4 colonnette)
+    # - Protruding metallic center cap (coprimozzo centrale metallizzato) with beveled bezel
     # =========================================================================
     R_TIRE = 0.168
-    R_RIM = 0.106
-    R_HUB = 0.034
+    R_RIM = 0.108
+    R_HUB = 0.023
 
     def add_wheel(ax, ay, side):
         z_inner = side * 0.235
         z_outer = side * 0.368
-        z_face = side * 0.356
+        z_face = side * 0.354
 
-        u_segs = 14
-        v_segs = 48
+        # 1. Pirelli Cinturato CN36 Tire Carcass & Sidewall Profile (64 angular segments)
+        u_segs = 18
+        v_segs = 64
         tire_grid = np.zeros((u_segs, v_segs, 3), dtype=np.float32)
-        u_angles = np.linspace(-math.pi * 0.85, math.pi * 0.85, u_segs)
+        u_angles = np.linspace(-math.pi * 0.86, math.pi * 0.86, u_segs)
         r_mid = 0.5 * (R_TIRE + R_RIM)
         r_tube = 0.5 * (R_TIRE - R_RIM)
         z_mid = 0.5 * (z_inner + z_outer)
@@ -729,8 +737,10 @@ def build_alfetta_gtv():
         for i, ua in enumerate(u_angles):
             su = math.sin(ua)
             cu = math.cos(ua)
-            r_curr = r_mid + r_tube * (abs(cu) ** 0.65) * (1.0 if cu >= 0 else -1.0)
-            z_curr = z_mid + side * z_half_w * (abs(su) ** 0.75) * (1.0 if su >= 0 else -1.0)
+            # Subtle tread shoulder block & sidewall contour
+            tread_groove = -0.0015 * math.cos(ua * 10.0) if abs(ua) < 0.55 else 0.0
+            r_curr = r_mid + r_tube * (abs(cu) ** 0.62) * (1.0 if cu >= 0 else -1.0) + tread_groove
+            z_curr = z_mid + side * z_half_w * (abs(su) ** 0.74) * (1.0 if su >= 0 else -1.0)
             for j in range(v_segs):
                 va = (j / v_segs) * 2.0 * math.pi
                 tire_grid[i, j] = [
@@ -740,32 +750,139 @@ def build_alfetta_gtv():
                 ]
         m_rubber.add_grid(tire_grid, flip=(side > 0), close_v=True)
 
-        m_rubber.add_cylinder_z(ax, ay, z_face - side * 0.012, z_face - side * 0.004, R_RIM * 0.96, segs=36)
+        # 2. Dark Recessed Brake Disc & Backing Plate behind the open 20 wheel slots
+        m_rubber.add_cylinder_z(
+            ax, ay,
+            z_face - side * 0.014,
+            z_face - side * 0.0035,
+            R_RIM * 0.96,
+            segs=48
+        )
 
-        r_segs = 12
-        a_segs = 64
-        rim_grid = np.zeros((r_segs, a_segs, 3), dtype=np.float32)
-        radii = np.linspace(R_HUB, R_RIM, r_segs)
-        for i, r in enumerate(radii):
-            t_r = (r - R_HUB) / (R_RIM - R_HUB)
-            dish_z = 0.008 * math.sin(t_r * math.pi * 1.6)
-            for j in range(a_segs):
-                va = (j / a_segs) * 2.0 * math.pi
-                slot_weight = math.sin(max(0.0, min(1.0, (t_r - 0.32) / 0.46)) * math.pi)
-                slot_depth = -0.0065 * slot_weight * max(0.0, math.cos(16.0 * va))
-                rim_grid[i, j] = [
-                    ax + r * math.cos(va),
-                    ay + r * math.sin(va),
-                    z_face + side * (dish_z + slot_depth),
-                ]
-        m_rim.add_grid(rim_grid, flip=(side < 0), close_v=True)
+        # 3. Continuous Stepped Alloy Rim Profile (from outer bead flange r=0.108 down to center cap r=0.023)
+        # Note: Between r=0.062 and r=0.083 (the 20-slot zone), the base surface dips back into the
+        # dark recess so the 20 individual 3D radial alloy spokes stand out in crisp relief!
+        profile_rz = [
+            # (radius, z_offset_from_z_face)
+            (0.1095,  0.0085),  # Outer tire bead flange lip
+            (0.1055,  0.0110),  # Bright outer rim flange crest (bordino esterno)
+            (0.1015,  0.0045),  # First machined step inward
+            (0.0955,  0.0035),  # Mid step ledge
+            (0.0905, -0.0020),  # Deep-dish barrel channel (canale profondo)
+            (0.0865, -0.0020),  # Inner corner of barrel channel
+            (0.0840,  0.0045),  # Raised outer perimeter ring around the 20 slots
+            (0.0815,  0.0042),  # Outer edge of slot ring
+            (0.0625,  0.0042),  # Inner edge of slot ring (bridged by the 20 radial spokes below)
+            (0.0595,  0.0068),  # Raised convex inner alloy ring (anello bombato interno)
+            (0.0525,  0.0075),  # Peak of inner alloy dome ring
+            (0.0465,  0.0045),  # Inner shoulder of dome ring
+            (0.0425, -0.0025),  # Recessed central lug-nut bowl (vano colonnette)
+            (0.0255, -0.0025),  # Inner floor of lug-nut bowl around center cap
+            (0.0235,  0.0020),  # Base collar of central hubcap
+        ]
 
-        m_chrome.add_cylinder_z(ax, ay, z_face, z_face + side * 0.014, R_HUB, segs=32)
-        for k in range(5):
-            la = k * 2.0 * math.pi / 5.0
-            lx = ax + (R_HUB + 0.014) * math.cos(la)
-            ly = ay + (R_HUB + 0.014) * math.sin(la)
-            m_chrome.add_cylinder_z(lx, ly, z_face, z_face + side * 0.009, 0.0045, segs=12)
+        # Build the outer stepped lip (r = 0.1095 down to 0.0815) and inner sculpted hub ring (r = 0.0625 down to 0.0235)
+        # leaving the slot band (0.0625 .. 0.0815) open to the dark backing except where the 20 radial spokes cross!
+        outer_rz = profile_rz[:8]   # r = 0.1095 .. 0.0815
+        inner_rz = profile_rz[8:]   # r = 0.0625 .. 0.0235
+
+        a_segs = 80
+        for ring_rz in (outer_rz, inner_rz):
+            ring_grid = np.zeros((len(ring_rz), a_segs, 3), dtype=np.float32)
+            for i, (r_val, dz_val) in enumerate(ring_rz):
+                for j in range(a_segs):
+                    va = (j / a_segs) * 2.0 * math.pi
+                    ring_grid[i, j] = [
+                        ax + r_val * math.cos(va),
+                        ay + r_val * math.sin(va),
+                        z_face + side * dz_val,
+                    ]
+            m_rim.add_grid(ring_grid, flip=(side > 0), close_v=True)
+
+        # 4. 20 True 3D Radial Alloy Spokes separating the 20 Open Rectangular Black Cooling Slots
+        # (Stile Campagnolo / FPS originale visibile in alfa-parco.jpeg e alfa-profilo.jpeg)
+        num_slots = 20
+        r_slot_in = 0.0615
+        r_slot_out = 0.0825
+        for k in range(num_slots):
+            ang_c = (k / num_slots) * 2.0 * math.pi
+            # Spoke angular half-width (~42% metal spoke, ~58% open black rectangular slot)
+            d_ang = (2.0 * math.pi / num_slots) * 0.21
+            a0 = ang_c - d_ang
+            a1 = ang_c + d_ang
+
+            # 3D spoke with beveled side walls from z_face - 0.003 up to z_face + 0.0045
+            spoke_angles = [a0 - 0.012, a0, a1, a1 + 0.012]
+            spoke_z_offs = [-0.0030, 0.0044, 0.0044, -0.0030]
+            spoke_radii = [r_slot_in, 0.5 * (r_slot_in + r_slot_out), r_slot_out]
+
+            spoke_grid = np.zeros((len(spoke_radii), len(spoke_angles), 3), dtype=np.float32)
+            for ir, rr in enumerate(spoke_radii):
+                for ia, (aa, zz) in enumerate(zip(spoke_angles, spoke_z_offs)):
+                    spoke_grid[ir, ia] = [
+                        ax + rr * math.cos(aa),
+                        ay + rr * math.sin(aa),
+                        z_face + side * zz,
+                    ]
+            m_rim.add_grid(spoke_grid, flip=(side < 0))
+
+        # 5. 4x98 PCD: 4 Recessed Dark Lug Wells + 4 Chrome Hexagonal Lug Bolts (Bulloni Ruota Cromati)
+        r_lug_pcd = 0.0345
+        for k in range(4):
+            la = (k / 4.0) * 2.0 * math.pi + math.pi * 0.25
+            lx = ax + r_lug_pcd * math.cos(la)
+            ly = ay + r_lug_pcd * math.sin(la)
+            # Dark recessed lug pocket collar
+            m_rubber.add_cylinder_z(
+                lx, ly,
+                z_face - side * 0.003,
+                z_face + side * 0.0015,
+                0.0062,
+                r_inner=0.0,
+                segs=16
+            )
+            # Bright chrome hexagonal lug bolt head inside the pocket
+            m_chrome.add_cylinder_z(
+                lx, ly,
+                z_face - side * 0.001,
+                z_face + side * 0.0065,
+                0.0040,
+                r_inner=0.0,
+                segs=6
+            )
+
+        # Chrome Tire Valve Stem on the outer rim lip
+        val_ang = -math.pi * 0.35
+        vx = ax + 0.092 * math.cos(val_ang)
+        vy = ay + 0.092 * math.sin(val_ang)
+        m_chrome.add_cylinder_z(vx, vy, z_face - side * 0.001, z_face + side * 0.007, 0.0022, segs=8)
+
+        # 6. Protruding Sculpted Metallic Center Cap (Coprimozzo Centrale Metallizzato Alfa Romeo)
+        # Base metallic cup cylinder + beveled chrome crown ring at z = z_face + side * 0.0155
+        m_rim.add_cylinder_z(
+            ax, ay,
+            z_face - side * 0.001,
+            z_face + side * 0.0135,
+            0.0225,
+            r_inner=0.0,
+            segs=48
+        )
+        m_chrome.add_cylinder_z(
+            ax, ay,
+            z_face + side * 0.0120,
+            z_face + side * 0.0158,
+            0.0212,
+            r_inner=0.0182,
+            segs=48
+        )
+        m_rim.add_cylinder_z(
+            ax, ay,
+            z_face + side * 0.0135,
+            z_face + side * 0.0155,
+            0.0185,
+            r_inner=0.0,
+            segs=48
+        )
 
     for ax in (FRONT_AXLE_X, REAR_AXLE_X):
         for side in (-1.0, 1.0):

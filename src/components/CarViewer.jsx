@@ -14,7 +14,7 @@ import {
   useProgress,
 } from '@react-three/drei';
 
-const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=6';
+const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=7';
 
 export const PAINT_FINISHES = [
   {
@@ -110,6 +110,12 @@ export const CAMERA_PRESETS = [
     label: 'Profilo',
     position: [4.6, 0.82, 0],
     target: [0, 0.25, 0],
+  },
+  {
+    id: 'wheel',
+    label: 'Cerchi',
+    position: [2.15, 0.38, 1.15],
+    target: [0, 0.22, 0.65],
   },
   {
     id: 'rear',
@@ -566,6 +572,334 @@ function AlfaRomeoEmblems() {
     return tex;
   }, []);
 
+  /**
+   * 1024x1024 Metallic Bas-Relief Alfa Romeo - Milano Texture & Bump Map
+   * for the 4 Campagnolo/FPS Wheel Center Caps (Coprimozzi Metallizzati):
+   * - Brushed silver/platinum/champagne-gold lathe-turned metallic surface
+   * - Dark gunmetal anodized recesses with raised silver/platinum-gold relief for:
+   *   - Outer & inner concentric rings
+   *   - "ALFA - ROMEO" (top arc) & "MILANO" (bottom arc) + Savoy figure-8 knots
+   *   - Cross of Milan (Croce) on left hemisphere
+   *   - Crowned Visconti Serpent (Biscione) on right hemisphere
+   */
+  const { metallicEmblemTexture, metallicBumpTexture } = useMemo(() => {
+    const size = 1024;
+    const cx = size / 2;
+    const cy = size / 2;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    const bumpCanvas = document.createElement('canvas');
+    bumpCanvas.width = size;
+    bumpCanvas.height = size;
+    const bctx = bumpCanvas.getContext('2d');
+
+    // Base height for bump map (recessed background = dark grey #282828, raised relief = bright white #f5f5f5)
+    bctx.fillStyle = '#262626';
+    bctx.fillRect(0, 0, size, size);
+
+    // 1. Brushed Metallic Silver/Champagne Outer Rim
+    const rimGrad = ctx.createLinearGradient(0, 0, size, size);
+    rimGrad.addColorStop(0, '#f4f6f9');
+    rimGrad.addColorStop(0.35, '#d4d9df');
+    rimGrad.addColorStop(0.5, '#9ea6b0');
+    rimGrad.addColorStop(0.7, '#eef2f6');
+    rimGrad.addColorStop(1, '#b8bec7');
+    ctx.fillStyle = rimGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 498, 0, Math.PI * 2);
+    ctx.fill();
+
+    bctx.fillStyle = '#e8e8e8';
+    bctx.beginPath();
+    bctx.arc(cx, cy, 498, 0, Math.PI * 2);
+    bctx.fill();
+
+    // 2. Burnished Gunmetal / Pewter Recessed Outer Border Ring
+    const borderGrad = ctx.createRadialGradient(cx - 70, cy - 70, 90, cx, cy, 475);
+    borderGrad.addColorStop(0, '#5a626e');
+    borderGrad.addColorStop(0.55, '#39404a');
+    borderGrad.addColorStop(1, '#262b32');
+    ctx.fillStyle = borderGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 470, 0, Math.PI * 2);
+    ctx.fill();
+
+    bctx.fillStyle = '#303030';
+    bctx.beginPath();
+    bctx.arc(cx, cy, 470, 0, Math.PI * 2);
+    bctx.fill();
+
+    // 3. Inner Raised Metallic Divider Ring
+    const innerR = 324;
+    ctx.strokeStyle = '#e6ebf0';
+    ctx.lineWidth = 16;
+    ctx.beginPath();
+    ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    bctx.strokeStyle = '#f2f2f2';
+    bctx.lineWidth = 18;
+    bctx.beginPath();
+    bctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+    bctx.stroke();
+
+    // 4. Inner Medallion Brushed Silver-Platinum Recessed Field
+    ctx.save();
+    bctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, innerR - 8, 0, Math.PI * 2);
+    ctx.clip();
+    bctx.beginPath();
+    bctx.arc(cx, cy, innerR - 8, 0, Math.PI * 2);
+    bctx.clip();
+
+    const innerMetalGrad = ctx.createLinearGradient(0, 0, size, size);
+    innerMetalGrad.addColorStop(0, '#78808a');
+    innerMetalGrad.addColorStop(0.3, '#525963');
+    innerMetalGrad.addColorStop(0.5, '#8c95a0');
+    innerMetalGrad.addColorStop(0.75, '#464d56');
+    innerMetalGrad.addColorStop(1, '#6c747e');
+    ctx.fillStyle = innerMetalGrad;
+    ctx.fillRect(0, 0, size, size);
+
+    // Subtle concentric lathe-turned metallic micro-grooves
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.lineWidth = 2;
+    for (let r = 24; r < innerR; r += 10) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Raised Silver-Champagne Metallic Gradient for Heraldic Relief Elements
+    const reliefGrad = ctx.createLinearGradient(cx - 250, cy - 250, cx + 250, cy + 250);
+    reliefGrad.addColorStop(0, '#ffffff');
+    reliefGrad.addColorStop(0.3, '#dfe5ec');
+    reliefGrad.addColorStop(0.55, '#b6bec8');
+    reliefGrad.addColorStop(0.8, '#f5f7fa');
+    reliefGrad.addColorStop(1, '#cbd2dc');
+
+    // LEFT HEMISPHERE: Raised Metallic Cross of Milan (Croce in Rilievo Metallico)
+    ctx.save();
+    bctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, cx - 6, size);
+    ctx.clip();
+    bctx.beginPath();
+    bctx.rect(0, 0, cx - 6, size);
+    bctx.clip();
+
+    const crossCenterX = cx - 142;
+    // Dark shadow bevel under the raised metallic cross
+    ctx.fillStyle = '#22262c';
+    ctx.fillRect(crossCenterX - 42, cy - 318, 92, 640);
+    ctx.fillRect(cx - 328, cy - 42, 330, 92);
+
+    // Bright raised metallic cross
+    ctx.fillStyle = reliefGrad;
+    ctx.fillRect(crossCenterX - 44, cy - 320, 88, 640);
+    ctx.fillRect(cx - 330, cy - 44, 330, 88);
+
+    // Specular edge highlight on the metallic cross
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(crossCenterX - 44, cy - 320, 88, 640);
+    ctx.strokeRect(cx - 330, cy - 44, 330, 88);
+
+    bctx.fillStyle = '#f5f5f5';
+    bctx.fillRect(crossCenterX - 44, cy - 320, 88, 640);
+    bctx.fillRect(cx - 330, cy - 44, 330, 88);
+
+    ctx.restore();
+    bctx.restore();
+
+    // RIGHT HEMISPHERE: Raised Metallic Crowned Visconti Biscione Serpent
+    ctx.save();
+    bctx.save();
+    ctx.beginPath();
+    ctx.rect(cx + 6, 0, size / 2, size);
+    ctx.clip();
+    bctx.beginPath();
+    bctx.rect(cx + 6, 0, size / 2, size);
+    bctx.clip();
+
+    const bx = cx + 132;
+
+    const drawBiscione = (targetCtx, strokeCol, fillCol, widthScale = 1.0, offset = 0) => {
+      targetCtx.save();
+      targetCtx.translate(offset, offset);
+
+      // Human figure emerging from serpent's jaws
+      targetCtx.strokeStyle = strokeCol;
+      targetCtx.fillStyle = fillCol;
+      targetCtx.lineWidth = 16 * widthScale;
+      targetCtx.lineCap = 'round';
+      targetCtx.beginPath();
+      targetCtx.arc(bx - 64, cy - 196, 15 * widthScale, 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.beginPath();
+      targetCtx.moveTo(bx - 22, cy - 170);
+      targetCtx.lineTo(bx - 56, cy - 182);
+      targetCtx.moveTo(bx - 74, cy - 218);
+      targetCtx.lineTo(bx - 48, cy - 176);
+      targetCtx.lineTo(bx - 82, cy - 160);
+      targetCtx.stroke();
+
+      // Crown atop serpent's head
+      targetCtx.beginPath();
+      targetCtx.moveTo(bx - 6, cy - 216);
+      targetCtx.lineTo(bx - 14, cy - 248);
+      targetCtx.lineTo(bx + 6, cy - 232);
+      targetCtx.lineTo(bx + 22, cy - 254);
+      targetCtx.lineTo(bx + 36, cy - 232);
+      targetCtx.lineTo(bx + 54, cy - 246);
+      targetCtx.lineTo(bx + 44, cy - 216);
+      targetCtx.closePath();
+      targetCtx.fill();
+
+      // Sinuous 3-coil serpent body
+      targetCtx.lineWidth = 38 * widthScale;
+      targetCtx.lineJoin = 'round';
+      targetCtx.beginPath();
+      targetCtx.moveTo(bx - 20, cy - 198);
+      targetCtx.quadraticCurveTo(bx + 36, cy - 208, bx + 38, cy - 162);
+      targetCtx.bezierCurveTo(bx + 40, cy - 118, bx - 48, cy - 110, bx - 44, cy - 62);
+      targetCtx.bezierCurveTo(bx - 40, cy - 12, bx + 58, cy - 8, bx + 52, cy + 46);
+      targetCtx.bezierCurveTo(bx + 46, cy + 98, bx - 44, cy + 96, bx - 34, cy + 148);
+      targetCtx.stroke();
+
+      // Lower tail loop
+      targetCtx.lineWidth = 24 * widthScale;
+      targetCtx.beginPath();
+      targetCtx.moveTo(bx - 34, cy + 148);
+      targetCtx.bezierCurveTo(bx - 24, cy + 194, bx + 42, cy + 186, bx + 18, cy + 236);
+      targetCtx.stroke();
+
+      targetCtx.restore();
+    };
+
+    // Dark bevel shadow under the metallic Biscione
+    drawBiscione(ctx, '#20242a', '#20242a', 1.12, 4);
+    // Raised metallic silver/platinum Biscione
+    drawBiscione(ctx, reliefGrad, reliefGrad, 1.0, 0);
+    // Bright specular spine ridge
+    drawBiscione(ctx, '#ffffff', '#ffffff', 0.35, -2);
+    // Bump map height for Biscione
+    drawBiscione(bctx, '#f5f5f5', '#f5f5f5', 1.05, 0);
+
+    ctx.restore();
+    bctx.restore();
+
+    // Central Vertical Raised Metallic Divider Line
+    ctx.fillStyle = '#eef2f6';
+    ctx.fillRect(cx - 7, cy - innerR, 14, innerR * 2);
+    bctx.fillStyle = '#f5f5f5';
+    bctx.fillRect(cx - 7, cy - innerR, 14, innerR * 2);
+
+    ctx.restore();
+    bctx.restore();
+
+    // 5. Raised Metallic Typography on Gunmetal Border: "ALFA - ROMEO" & "MILANO"
+    const textRadius = 398;
+    ctx.fillStyle = '#eef2f7';
+    ctx.font = 'bold 64px "Cormorant Garamond", Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    bctx.fillStyle = '#f5f5f5';
+    bctx.font = 'bold 64px "Cormorant Garamond", Georgia, serif';
+    bctx.textAlign = 'center';
+    bctx.textBaseline = 'middle';
+
+    const topText = 'ALFA - ROMEO';
+    const topStartAngle = -Math.PI / 2 - 0.98;
+    const topEndAngle = -Math.PI / 2 + 0.98;
+    for (let i = 0; i < topText.length; i++) {
+      const charAngle =
+        topStartAngle +
+        (i / (topText.length - 1)) * (topEndAngle - topStartAngle);
+      [ctx, bctx].forEach((c) => {
+        c.save();
+        c.translate(
+          cx + Math.cos(charAngle) * textRadius,
+          cy + Math.sin(charAngle) * textRadius
+        );
+        c.rotate(charAngle + Math.PI / 2);
+        c.fillText(topText[i], 0, 0);
+        c.restore();
+      });
+    }
+
+    const botText = 'MILANO';
+    const botStartAngle = Math.PI / 2 + 0.56;
+    const botEndAngle = Math.PI / 2 - 0.56;
+    for (let i = 0; i < botText.length; i++) {
+      const charAngle =
+        botStartAngle +
+        (i / (botText.length - 1)) * (botEndAngle - botStartAngle);
+      [ctx, bctx].forEach((c) => {
+        c.save();
+        c.translate(
+          cx + Math.cos(charAngle) * textRadius,
+          cy + Math.sin(charAngle) * textRadius
+        );
+        c.rotate(charAngle - Math.PI / 2);
+        c.fillText(botText[i], 0, 0);
+        c.restore();
+      });
+    }
+
+    // 6. Raised Metallic Savoy Knots (Nodi Sabaudi) at 9 o'clock and 3 o'clock
+    [ctx, bctx].forEach((c) => {
+      c.strokeStyle = '#eef2f7';
+      c.lineWidth = 11;
+      [-1, 1].forEach((side) => {
+        const kx = cx + side * textRadius;
+        const ky = cy + 12;
+        c.beginPath();
+        c.arc(kx - 16, ky, 15, 0, Math.PI * 2);
+        c.arc(kx + 16, ky, 15, 0, Math.PI * 2);
+        c.stroke();
+      });
+    });
+
+    // 7. Anisotropic Metallic Sheen across the Medallion
+    const sheenGrad = ctx.createLinearGradient(0, 0, size, size);
+    sheenGrad.addColorStop(0, 'rgba(255, 255, 255, 0.22)');
+    sheenGrad.addColorStop(0.45, 'rgba(255, 255, 255, 0.0)');
+    sheenGrad.addColorStop(0.55, 'rgba(255, 255, 255, 0.18)');
+    sheenGrad.addColorStop(1, 'rgba(0, 0, 0, 0.15)');
+    ctx.fillStyle = sheenGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 490, 0, Math.PI * 2);
+    ctx.fill();
+
+    const colorTex = new THREE.CanvasTexture(canvas);
+    colorTex.colorSpace = THREE.SRGBColorSpace;
+    colorTex.anisotropy = 8;
+    colorTex.needsUpdate = true;
+
+    const bumpTex = new THREE.CanvasTexture(bumpCanvas);
+    bumpTex.anisotropy = 8;
+    bumpTex.needsUpdate = true;
+
+    return {
+      metallicEmblemTexture: colorTex,
+      metallicBumpTexture: bumpTex,
+    };
+  }, []);
+
+  const wheelCapPositions = [
+    { x: -0.575, y: -0.145, z: 0.3702, rotY: 0 },
+    { x: 0.570, y: -0.145, z: 0.3702, rotY: 0 },
+    { x: -0.575, y: -0.145, z: -0.3702, rotY: Math.PI },
+    { x: 0.570, y: -0.145, z: -0.3702, rotY: Math.PI },
+  ];
+
   return (
     <>
       {/* Front Scudetto Top-Center Alfa Romeo - Milano Enameled Emblem */}
@@ -599,6 +933,27 @@ function AlfaRomeoEmblems() {
           envMapIntensity={1.4}
         />
       </mesh>
+
+      {/* Four Metallic Bas-Relief Alfa Romeo - Milano Wheel Center Cap Medallions */}
+      {wheelCapPositions.map((cap, idx) => (
+        <mesh
+          key={idx}
+          position={[cap.x, cap.y, cap.z]}
+          rotation={[0, cap.rotY, 0]}
+        >
+          <circleGeometry args={[0.0184, 64]} />
+          <meshPhysicalMaterial
+            map={metallicEmblemTexture}
+            bumpMap={metallicBumpTexture}
+            bumpScale={0.003}
+            metalness={0.92}
+            roughness={0.17}
+            clearcoat={0.85}
+            clearcoatRoughness={0.06}
+            envMapIntensity={1.65}
+          />
+        </mesh>
+      ))}
     </>
   );
 }
@@ -881,7 +1236,7 @@ export default function CarViewer({
           enablePan={false}
           minPolarAngle={0}
           maxPolarAngle={Math.PI / 2.05}
-          minDistance={2}
+          minDistance={0.65}
           maxDistance={10}
           autoRotate={autoRotate}
           autoRotateSpeed={0.8}

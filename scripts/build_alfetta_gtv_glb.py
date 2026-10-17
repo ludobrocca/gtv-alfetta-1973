@@ -183,18 +183,18 @@ def build_alfetta_gtv():
         [-0.740,  0.086,        0.078,       0.044,  -0.175,   0.388,   0.352,   0.340], # Front wheel arch lead
         [-0.575,  0.102,        0.094,       0.052,  -0.184,   0.394,   0.358,   0.346], # Front axle center
         [-0.410,  0.113,        0.106,       0.057,  -0.186,   0.393,   0.352,   0.346], # Front wheel arch trail
-        [-0.352,  0.117,        0.110,       0.059,  -0.186,   0.392,   0.344,   0.346], # Rear hood seam before cowl louvers
-        [-0.305,  0.120,        0.113,       0.061,  -0.186,   0.392,   0.336,   0.346], # Base of windshield (cowl)
-        [-0.160,  0.208,        0.117,       0.066,  -0.186,   0.394,   0.302,   0.346], # Mid windshield
-        [-0.015,  0.292,        0.120,       0.071,  -0.186,   0.396,   0.278,   0.346], # Windshield header / A-pillar top
-        [ 0.155,  0.304,        0.124,       0.076,  -0.186,   0.396,   0.276,   0.346], # Roof peak / B-pillar
-        [ 0.355,  0.294,        0.129,       0.083,  -0.186,   0.395,   0.272,   0.345], # Rear roof crown
-        [ 0.500,  0.258,        0.136,       0.090,  -0.184,   0.395,   0.266,   0.344], # Fastback slope / C-pillar
-        [ 0.570,  0.238,        0.140,       0.094,  -0.182,   0.396,   0.262,   0.342], # Rear axle center
-        [ 0.720,  0.190,        0.142,       0.102,  -0.174,   0.386,   0.258,   0.332], # Lower fastback hatch
-        [ 0.855,  0.144,        0.140,       0.106,  -0.156,   0.368,   0.254,   0.314], # Rear decklid base of glass
-        [ 0.915,  0.130,        0.128,       0.102,  -0.132,   0.348,   0.248,   0.295], # Kamm tail sharp trailing edge
-        [ 0.932,  0.112,        0.110,       0.060,  -0.118,   0.335,   0.242,   0.282], # Kamm tail vertical face
+        [-0.352,  0.117,        0.110,       0.059,  -0.186,   0.392,   0.335,   0.346], # Rear hood seam before cowl louvers
+        [-0.305,  0.120,        0.113,       0.061,  -0.186,   0.392,   0.335,   0.346], # Base of windshield (cowl)
+        [-0.205,  0.198,        0.116,       0.065,  -0.186,   0.394,   0.310,   0.346], # Mid windshield
+        [-0.105,  0.268,        0.119,       0.069,  -0.186,   0.395,   0.285,   0.346], # Windshield header / A-pillar top apex
+        [ 0.080,  0.278,        0.125,       0.075,  -0.186,   0.396,   0.286,   0.346], # Roof peak above door
+        [ 0.280,  0.270,        0.131,       0.082,  -0.186,   0.395,   0.283,   0.345], # Rear roof crown
+        [ 0.480,  0.246,        0.136,       0.089,  -0.184,   0.395,   0.276,   0.344], # Fastback hatch top hinge
+        [ 0.570,  0.228,        0.138,       0.094,  -0.182,   0.396,   0.272,   0.342], # Rear axle center
+        [ 0.720,  0.188,        0.140,       0.102,  -0.174,   0.386,   0.263,   0.332], # Lower fastback hatch
+        [ 0.855,  0.144,        0.140,       0.106,  -0.156,   0.368,   0.252,   0.314], # Rear decklid base of glass
+        [ 0.915,  0.130,        0.128,       0.102,  -0.132,   0.348,   0.246,   0.295], # Kamm tail sharp trailing edge
+        [ 0.932,  0.112,        0.110,       0.060,  -0.118,   0.335,   0.240,   0.282], # Kamm tail vertical face
     ], dtype=np.float64)
 
     xs_ctrl = profile_pts[:, 0]
@@ -420,56 +420,125 @@ def build_alfetta_gtv():
     # B) UNIFIED GREENHOUSE TOP SURFACE (Windshield + Painted Roof + Rear Fastback Glass)
     # All evaluated on the same crown function y_crown(x, s) so they meet flush!
     # =========================================================================
+    def z_roof_rail(x_q):
+        """Strictly convex plan-view barrel curve for the upper roof rail (d^2z/dx^2 < 0 everywhere, never concave!)."""
+        return 0.286 - 0.042 * ((x_q - 0.06) ** 2)
+
+    # Photo-calibrated, 100% strictly convex window & greenhouse boundary functions:
+    X_WIN_APEX = 0.562
+    Y_WIN_APEX = 0.192
+
+    def win_sill_y(x_q):
+        """
+        100% straight rising wedge line from front apex x=-0.305 (y=0.114) to the lower-rear elbow
+        at x=0.440 (y=0.139, just behind the 4th window sticker and in front of the black fuel cap),
+        then angling smoothly upward to the pointed rear apex (X_WIN_APEX=0.562, Y_WIN_APEX=0.192).
+        """
+        y0 = float(f_y_shoulder(-0.305)) + 0.001
+        y_elb = float(f_y_shoulder(0.440)) + 0.002
+        if x_q <= 0.440:
+            return y0 + (y_elb - y0) * ((x_q - (-0.305)) / (0.440 - (-0.305)))
+        u = max(0.0, min(1.0, (x_q - 0.440) / (X_WIN_APEX - 0.440)))
+        return y_elb + (Y_WIN_APEX - y_elb) * (0.18 * u + 0.82 * (u ** 1.55))
+
+    def win_arch_y(x_q):
+        """
+        100% strictly CONVEX (d^2y/dx^2 < 0 everywhere) upper window arch:
+        1. Sloped A-pillar from x=-0.305 (y=0.114) to the rounded roof corner at x=-0.055 (y=0.244).
+        2. Gently arched roof rail from x=-0.055 (y=0.244) to the arch peak at x=0.245 (y=0.264).
+        3. Strictly convex descending fastback arch from x=0.245 (y=0.264) to (X_WIN_APEX=0.562, Y_WIN_APEX=0.192).
+        """
+        if x_q <= -0.055:
+            t = max(0.0, min(1.0, (x_q - (-0.305)) / (-0.055 - (-0.305))))
+            y0 = win_sill_y(-0.305)
+            y1 = 0.244
+            return y0 + (y1 - y0) * (1.16 * t - 0.16 * (t ** 2.4))
+        elif x_q <= 0.245:
+            u = (0.245 - x_q) / (0.245 - (-0.055))
+            return 0.264 - 0.020 * (u ** 2.1)
+        else:
+            s = min(1.0, (x_q - 0.245) / (X_WIN_APEX - 0.245))
+            return 0.264 - (0.264 - Y_WIN_APEX) * (0.08 * s + 0.92 * (s ** 2.05))
+
+    def greenhouse_edge_y(x_q):
+        """100% strictly convex outer roof/A-pillar/fastback edge y_top(x) with zero concavity anywhere."""
+        if x_q <= 0.245:
+            return win_arch_y(x_q) + 0.0055
+        w = max(0.0, min(1.0, (x_q - 0.245) / (0.855 - 0.245)))
+        return 0.2695 - (0.2695 - 0.140) * (0.22 * w + 0.78 * (w ** 1.85))
+
+    def greenhouse_xyz_from_xy(x_q, y_q, side_q, offset_z=0.0):
+        """Projects any 2D profile point (x_q, y_q) onto the strictly convex 3D greenhouse tumblehome surface."""
+        ys = float(f_y_shoulder(x_q))
+        y_top = greenhouse_edge_y(x_q)
+        ty = max(0.0, min(1.0, (y_q - ys) / max(0.012, y_top - ys)))
+        z_sill = get_z_shoulder(x_q)
+        z_roof = z_roof_rail(x_q)
+        z_abs = z_sill + (z_roof - z_sill) * (ty ** 0.90) + offset_z
+        return [x_q, y_q, side_q * z_abs]
+
+    def greenhouse_xy_norm(x_q, y_q, side_q):
+        """Analytical pre-flip unit normal on the smooth C2 greenhouse surface at (x_q, y_q)."""
+        eps = 0.004
+        p_x1 = np.array(greenhouse_xyz_from_xy(min(0.855, x_q + eps), y_q, side_q), dtype=np.float64)
+        p_x0 = np.array(greenhouse_xyz_from_xy(max(-0.305, x_q - eps), y_q, side_q), dtype=np.float64)
+        p_y1 = np.array(greenhouse_xyz_from_xy(x_q, y_q + eps, side_q), dtype=np.float64)
+        p_y0 = np.array(greenhouse_xyz_from_xy(x_q, y_q - eps, side_q), dtype=np.float64)
+        n_vec = np.cross(p_x1 - p_x0, p_y1 - p_y0)
+        n_vec /= np.linalg.norm(n_vec) + 1e-9
+        return n_vec.astype(np.float32)
+
     def greenhouse_top_point(x, s, offset_y=0.0):
-        """s in [-1, 1] across the width of the greenhouse top/glass."""
-        yc = float(f_y_center(x))
-        zt = float(f_z_top(x))
-        z = s * zt
+        """s in [-1, 1] across the width of the greenhouse top/glass, matching greenhouse_xyz_from_xy at |s|=1."""
+        y_edge = greenhouse_edge_y(x)
+        yc = y_edge + 0.014
+        _, _, z_edge = greenhouse_xyz_from_xy(x, y_edge, 1.0)
+        z = s * z_edge
         y = yc - 0.014 * (s ** 2) + offset_y
         return [x, y, z]
 
-    # 1. Front Laminated Windshield (-0.305 <= x <= -0.105, |s| <= 0.92)
+    # 1. Front Laminated Windshield (-0.305 <= x <= -0.055, |s| <= 0.92)
     ws_nx, ws_nv = 28, 30
     ws_grid = np.zeros((ws_nx, ws_nv, 3), dtype=np.float32)
-    for i, x in enumerate(np.linspace(-0.305, -0.105, ws_nx)):
+    for i, x in enumerate(np.linspace(-0.305, -0.055, ws_nx)):
         for j, s in enumerate(np.linspace(-0.92, 0.92, ws_nv)):
             ws_grid[i, j] = greenhouse_top_point(x, s)
     m_glass.add_grid(ws_grid, flip=False)
 
-    # Painted A-Pillars on the outer edges (0.90 <= |s| <= 1.02) of the windshield
+    # Painted A-Pillars on the outer edges (0.90 <= |s| <= 1.00) of the windshield
     for side in (-1.0, 1.0):
         ap_grid = np.zeros((ws_nx, 5, 3), dtype=np.float32)
-        for i, x in enumerate(np.linspace(-0.305, -0.105, ws_nx)):
-            for j, s_abs in enumerate(np.linspace(0.90, 1.02, 5)):
+        for i, x in enumerate(np.linspace(-0.305, -0.055, ws_nx)):
+            for j, s_abs in enumerate(np.linspace(0.90, 1.00, 5)):
                 ap_grid[i, j] = greenhouse_top_point(x, side * s_abs, offset_y=0.001)
         m_paint.add_grid(ap_grid, flip=(side < 0))
         # Chrome windshield side molding
         cr_grid = np.zeros((ws_nx, 3, 3), dtype=np.float32)
-        for i, x in enumerate(np.linspace(-0.305, -0.105, ws_nx)):
+        for i, x in enumerate(np.linspace(-0.305, -0.055, ws_nx)):
             for j, s_abs in enumerate(np.linspace(0.89, 0.92, 3)):
                 cr_grid[i, j] = greenhouse_top_point(x, side * s_abs, offset_y=0.002)
         m_chrome.add_grid(cr_grid, flip=(side < 0))
 
     # Chrome windshield top & bottom moldings
-    for x_edge in (-0.304, -0.106):
+    for x_edge in (-0.304, -0.056):
         cr_bar = np.zeros((2, ws_nv, 3), dtype=np.float32)
         for j, s in enumerate(np.linspace(-0.92, 0.92, ws_nv)):
             cr_bar[0, j] = greenhouse_top_point(x_edge - 0.004, s, offset_y=0.002)
             cr_bar[1, j] = greenhouse_top_point(x_edge + 0.004, s, offset_y=0.002)
         m_chrome.add_grid(cr_bar, flip=False)
 
-    # 2. Painted Roof Panel Crown (-0.105 <= x <= 0.500, |s| <= 1.0)
+    # 2. Painted Roof Panel Crown (-0.055 <= x <= 0.480, |s| <= 1.0)
     roof_nx, roof_nv = 36, 30
     roof_grid = np.zeros((roof_nx, roof_nv, 3), dtype=np.float32)
-    for i, x in enumerate(np.linspace(-0.105, 0.500, roof_nx)):
+    for i, x in enumerate(np.linspace(-0.055, 0.480, roof_nx)):
         for j, s in enumerate(np.linspace(-1.0, 1.0, roof_nv)):
             roof_grid[i, j] = greenhouse_top_point(x, s, offset_y=0.001)
     m_paint.add_grid(roof_grid, flip=False)
 
-    # 3. Rear Fastback Hatch Window (0.500 <= x <= 0.855, |s| <= 0.88) — ZERO SPOILER!
+    # 3. Rear Fastback Hatch Window (0.480 <= x <= 0.855, |s| <= 0.88) — ZERO SPOILER!
     rw_nx, rw_nv = 32, 30
     rw_grid = np.zeros((rw_nx, rw_nv, 3), dtype=np.float32)
-    for i, x in enumerate(np.linspace(0.500, 0.855, rw_nx)):
+    for i, x in enumerate(np.linspace(0.480, 0.855, rw_nx)):
         for j, s in enumerate(np.linspace(-0.88, 0.88, rw_nv)):
             rw_grid[i, j] = greenhouse_top_point(x, s)
     m_glass.add_grid(rw_grid, flip=False)
@@ -477,18 +546,18 @@ def build_alfetta_gtv():
     # Painted Rear Hatch Side Pillars (0.87 <= |s| <= 1.0) & Chrome Rear Window Frame
     for side in (-1.0, 1.0):
         rh_grid = np.zeros((rw_nx, 5, 3), dtype=np.float32)
-        for i, x in enumerate(np.linspace(0.500, 0.855, rw_nx)):
+        for i, x in enumerate(np.linspace(0.480, 0.855, rw_nx)):
             for j, s_abs in enumerate(np.linspace(0.87, 1.00, 5)):
                 rh_grid[i, j] = greenhouse_top_point(x, side * s_abs, offset_y=0.001)
         m_paint.add_grid(rh_grid, flip=(side < 0))
 
         cr_rw = np.zeros((rw_nx, 3, 3), dtype=np.float32)
-        for i, x in enumerate(np.linspace(0.500, 0.855, rw_nx)):
+        for i, x in enumerate(np.linspace(0.480, 0.855, rw_nx)):
             for j, s_abs in enumerate(np.linspace(0.855, 0.885, 3)):
                 cr_rw[i, j] = greenhouse_top_point(x, side * s_abs, offset_y=0.002)
         m_chrome.add_grid(cr_rw, flip=(side < 0))
 
-    for x_edge in (0.501, 0.854):
+    for x_edge in (0.481, 0.854):
         cr_bar = np.zeros((2, rw_nv, 3), dtype=np.float32)
         for j, s in enumerate(np.linspace(-0.88, 0.88, rw_nv)):
             cr_bar[0, j] = greenhouse_top_point(x_edge - 0.004, s, offset_y=0.002)
@@ -496,29 +565,11 @@ def build_alfetta_gtv():
         m_chrome.add_grid(cr_bar, flip=False)
 
     # =========================================================================
-    # C) UNIFIED GREENHOUSE SIDE TUMBLEHOME SURFACE & GIUGIARO DOOR ARCHITECTURE
-    # Includes Triangular Vent Window, Aligned B-Pillar, Crisp Door Shut-Lines,
-    # Recessed Door Handle + Keyhole Lock, Pedestal Chrome Mirror & Rocker Sill
+    # C) 100% CONVEX 3-PIECE SIDE WINDOW ARCHITECTURE & C-PILLAR SAIL PANEL
+    #    - Pezzo 1: Deflettore Anteriore Triangolare (Front Triangular Vent-Wing)
+    #    - Pezzo 2: Finestrino Principale Scendente Portiera (5-Sided Pentagonal Door Glass)
+    #    - Pezzo 3: Finestrino Posteriore a Compasso a Punta (Pointed Pop-Out Quarter Window)
     # =========================================================================
-    def greenhouse_side_point(tx, ty, side, offset_z=0.0):
-        """
-        ty in [0, 1] from window sill (ys) up to roof rail (yc - 0.014).
-        tx in [0, 1] from front A-pillar (-0.305.. -0.105) to rear hatch edge (0.855.. 0.500).
-        """
-        x_front = -0.305 + ty * (-0.105 - (-0.305))
-        x_rear = 0.855 + ty * (0.500 - 0.855)
-        x = x_front + tx * (x_rear - x_front)
-
-        ys = float(f_y_shoulder(x))
-        y_top = float(f_y_center(x)) - 0.014
-        y = ys + ty * (y_top - ys)
-
-        z_sill = get_z_shoulder(x)
-        z_roof = float(f_z_top(x))
-        # Smooth tumblehome curve
-        z_abs = z_sill + (z_roof - z_sill) * (ty ** 0.92) + offset_z
-        return [x, y, side * z_abs]
-
     def eval_shoulder(x_q, s_sh, side_q, offset_z=0.0, offset_y=0.0):
         """Evaluates a point on the C2 Upper Shoulder surface (s_sh=0 at window sill, s_sh=1 at Giugiaro beltline crease)."""
         ys = float(f_y_shoulder(x_q))
@@ -539,29 +590,8 @@ def build_alfetta_gtv():
         z_val = zb - (zb - zbot) * (s_vert ** 1.30) + offset_z
         return [x_q, y_val, side_q * z_val]
 
-    def greenhouse_side_norm(tx, ty, side):
-        """Computes the exact analytical unit normal (pre-flip) on the smooth C2 greenhouse tumblehome surface."""
-        eps = 0.005
-        p_u1 = np.array(greenhouse_side_point(min(1.0, tx + eps), ty, side), dtype=np.float64)
-        p_u0 = np.array(greenhouse_side_point(max(0.0, tx - eps), ty, side), dtype=np.float64)
-        p_v1 = np.array(greenhouse_side_point(tx, min(1.0, ty + eps), side), dtype=np.float64)
-        p_v0 = np.array(greenhouse_side_point(tx, max(0.0, ty - eps), side), dtype=np.float64)
-        n_vec = np.cross(p_u1 - p_u0, p_v1 - p_v0)
-        n_vec /= np.linalg.norm(n_vec) + 1e-9
-        return n_vec.astype(np.float32)
-
-    def greenhouse_xyz_from_xy(x_q, y_q, side_q, offset_z=0.0):
-        """Projects any 2D profile point (x_q, y_q) directly onto the 3D greenhouse tumblehome surface."""
-        ys = float(f_y_shoulder(x_q))
-        y_top = float(f_y_center(x_q)) - 0.014
-        ty = max(0.0, min(1.0, (y_q - ys) / max(1e-5, y_top - ys)))
-        z_sill = get_z_shoulder(x_q)
-        z_roof = float(f_z_top(x_q))
-        z_abs = z_sill + (z_roof - z_sill) * (ty ** 0.92) + offset_z
-        return [x_q, y_q, side_q * z_abs]
-
     def add_cpillar_stroke(p0, p1, width_xy, side_q, mat, offset_z=0.0022, n_seg=8):
-        """Builds a conformal 3D ribbon stroke between 2D profile points p0=(x0,y0) and p1=(x1,y1) on the C-pillar."""
+        """Builds a conformal 3D ribbon stroke between 2D profile points p0=(x0,y0) and p1=(x1,y1) on the greenhouse."""
         x0, y0 = p0
         x1, y1 = p1
         dx, dy = x1 - x0, y1 - y0
@@ -576,202 +606,178 @@ def build_alfetta_gtv():
             stroke_grid[i, 1] = greenhouse_xyz_from_xy(xm + nx_p * hw, ym + ny_p * hw, side_q, offset_z=offset_z)
         mat.add_grid(stroke_grid, flip=(side_q < 0))
 
-    # Pointed Rear Quarter Window & C-Pillar Sail Panel geometry helpers (matching alfa-profilo.jpeg)
-    # Intermediate vertical divider bar (montantino verticale secondario) at u = 0.66,
-    # and sharp pointed rear window apex at (tx_apex = 0.769, ty_apex = 0.255) -> (x = 0.530, y = 0.160)
-    TX_APEX = 0.769
-    TY_APEX = 0.255
+    def build_window_piece(x_bot_0, x_top_0, x_bot_1, x_top_1, side_q, nu=26, nv=16, is_pointed_front=False, is_pointed_rear=False):
+        """
+        Builds a distinct side window pane (glass mesh + 3D perimeter chrome molding + black weatherstrip seal)
+        bounded horizontally by [x_bot_0..x_bot_1] along win_sill_y(x) and [x_top_0..x_top_1] along win_arch_y(x).
+        """
+        u_vals = np.linspace(0.0, 1.0, nu)
+        v_vals = np.linspace(0.0, 1.0, nv)
+        glass_grid = np.zeros((nu, nv, 3), dtype=np.float32)
 
-    def tx_mid_bar(ty):
-        return 0.526 * (1.0 - ty) + 0.653 * ty
+        for i, u in enumerate(u_vals):
+            u_in = 0.015 + 0.97 * u
+            xb = x_bot_0 + u_in * (x_bot_1 - x_bot_0)
+            xt = x_top_0 + u_in * (x_top_1 - x_top_0)
+            yb = win_sill_y(xb)
+            yt = win_arch_y(xt)
+            for j, v in enumerate(v_vals):
+                v_in = 0.02 + 0.96 * v
+                x_curr = xb + v_in * (xt - xb)
+                y_curr = yb + v_in * (yt - yb)
+                glass_grid[i, j] = greenhouse_xyz_from_xy(x_curr, y_curr, side_q, offset_z=0.0)
+        m_glass.add_grid(glass_grid, flip=(side_q < 0))
 
-    def win_bounds_at_u(u):
-        """Returns (ty_bot, ty_top) for normalized window length u in [0, 1] (u=1 is the pointed rear tip)."""
-        if u <= 0.66:
-            return 0.0, 1.0
-        w = (u - 0.66) / (1.0 - 0.66)
-        ty_b = TY_APEX * (w ** 1.15)
-        ty_t = 1.0 - (1.0 - TY_APEX) * (w ** 1.10)
-        return ty_b, ty_t
+        # Top & Bottom Chrome + Black Weatherstrip Frame Moldings along this specific window piece
+        top_cr = np.zeros((nu, 2, 3), dtype=np.float32)
+        bot_cr = np.zeros((nu, 2, 3), dtype=np.float32)
+        top_rb = np.zeros((nu, 2, 3), dtype=np.float32)
+        bot_rb = np.zeros((nu, 2, 3), dtype=np.float32)
 
-    def win_tx_at_u(u, ty):
-        tm = tx_mid_bar(ty)
-        if u <= 0.66:
-            return (u / 0.66) * tm
-        w = (u - 0.66) / (1.0 - 0.66)
-        return tm * (1.0 - w) + TX_APEX * w
+        for i, u in enumerate(u_vals):
+            xb = x_bot_0 + u * (x_bot_1 - x_bot_0)
+            xt = x_top_0 + u * (x_top_1 - x_top_0)
+            yb = win_sill_y(xb)
+            yt = win_arch_y(xt)
+
+            bot_cr[i, 0] = greenhouse_xyz_from_xy(xb, yb - 0.0025, side_q, offset_z=0.0026)
+            bot_cr[i, 1] = greenhouse_xyz_from_xy(xb, yb + 0.0030, side_q, offset_z=0.0026)
+            bot_rb[i, 0] = greenhouse_xyz_from_xy(xb, yb + 0.0025, side_q, offset_z=0.0018)
+            bot_rb[i, 1] = greenhouse_xyz_from_xy(xb, yb + 0.0055, side_q, offset_z=0.0018)
+
+            top_cr[i, 0] = greenhouse_xyz_from_xy(xt, yt - 0.0030, side_q, offset_z=0.0026)
+            top_cr[i, 1] = greenhouse_xyz_from_xy(xt, yt + 0.0025, side_q, offset_z=0.0026)
+            top_rb[i, 0] = greenhouse_xyz_from_xy(xt, yt - 0.0055, side_q, offset_z=0.0018)
+            top_rb[i, 1] = greenhouse_xyz_from_xy(xt, yt - 0.0025, side_q, offset_z=0.0018)
+
+        m_chrome.add_grid(bot_cr, flip=(side_q < 0))
+        m_chrome.add_grid(top_cr, flip=(side_q < 0))
+        m_rubber.add_grid(bot_rb, flip=(side_q < 0))
+        m_rubber.add_grid(top_rb, flip=(side_q < 0))
+
+        # Front vertical/sloped chrome edge (for Piece 2 and Piece 3; Piece 1 converges to a sharp front apex!)
+        if not is_pointed_front:
+            p0_f = (x_bot_0, win_sill_y(x_bot_0))
+            p1_f = (x_top_0, win_arch_y(x_top_0))
+            add_cpillar_stroke(p0_f, p1_f, 0.0058, side_q, m_chrome, offset_z=0.0027, n_seg=14)
+            add_cpillar_stroke(p0_f, p1_f, 0.0095, side_q, m_rubber, offset_z=0.0018, n_seg=14)
+
+        # Rear vertical chrome edge (for Piece 1 and Piece 2; Piece 3 converges to a sharp rear apex!)
+        if not is_pointed_rear:
+            p0_r = (x_bot_1, win_sill_y(x_bot_1))
+            p1_r = (x_top_1, win_arch_y(x_top_1))
+            add_cpillar_stroke(p0_r, p1_r, 0.0058, side_q, m_chrome, offset_z=0.0027, n_seg=14)
+            add_cpillar_stroke(p0_r, p1_r, 0.0095, side_q, m_rubber, offset_z=0.0018, n_seg=14)
 
     for side in (-1.0, 1.0):
-        # 1. Pointed Side Window Glass (Front Vent-Wing + Door Glass + Rear 2-Pane Pointed Quarter Window)
-        sw_nx, sw_ny = 52, 18
-        sw_grid = np.zeros((sw_nx, sw_ny, 3), dtype=np.float32)
-        for i, u in enumerate(np.linspace(0.015, 0.992, sw_nx)):
-            ty_b, ty_t = win_bounds_at_u(u)
-            ty_b_eff = max(0.02, ty_b + 0.012)
-            ty_t_eff = min(0.97, ty_t - 0.012)
-            for j, s_y in enumerate(np.linspace(0.0, 1.0, sw_ny)):
-                ty = ty_b_eff + (ty_t_eff - ty_b_eff) * s_y
-                tx = win_tx_at_u(u, ty)
-                sw_grid[i, j] = greenhouse_side_point(tx, ty, side, offset_z=0.0)
-        m_glass.add_grid(sw_grid, flip=(side < 0))
+        # =====================================================================
+        # 1. THE 3 DISTINCT SIDE WINDOW PIECES (I 3 Pezzi Distinti dei Finestrini)
+        # =====================================================================
+        # PEZZO 1: Deflettore Anteriore Triangolare (Front Triangular Vent-Wing Window)
+        # True triangle: front apex at (-0.305, 0.114), meeting sloped A-pillar along top and vertical divider bar at x=-0.165..-0.148
+        build_window_piece(-0.305, -0.305, -0.165, -0.148, side, nu=20, nv=14, is_pointed_front=True, is_pointed_rear=False)
 
-        # 2. Giugiaro Painted C-Pillar Sail Panel wrapping seamlessly around the pointed rear quarter window!
-        # Split into cp_low_grid (below ty_bot / ty_apex) and cp_top_grid (above ty_top / ty_apex) with analytical C2 normals
-        cp_nx, cp_ny = 36, 14
-        cp_low_grid = np.zeros((cp_nx, cp_ny, 3), dtype=np.float32)
-        cp_low_norm = np.zeros((cp_nx, cp_ny, 3), dtype=np.float32)
+        # Triangular Matte-Black & Stainless Corner Gusset at front apex of Pezzo 1 + Chrome Swivel Latch
+        gusset_rb = np.zeros((6, 6, 3), dtype=np.float32)
+        for i, xg in enumerate(np.linspace(-0.304, -0.274, 6)):
+            yb_g = win_sill_y(xg)
+            yt_g = min(win_arch_y(xg), yb_g + 0.018 * (1.0 - (xg - (-0.304)) / 0.030))
+            for j, yg in enumerate(np.linspace(yb_g, yt_g, 6)):
+                gusset_rb[i, j] = greenhouse_xyz_from_xy(xg, yg, side, offset_z=0.0024)
+        m_rubber.add_grid(gusset_rb, flip=(side < 0))
+
+        # Matte-black weatherstrip channel bridging the divider post between Pezzo 1 and Pezzo 2
+        add_cpillar_stroke((-0.161, win_sill_y(-0.161) - 0.002), (-0.144, win_arch_y(-0.144) + 0.002), 0.012, side, m_rubber, offset_z=0.0022, n_seg=14)
+
+        latch_pt = greenhouse_xyz_from_xy(-0.174, win_sill_y(-0.174) + 0.012, side, offset_z=0.0038)
+        m_chrome.add_box(latch_pt, [0.011, 0.009, 0.005])
+
+        # PEZZO 2: Finestrino Principale Scendente della Portiera (5-Sided Pentagonal Main Door Drop Window)
+        # Starts behind vent-wing bar (-0.157..-0.140), climbs upper A-pillar to roof corner (-0.055), runs to backward-tilted B-pillar (+0.140..+0.172)
+        build_window_piece(-0.157, -0.140, 0.140, 0.172, side, nu=32, nv=16, is_pointed_front=False, is_pointed_rear=False)
+
+        # Central Chrome & Matte-Black B-Pillar Post between Pezzo 2 and Pezzo 3 (tilted backward from x_bot=+0.148 to x_top=+0.179)
+        add_cpillar_stroke((0.148, win_sill_y(0.148) - 0.003), (0.179, win_arch_y(0.179) + 0.002), 0.018, side, m_rubber, offset_z=0.0021, n_seg=16)
+        add_cpillar_stroke((0.148, win_sill_y(0.148) - 0.002), (0.179, win_arch_y(0.179) + 0.002), 0.006, side, m_chrome, offset_z=0.0029, n_seg=16)
+
+        # PEZZO 3: Finestrino Posteriore a Compasso a Punta (Rear Pointed Pop-Out Quarter Window)
+        # Starts behind B-pillar (+0.155..+0.187), straight sill to x=0.440 then upward bevel, convex upper arch to (X_WIN_APEX=0.562, Y_WIN_APEX=0.192)
+        build_window_piece(0.155, 0.187, X_WIN_APEX, X_WIN_APEX, side, nu=34, nv=16, is_pointed_front=False, is_pointed_rear=True)
+
+        # Vertical Chrome Pop-Out Window Latch Strut near the rear corner of Pezzo 3
+        add_cpillar_stroke((0.515, win_sill_y(0.515) + 0.003), (0.515, win_arch_y(0.515) - 0.003), 0.0045, side, m_chrome, offset_z=0.0025, n_seg=6)
+
+        # =====================================================================
+        # 2. SEAMLESS C2 PAINTED A-PILLAR, ROOF RAIL & C-PILLAR SAIL PANEL
+        # =====================================================================
+        # Evaluated directly on uniform vertical x-columns in (x, y) space across the full greenhouse [-0.305, 0.855]!
+        cp_nx, cp_ny = 56, 14
+        cp_xs = np.linspace(-0.305, 0.855, cp_nx)
         cp_top_grid = np.zeros((cp_nx, cp_ny, 3), dtype=np.float32)
         cp_top_norm = np.zeros((cp_nx, cp_ny, 3), dtype=np.float32)
+        cp_low_grid = np.zeros((cp_nx, cp_ny, 3), dtype=np.float32)
+        cp_low_norm = np.zeros((cp_nx, cp_ny, 3), dtype=np.float32)
 
-        for i, u_cp in enumerate(np.linspace(0.66, 1.38, cp_nx)):
-            if u_cp <= 1.0:
-                ty_b, ty_t = win_bounds_at_u(u_cp)
-            else:
-                ty_b, ty_t = TY_APEX, TY_APEX
+        def cp_split_line_y(x_q):
+            """Seamless split line behind the pointed window tip (x >= X_WIN_APEX) to the base of the rear hatch (0.855)."""
+            w = max(0.0, min(1.0, (x_q - X_WIN_APEX) / (0.855 - X_WIN_APEX)))
+            return Y_WIN_APEX + (greenhouse_edge_y(0.855) - Y_WIN_APEX) * w
 
+        for i, xc in enumerate(cp_xs):
+            y_low_bound = win_arch_y(xc) if xc <= X_WIN_APEX else cp_split_line_y(xc)
+            y_high_bound = greenhouse_edge_y(xc)
             for j, s_y in enumerate(np.linspace(0.0, 1.0, cp_ny)):
-                # Lower C-pillar & quarter-window under-wedge (0.0 <= ty <= ty_b)
-                ty_low = ty_b * s_y
-                if u_cp <= 1.0:
-                    tx_low = win_tx_at_u(u_cp, ty_low)
-                else:
-                    w_post = (u_cp - 1.0) / 0.38
-                    tx_low = TX_APEX + (1.0 - TX_APEX) * w_post
-                cp_low_grid[i, j] = greenhouse_side_point(tx_low, ty_low, side, offset_z=0.001)
-                cp_low_norm[i, j] = greenhouse_side_norm(tx_low, ty_low, side)
+                yc = y_low_bound + (y_high_bound - y_low_bound) * s_y
+                cp_top_grid[i, j] = greenhouse_xyz_from_xy(xc, yc, side, offset_z=0.0008)
+                cp_top_norm[i, j] = greenhouse_xy_norm(xc, yc, side)
 
-                # Upper C-pillar & fastback roof sail panel (ty_t <= ty <= 1.0)
-                ty_high = ty_t + (1.0 - ty_t) * s_y
-                if u_cp <= 1.0:
-                    tx_high = win_tx_at_u(u_cp, ty_high)
-                else:
-                    w_post = (u_cp - 1.0) / 0.38
-                    tx_high = TX_APEX + (1.0 - TX_APEX) * w_post
-                cp_top_grid[i, j] = greenhouse_side_point(tx_high, ty_high, side, offset_z=0.001)
-                cp_top_norm[i, j] = greenhouse_side_norm(tx_high, ty_high, side)
+            y_sh_bound = float(f_y_shoulder(xc))
+            y_sill_bound = win_sill_y(xc) if xc <= X_WIN_APEX else cp_split_line_y(xc)
+            for j, s_y in enumerate(np.linspace(0.0, 1.0, cp_ny)):
+                yc = y_sh_bound + (y_sill_bound - y_sh_bound) * s_y
+                cp_low_grid[i, j] = greenhouse_xyz_from_xy(xc, yc, side, offset_z=0.0008)
+                cp_low_norm[i, j] = greenhouse_xy_norm(xc, yc, side)
 
-        m_paint.add_grid(cp_low_grid, grid_norm=cp_low_norm, flip=(side < 0))
         m_paint.add_grid(cp_top_grid, grid_norm=cp_top_norm, flip=(side < 0))
+        m_paint.add_grid(cp_low_grid, grid_norm=cp_low_norm, flip=(side < 0))
 
-        # 3. Iconic Triangular "GTV" C-Pillar Shield (Scudetto Triangolare GTV) + Black C-Pillar Pin (from alfa-profilo.jpeg)
-        # Triangle vertices on the painted silver C-pillar:
-        p_gtv_left = (0.554, 0.137)
-        p_gtv_right = (0.768, 0.146)
-        p_gtv_top_l = (0.638, 0.178)
-        p_gtv_top_r = (0.652, 0.178)
+        # =====================================================================
+        # 3. ICONIC TRIANGULAR "GTV" C-PILLAR SHIELD & BLACK FASTENER PIN
+        # =====================================================================
+        p_gtv_left = (0.585, 0.144)
+        p_gtv_right = (0.785, 0.152)
+        p_gtv_top_l = (0.664, 0.184)
+        p_gtv_top_r = (0.678, 0.184)
 
-        # Crisp dark-gunmetal + chrome triangular outline border with authentic top chevron opening
         for mat_s, w_s, oz_s in ((m_rubber, 0.0034, 0.0024), (m_chrome, 0.0015, 0.0030)):
             add_cpillar_stroke(p_gtv_left, p_gtv_right, w_s, side, mat_s, offset_z=oz_s, n_seg=14)
             add_cpillar_stroke(p_gtv_left, p_gtv_top_l, w_s, side, mat_s, offset_z=oz_s, n_seg=10)
             add_cpillar_stroke(p_gtv_top_r, p_gtv_right, w_s, side, mat_s, offset_z=oz_s, n_seg=10)
-            # Top apex inward chevron hooks
-            add_cpillar_stroke(p_gtv_top_l, (0.642, 0.172), w_s * 0.85, side, mat_s, offset_z=oz_s, n_seg=4)
-            add_cpillar_stroke(p_gtv_top_r, (0.648, 0.172), w_s * 0.85, side, mat_s, offset_z=oz_s, n_seg=4)
+            add_cpillar_stroke(p_gtv_top_l, (0.668, 0.178), w_s * 0.85, side, mat_s, offset_z=oz_s, n_seg=4)
+            add_cpillar_stroke(p_gtv_top_r, (0.674, 0.178), w_s * 0.85, side, mat_s, offset_z=oz_s, n_seg=4)
 
         # Bold geometric "G T V" lettering inside the lower half of the triangle
-        # Letter 'G' (x in [0.592, 0.624], y in [0.143, 0.156])
         for s0, s1 in (
-            ((0.624, 0.155), (0.592, 0.154)),
-            ((0.592, 0.154), (0.592, 0.142)),
-            ((0.592, 0.142), (0.624, 0.143)),
-            ((0.624, 0.143), (0.624, 0.149)),
-            ((0.624, 0.149), (0.608, 0.149)),
-            # Letter 'T' (x in [0.635, 0.665], y in [0.143, 0.157])
-            ((0.635, 0.156), (0.665, 0.157)),
-            ((0.650, 0.157), (0.650, 0.143)),
-            # Letter 'V' (x in [0.676, 0.708], y in [0.144, 0.158])
-            ((0.676, 0.158), (0.692, 0.144)),
-            ((0.692, 0.144), (0.708, 0.159)),
+            # Letter 'G'
+            ((0.650, 0.161), (0.618, 0.160)),
+            ((0.618, 0.160), (0.618, 0.148)),
+            ((0.618, 0.148), (0.650, 0.149)),
+            ((0.650, 0.149), (0.650, 0.155)),
+            ((0.650, 0.155), (0.634, 0.155)),
+            # Letter 'T'
+            ((0.661, 0.162), (0.691, 0.163)),
+            ((0.676, 0.163), (0.676, 0.149)),
+            # Letter 'V'
+            ((0.702, 0.164), (0.718, 0.150)),
+            ((0.718, 0.150), (0.734, 0.165)),
         ):
             add_cpillar_stroke(s0, s1, 0.0032, side, m_rubber, offset_z=0.0026, n_seg=5)
             add_cpillar_stroke(s0, s1, 0.0016, side, m_chrome, offset_z=0.0031, n_seg=5)
 
-        # Small Black Cylindrical Fastener Pin on C-pillar above the rear slope of the GTV triangle (from alfa-profilo.jpeg)
-        pin_pt = greenhouse_xyz_from_xy(0.736, 0.166, side, offset_z=0.001)
+        # Small Black Cylindrical Fastener Pin on C-pillar above the rear slope of the GTV triangle
+        pin_pt = greenhouse_xyz_from_xy(0.758, 0.172, side, offset_z=0.001)
         z_pin = abs(pin_pt[2])
         m_rubber.add_cylinder_z(pin_pt[0], pin_pt[1], side * (z_pin - 0.001), side * (z_pin + 0.0055), 0.0052, segs=20)
-
-        # 4. Pointed Chrome Window Perimeter Moldings, Intermediate Vertical Bar, Vent-Wing & Aligned B-Pillar
-        # Lower sill chrome molding following ty_bot(u) all the way to the sharp pointed rear apex!
-        sill_cr = np.zeros((48, 3, 3), dtype=np.float32)
-        top_cr = np.zeros((48, 3, 3), dtype=np.float32)
-        for i, u in enumerate(np.linspace(0.0, 1.0, 48)):
-            ty_b, ty_t = win_bounds_at_u(u)
-            for j, dty in enumerate((-0.012, 0.008, 0.028)):
-                ty_c = max(0.0, min(1.0, ty_b + dty))
-                tx_c = win_tx_at_u(u, ty_c)
-                sill_cr[i, j] = greenhouse_side_point(tx_c, ty_c, side, offset_z=0.0026)
-            for j, dty in enumerate((-0.028, -0.008, 0.012)):
-                ty_c = max(0.0, min(1.0, ty_t + dty))
-                tx_c = win_tx_at_u(u, ty_c)
-                top_cr[i, j] = greenhouse_side_point(tx_c, ty_c, side, offset_z=0.0026)
-        m_chrome.add_grid(sill_cr, flip=(side < 0))
-        m_chrome.add_grid(top_cr, flip=(side < 0))
-
-        # Front A-pillar chrome window frame along the leading edge of the triangular vent window
-        ap_cr = np.zeros((3, 18, 3), dtype=np.float32)
-        for i, tx in enumerate(np.linspace(0.0, 0.016, 3)):
-            for j, ty in enumerate(np.linspace(0.0, 1.0, 18)):
-                ap_cr[i, j] = greenhouse_side_point(tx, ty, side, offset_z=0.0026)
-        m_chrome.add_grid(ap_cr, flip=(side < 0))
-
-        # Triangular Stainless Corner Gusset at the front-bottom apex of the vent window (from alfa-profilo.jpeg)
-        gusset_cr = np.zeros((6, 6, 3), dtype=np.float32)
-        for j, ty in enumerate(np.linspace(0.02, 0.22, 6)):
-            tx_max = 0.040 * (1.0 - (ty - 0.02) / 0.20) + 0.008
-            for i, tx in enumerate(np.linspace(0.006, tx_max, 6)):
-                gusset_cr[i, j] = greenhouse_side_point(tx, ty, side, offset_z=0.0028)
-        m_chrome.add_grid(gusset_cr, flip=(side < 0))
-
-        # Vertical Chrome Vent-Wing Divider Bar (Barra Verticale Deflettore Anteriore: rises vertically from x=-0.134 at sill to top of A-pillar!)
-        vw_cr = np.zeros((3, 18, 3), dtype=np.float32)
-        for j, ty in enumerate(np.linspace(0.02, 0.97, 18)):
-            tx_center = 0.1474 * (1.0 - ty) + 0.0083 * ty
-            for i, dtx in enumerate((-0.0055, 0.0, 0.0055)):
-                vw_cr[i, j] = greenhouse_side_point(tx_center + dtx, ty, side, offset_z=0.0028)
-        m_chrome.add_grid(vw_cr, flip=(side < 0))
-
-        # Chrome Vent-Window Swivel Latch Knob at lower rear corner of the vent wing
-        latch_pt = greenhouse_side_point(0.136, 0.10, side, offset_z=0.0040)
-        m_chrome.add_box(latch_pt, [0.012, 0.010, 0.005])
-
-        # B-Pillar (Montante B) aligned with Rear Door Shut-Line (x = +0.148 at sill, tilting forward to x = +0.116 at roof)
-        b_black = np.zeros((3, 18, 3), dtype=np.float32)
-        b_cr_front = np.zeros((3, 18, 3), dtype=np.float32)
-        b_cr_rear = np.zeros((3, 18, 3), dtype=np.float32)
-        for j, ty in enumerate(np.linspace(0.0, 0.98, 18)):
-            tx_b = 0.3905 * (1.0 - ty) + 0.3653 * ty
-            for i, dtx in enumerate((-0.0035, 0.0, 0.0035)):
-                b_black[i, j] = greenhouse_side_point(tx_b + dtx, ty, side, offset_z=0.0029)
-            for i, dtx in enumerate((-0.0145, -0.0090, -0.0035)):
-                b_cr_front[i, j] = greenhouse_side_point(tx_b + dtx, ty, side, offset_z=0.0027)
-            for i, dtx in enumerate((0.0035, 0.0090, 0.0145)):
-                b_cr_rear[i, j] = greenhouse_side_point(tx_b + dtx, ty, side, offset_z=0.0027)
-        m_rubber.add_grid(b_black, flip=(side < 0))
-        m_chrome.add_grid(b_cr_front, flip=(side < 0))
-        m_chrome.add_grid(b_cr_rear, flip=(side < 0))
-
-        # Intermediate Vertical Divider Bar in Rear Quarter Window (Montantino Verticale Secondario at u = 0.66)
-        mid_black = np.zeros((3, 18, 3), dtype=np.float32)
-        mid_cr = np.zeros((3, 18, 3), dtype=np.float32)
-        for j, ty in enumerate(np.linspace(0.02, 0.97, 18)):
-            tx_m = tx_mid_bar(ty)
-            for i, dtx in enumerate((-0.0030, 0.0, 0.0030)):
-                mid_black[i, j] = greenhouse_side_point(tx_m + dtx, ty, side, offset_z=0.0026)
-            for i, dtx in enumerate((-0.0055, 0.0, 0.0055)):
-                mid_cr[i, j] = greenhouse_side_point(tx_m + dtx, ty, side, offset_z=0.0022)
-        m_rubber.add_grid(mid_black, flip=(side < 0))
-        m_chrome.add_grid(mid_cr, flip=(side < 0))
-
-        # Vertical Chrome Pop-Out Window Latch Strut near the pointed rear apex of the quarter window
-        pop_cr = np.zeros((3, 8, 3), dtype=np.float32)
-        ty_b_pop, ty_t_pop = win_bounds_at_u(0.92)
-        for j, ty in enumerate(np.linspace(ty_b_pop + 0.02, ty_t_pop - 0.02, 8)):
-            tx_p = win_tx_at_u(0.92, ty)
-            for i, dtx in enumerate((-0.0035, 0.0, 0.0035)):
-                pop_cr[i, j] = greenhouse_side_point(tx_p + dtx, ty, side, offset_z=0.0027)
-        m_chrome.add_grid(pop_cr, flip=(side < 0))
 
         # =====================================================================
         # 5. SCULPTED DOOR SHUT-LINES (Fughe delle Portiere) & ROCKER PANEL SILL
@@ -871,7 +877,7 @@ def build_alfetta_gtv():
         m_amber.add_box([-0.805, 0.020, side * 0.374], [0.022, 0.011, 0.008], rotation_y=-side * 0.08)
 
     # Detailed Matte-Black Circular Fuel Filler Cap on Left Rear Quarter Panel (+Z, right below pointed quarter window tip)
-    fuel_pt = eval_shoulder(0.496, 0.30, 1.0, offset_z=0.0)
+    fuel_pt = eval_shoulder(0.542, 0.32, 1.0, offset_z=0.0)
     z_fuel = abs(fuel_pt[2])
     # Outer recessed black ring + circular cap disc + horizontal finger grip bar + central chrome keyhole
     m_rubber.add_cylinder_z(fuel_pt[0], fuel_pt[1], z_fuel - 0.002, z_fuel + 0.0025, 0.0225, segs=36)
@@ -882,7 +888,7 @@ def build_alfetta_gtv():
     # =========================================================================
     # 7. PEDESTAL CHROME EXTERIOR MIRROR ON DRIVER DOOR (+Z, Specchietto Cromato Alfa Romeo)
     # =========================================================================
-    mir_base = eval_shoulder(-0.106, 0.25, 1.0, offset_z=0.001, offset_y=0.0005)
+    mir_base = eval_shoulder(-0.172, 0.25, 1.0, offset_z=0.001, offset_y=0.0005)
     mx, my, mz = mir_base[0], mir_base[1], mir_base[2]
     # Matte-black rubber mounting gasket & sculpted chrome pedestal foot
     m_rubber.add_box([mx, my, mz + 0.0015], [0.032, 0.008, 0.006], rotation_x=-0.38)

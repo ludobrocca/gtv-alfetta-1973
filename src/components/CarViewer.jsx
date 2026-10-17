@@ -14,7 +14,7 @@ import {
   useProgress,
 } from '@react-three/drei';
 
-const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=10';
+const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=11';
 
 export const PAINT_FINISHES = [
   {
@@ -1008,13 +1008,13 @@ function AlfaRomeoEmblems() {
     tex.anisotropy = 8;
     tex.needsUpdate = true;
 
-    // Conformal 3D quad matching the exact rear quarter glass vertices (BL, BR, TL, TR) on side +Z
+    // Conformal 3D quad matching the exact Pezzo 3 rear quarter glass vertices (BL, BR, TL, TR) on side +Z
     const geo = new THREE.BufferGeometry();
     const positions = new Float32Array([
-      0.332, 0.141, 0.3328, // 0: Bottom-Left (near intermediate vertical bar)
-      0.476, 0.155, 0.3245, // 1: Bottom-Right (toward pointed rear apex)
-      0.334, 0.167, 0.3214, // 2: Top-Left
-      0.480, 0.176, 0.3118, // 3: Top-Right
+      0.235, 0.1362, 0.3353, // 0: Bottom-Left (along straight sill of Pezzo 3)
+      0.440, 0.1426, 0.3335, // 1: Bottom-Right (just before lower-rear upward elbow)
+      0.235, 0.1742, 0.3197, // 2: Top-Left
+      0.440, 0.1806, 0.3131, // 3: Top-Right
     ]);
     const uvs = new Float32Array([
       0, 0,

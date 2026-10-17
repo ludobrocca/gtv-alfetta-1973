@@ -13,6 +13,7 @@ export function Speedometer({ onExitDrive }) {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [throttleActive, setThrottleActive] = useState(false);
   const [brakeActive, setBrakeActive] = useState(false);
+  const [cruiseSpeed, setCruiseSpeed] = useState(driveStore.cruiseSpeed);
 
   useEffect(() => {
     let animId;
@@ -28,6 +29,7 @@ export function Speedometer({ onExitDrive }) {
         setRpm(Math.round(driveStore.rpm));
         setDistance(driveStore.distanceMeters);
         setSoundEnabled(driveStore.soundEnabled);
+        setCruiseSpeed(driveStore.cruiseSpeed);
       }
     };
     animId = requestAnimationFrame(tick);
@@ -54,13 +56,25 @@ export function Speedometer({ onExitDrive }) {
       }
     };
 
+    // Safety: if the user releases the mouse button anywhere on screen or switches windows, release throttle and brake
+    const handleGlobalRelease = () => {
+      driveStore.setThrottle(0);
+      driveStore.setBrake(0);
+      setThrottleActive(false);
+      setBrakeActive(false);
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('mouseup', handleGlobalRelease);
+    window.addEventListener('blur', handleGlobalRelease);
 
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('mouseup', handleGlobalRelease);
+      window.removeEventListener('blur', handleGlobalRelease);
     };
   }, []);
 
@@ -209,7 +223,12 @@ export function Speedometer({ onExitDrive }) {
         </div>
 
         {/* Driving Controls: Accel / Brake Pedals & Quick Cruising Buttons */}
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-2">
+          {/* Controls guidance hint */}
+          <div className="text-center text-[10px] font-mono text-zinc-400 tracking-wider select-none">
+            <span className="text-alfa-gold">W</span> ACCELERA &nbsp;•&nbsp; RILASCIA PER FRENO MOTORE &nbsp;•&nbsp; <span className="text-red-400">S</span> FRENO
+          </div>
+
           <div className="flex items-center gap-2">
             {/* Brake Button */}
             <button
@@ -221,17 +240,27 @@ export function Speedometer({ onExitDrive }) {
                 driveStore.setBrake(0);
                 setBrakeActive(false);
               }}
-              onTouchStart={() => {
+              onMouseLeave={() => {
+                driveStore.setBrake(0);
+                setBrakeActive(false);
+              }}
+              onTouchStart={(e) => {
+                e.preventDefault();
                 driveStore.setBrake(1);
                 setBrakeActive(true);
               }}
-              onTouchEnd={() => {
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                driveStore.setBrake(0);
+                setBrakeActive(false);
+              }}
+              onTouchCancel={() => {
                 driveStore.setBrake(0);
                 setBrakeActive(false);
               }}
               className={`flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl border font-mono text-xs uppercase tracking-wider shadow-xl select-none transition-all ${
                 brakeActive
-                  ? 'border-red-500 bg-red-600 text-white scale-95'
+                  ? 'border-red-500 bg-red-600 text-white scale-95 shadow-red-900/50 shadow-lg'
                   : 'border-red-500/40 bg-red-950/40 text-red-300 hover:bg-red-900/50'
               }`}
             >
@@ -248,17 +277,27 @@ export function Speedometer({ onExitDrive }) {
                 driveStore.setThrottle(0);
                 setThrottleActive(false);
               }}
-              onTouchStart={() => {
+              onMouseLeave={() => {
+                driveStore.setThrottle(0);
+                setThrottleActive(false);
+              }}
+              onTouchStart={(e) => {
+                e.preventDefault();
                 driveStore.setThrottle(1);
                 setThrottleActive(true);
               }}
-              onTouchEnd={() => {
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                driveStore.setThrottle(0);
+                setThrottleActive(false);
+              }}
+              onTouchCancel={() => {
                 driveStore.setThrottle(0);
                 setThrottleActive(false);
               }}
               className={`flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl border font-mono text-xs uppercase tracking-wider shadow-xl select-none transition-all ${
                 throttleActive
-                  ? 'border-emerald-400 bg-emerald-500 text-black font-bold scale-95'
+                  ? 'border-emerald-400 bg-emerald-500 text-black font-bold scale-95 shadow-emerald-900/50 shadow-lg'
                   : 'border-emerald-500/40 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50'
               }`}
             >
@@ -267,23 +306,42 @@ export function Speedometer({ onExitDrive }) {
             </button>
           </div>
 
-          {/* Quick Cruise Speed Presets */}
-          <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/10 bg-black/60 backdrop-blur-md text-[11px] font-mono">
-            <span className="text-zinc-500 mr-1">Cruise:</span>
-            {[60, 95, 130, 175].map((targetKmh) => (
-              <button
-                key={targetKmh}
-                onClick={() => driveStore.setTargetSpeed(targetKmh)}
-                className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${
-                  Math.abs(speed - targetKmh) < 8
-                    ? 'bg-alfa-gold text-black font-bold'
-                    : 'bg-white/10 text-zinc-300 hover:bg-white/20'
-                }`}
-              >
-                {targetKmh}
-              </button>
-            ))}
-            <span className="text-zinc-500 ml-1">km/h</span>
+          {/* Quick Cruise Speed Presets & Status Indicator */}
+          <div className="flex items-center justify-between gap-1.5 px-3 py-2 rounded-xl border border-white/10 bg-black/60 backdrop-blur-md text-[11px] font-mono">
+            <div className="flex items-center gap-1.5">
+              <span className="text-zinc-500">Modalità:</span>
+              {cruiseSpeed !== null ? (
+                <span className="px-1.5 py-0.5 rounded bg-alfa-gold/25 text-alfa-gold text-[10px] font-bold border border-alfa-gold/40">
+                  CRUISE {cruiseSpeed}
+                </span>
+              ) : (
+                <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px] border border-white/10">
+                  MANUALE (W/S)
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1">
+              <span className="text-zinc-500 mr-0.5">Cruise:</span>
+              {[60, 95, 130, 175].map((targetKmh) => {
+                const isCurrentCruise = cruiseSpeed === targetKmh;
+                return (
+                  <button
+                    key={targetKmh}
+                    onClick={() => driveStore.setCruise(isCurrentCruise ? null : targetKmh)}
+                    className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${
+                      isCurrentCruise
+                        ? 'bg-alfa-gold text-black font-bold shadow-md ring-1 ring-white/50'
+                        : 'bg-white/10 text-zinc-300 hover:bg-white/20'
+                    }`}
+                    title={isCurrentCruise ? 'Disattiva Cruise Control' : `Attiva Cruise a ${targetKmh} km/h`}
+                  >
+                    {targetKmh}
+                  </button>
+                );
+              })}
+              <span className="text-zinc-500 ml-0.5">km/h</span>
+            </div>
           </div>
         </div>
       </div>

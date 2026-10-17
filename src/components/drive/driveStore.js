@@ -6,7 +6,7 @@ class DriveStore {
   constructor() {
     this.mode = 'showroom'; // 'showroom' | 'drive'
     this.speedKmh = 0;       // Current speed in km/h
-    this.targetSpeedKmh = 95;// Default cruising speed when entering drive mode
+    this.cruiseSpeed = null; // null = manual pedal driving, number = active cruise speed
     this.throttle = 0;       // 0 to 1
     this.brake = 0;          // 0 to 1
     this.rpm = 950;          // Bialbero 1779cc RPM: 950 idle to 6200 redline
@@ -42,26 +42,49 @@ class DriveStore {
     if (this.mode === mode) return;
     this.mode = mode;
     if (mode === 'drive') {
+      // Start in smooth rolling motion, 100% manual pedal driving ready
       if (this.speedKmh < 10) {
-        this.targetSpeedKmh = 95;
+        this.speedKmh = 50;
       }
+      this.cruiseSpeed = null;
       this.headlightsOn = true;
     } else {
-      this.targetSpeedKmh = 0;
+      this.cruiseSpeed = null;
     }
     this.notify();
   }
 
   setThrottle(val) {
-    this.throttle = Math.max(0, Math.min(1, val));
+    const clamped = Math.max(0, Math.min(1, val));
+    this.throttle = clamped;
+    // Pressing manual throttle immediately takes manual control from cruise
+    if (clamped > 0 && this.cruiseSpeed !== null) {
+      this.cruiseSpeed = null;
+      this.notify();
+    }
   }
 
   setBrake(val) {
-    this.brake = Math.max(0, Math.min(1, val));
+    const clamped = Math.max(0, Math.min(1, val));
+    this.brake = clamped;
+    // Tapping brake immediately disengages cruise control, exactly like in real cars
+    if (clamped > 0 && this.cruiseSpeed !== null) {
+      this.cruiseSpeed = null;
+      this.notify();
+    }
+  }
+
+  setCruise(kmh) {
+    if (kmh === null || kmh === this.cruiseSpeed) {
+      this.cruiseSpeed = null;
+    } else {
+      this.cruiseSpeed = Math.max(20, Math.min(195, kmh));
+    }
+    this.notify();
   }
 
   setTargetSpeed(kmh) {
-    this.targetSpeedKmh = Math.max(0, Math.min(195, kmh));
+    this.setCruise(kmh);
   }
 
   toggleSound() {
@@ -85,25 +108,44 @@ class DriveStore {
     const dt = Math.min(delta, 0.1);
 
     if (this.mode === 'drive') {
-      // Manual input handling vs cruise target
-      let target = this.targetSpeedKmh;
-      if (this.throttle > 0) {
-        target = Math.min(195, target + this.throttle * 40 * dt);
-        this.targetSpeedKmh = target;
-      }
-      if (this.brake > 0) {
-        target = Math.max(0, target - this.brake * 60 * dt);
-        this.targetSpeedKmh = target;
-      }
+      if (this.cruiseSpeed !== null) {
+        // Active Cruise Control: smoothly lock onto set cruise speed
+        const diff = this.cruiseSpeed - this.speedKmh;
+        if (diff > 0) {
+          this.speedKmh = Math.min(this.cruiseSpeed, this.speedKmh + 14.0 * dt);
+        } else if (diff < 0) {
+          this.speedKmh = Math.max(this.cruiseSpeed, this.speedKmh - 12.0 * dt);
+        }
+      } else {
+        // 100% Realistic Manual Driving Physics (1973 Alfetta GTV Bialbero 1.8 122 CV, 1080 kg):
+        if (this.throttle > 0) {
+          // Engine acceleration:
+          // Brisk in low-to-mid gears (0-100 km/h ~9.5s), tapering naturally with aerodynamic drag up to 195 km/h
+          const speedRatio = Math.max(0, Math.min(1, this.speedKmh / 195.0));
+          const powerCurve = Math.max(0.12, 1.0 - Math.pow(speedRatio, 1.6));
+          const accelRate = 24.0 * powerCurve * this.throttle; // km/h per sec
+          this.speedKmh = Math.min(195.0, this.speedKmh + accelRate * dt);
+        } else {
+          // Accelerator released (pedale alzato / freno motore):
+          // Realistic multi-stage deceleration:
+          // - High speed (120-195 km/h): strong aerodynamic resistance + engine drag (~15-26 km/h/s)
+          // - Medium speed (50-120 km/h): mechanical engine braking in gear (~9-14 km/h/s)
+          // - Low speed (0-50 km/h): gentle rolling deceleration down to complete stop (~6-9 km/h/s)
+          if (this.speedKmh > 0) {
+            const vRel = this.speedKmh / 100.0;
+            const aeroDrag = vRel * vRel * 5.2; // Aerodynamic drag grows with v^2
+            const engineBrake = 7.5;            // Mechanical engine braking in gear
+            const rollingFriction = 2.0;        // Tire and wheel bearing resistance
+            const totalNaturalDecel = aeroDrag + engineBrake + rollingFriction;
+            this.speedKmh = Math.max(0.0, this.speedKmh - totalNaturalDecel * dt);
+          }
+        }
 
-      // Smooth acceleration & braking response curves
-      const accelRate = 22.0; // km/h per sec
-      const brakeRate = this.brake > 0 ? 55.0 : 18.0;
-
-      if (this.speedKmh < target) {
-        this.speedKmh = Math.min(target, this.speedKmh + accelRate * dt);
-      } else if (this.speedKmh > target) {
-        this.speedKmh = Math.max(target, this.speedKmh - brakeRate * dt);
+        // Foot brake pedal (dischi freno servoassistiti): firm, rapid stopping power
+        if (this.brake > 0) {
+          const brakeDecel = this.brake * 58.0 * dt; // ~58 km/h per sec
+          this.speedKmh = Math.max(0.0, this.speedKmh - brakeDecel);
+        }
       }
 
       // 1 unit in our 3D model is approx 2.22 meters (model length ~1.89m, real GTV 4.19m)
@@ -119,7 +161,7 @@ class DriveStore {
       const R_TIRE = 0.168;
       this.wheelRotation += distUnits / R_TIRE;
 
-      // Determine gear from speed
+      // Determine 5-speed transaxle gear
       let calculatedGear = 1;
       for (let g = 1; g <= 5; g++) {
         if (this.speedKmh <= this.gearMaxSpeeds[g] || g === 5) {
@@ -129,15 +171,17 @@ class DriveStore {
       }
       this.gear = calculatedGear;
 
-      // Calculate engine RPM for Bialbero engine sound
-      const minGearSpeed = this.gear === 1 ? 0 : this.gearMaxSpeeds[this.gear - 1] * 0.75;
+      // Calculate engine RPM for Bialbero Twin-Cam audio
+      const minGearSpeed = this.gear === 1 ? 0 : this.gearMaxSpeeds[this.gear - 1] * 0.70;
       const maxGearSpeed = this.gearMaxSpeeds[this.gear];
       const speedRatio = Math.max(0, Math.min(1, (this.speedKmh - minGearSpeed) / Math.max(1, maxGearSpeed - minGearSpeed)));
 
-      if (this.speedKmh < 1) {
-        this.rpm = 950 + Math.random() * 40; // Idle tremble
+      if (this.speedKmh < 0.5) {
+        // Stationary idle: rev up if pressing throttle, otherwise smooth idle tremble
+        this.rpm = this.throttle > 0 ? 950 + this.throttle * 2800 : 950 + Math.random() * 30;
       } else {
-        this.rpm = 1800 + speedRatio * 4400 + (this.throttle > 0 ? 300 : 0);
+        const throttleRpmBoost = this.throttle > 0 ? 300 : (this.brake > 0 ? -250 : -120);
+        this.rpm = Math.max(950, Math.min(6200, 1600 + speedRatio * 4400 + throttleRpmBoost));
       }
 
       // Return to cinematic camera after 6 seconds of no user touch/orbit

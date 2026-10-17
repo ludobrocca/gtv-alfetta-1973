@@ -108,7 +108,16 @@ const HISTORICAL_SPECS = [
 ];
 
 export default function App() {
-  const [sceneMode, setSceneMode] = useState('showroom'); // 'showroom' | 'drive'
+  const [sceneMode, setSceneMode] = useState(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('mode') === 'drive' || window.location.hash === '#drive') {
+        driveStore.setMode('drive');
+        return 'drive';
+      }
+    } catch {}
+    return 'showroom';
+  });
   const [autoRotate, setAutoRotate] = useState(true);
   const [lightingMode, setLightingMode] = useState('night'); // 'night' | 'studio'
   const [activePaintId, setActivePaintId] = useState('ar727-reale');

@@ -1,0 +1,28 @@
+services:
+  alfetta-showroom:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: alfa-romeo-1973-showroom
+    ports:
+      - "8080:80"
+    volumes:
+      # Mount public/models so updating public/models/alfa-romeo-1973.glb immediately updates the served 3D model without rebuilding
+      - ./public/models:/usr/share/nginx/html/models:ro
+    restart: unless-stopped
+
+  alfetta-dev:
+    image: node:20-alpine
+    container_name: alfa-romeo-1973-dev
+    working_dir: /app
+    profiles:
+      - dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"

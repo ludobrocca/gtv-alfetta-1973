@@ -1,0 +1,835 @@
+#!/usr/bin/env python3
+"""
+Parametric Coachbuilt 3D CAD Mesh Generator for the 1973/1976 Alfa Romeo Alfetta GTV.
+Uses unified C2-continuous parametric surfaces for the lower coachwork, greenhouse glass,
+pillars, chrome window frames, and C-pillar louvers so every panel is 100% flush and watertight.
+"""
+
+import json
+import math
+import struct
+import numpy as np
+from scipy.interpolate import PchipInterpolator
+
+
+class MeshBuilder:
+    def __init__(self, name, material_idx):
+        self.name = name
+        self.material_idx = material_idx
+        self.positions = []
+        self.normals = []
+        self.indices = []
+
+    def add_grid(self, grid_pos, grid_norm=None, flip=False, close_u=False, close_v=False):
+        P = np.asarray(grid_pos, dtype=np.float32)
+        nu, nv, _ = P.shape
+
+        if grid_norm is None:
+            dP_du = np.zeros_like(P)
+            dP_dv = np.zeros_like(P)
+            dP_du[1:-1] = P[2:] - P[:-2]
+            dP_du[0] = P[1] - P[0]
+            dP_du[-1] = P[-1] - P[-2]
+
+            dP_dv[:, 1:-1] = P[:, 2:] - P[:, :-2]
+            dP_dv[:, 0] = P[:, 1] - P[:, 0]
+            dP_dv[:, -1] = P[:, -1] - P[:, -2]
+
+            N = np.cross(dP_du, dP_dv)
+            if flip:
+                N = -N
+            lengths = np.linalg.norm(N, axis=-1, keepdims=True)
+            lengths[lengths < 1e-8] = 1.0
+            N = N / lengths
+        else:
+            N = np.asarray(grid_norm, dtype=np.float32)
+            if flip:
+                N = -N
+
+        offset = len(self.positions)
+        self.positions.extend(P.reshape(-1, 3).tolist())
+        self.normals.extend(N.reshape(-1, 3).tolist())
+
+        u_max = nu if close_u else nu - 1
+        v_max = nv if close_v else nv - 1
+
+        for i in range(u_max):
+            i0 = i
+            i1 = (i + 1) % nu
+            for j in range(v_max):
+                j0 = j
+                j1 = (j + 1) % nv
+                a = offset + i0 * nv + j0
+                b = offset + i1 * nv + j0
+                c = offset + i1 * nv + j1
+                d = offset + i0 * nv + j1
+                if not flip:
+                    self.indices.extend([a, b, c, a, c, d])
+                else:
+                    self.indices.extend([a, c, b, a, d, c])
+
+    def add_box(self, center, size, rotation_y=0.0, rotation_z=0.0):
+        cx, cy, cz = center
+        sx, sy, sz = size[0] * 0.5, size[1] * 0.5, size[2] * 0.5
+        faces = [
+            ([[sx, -sy, -sz], [sx, sy, -sz], [sx, sy, sz], [sx, -sy, sz]], [1, 0, 0]),
+            ([[-sx, -sy, sz], [-sx, sy, sz], [-sx, sy, -sz], [-sx, -sy, -sz]], [-1, 0, 0]),
+            ([[-sx, sy, -sz], [-sx, sy, sz], [sx, sy, sz], [sx, sy, -sz]], [0, 1, 0]),
+            ([[-sx, -sy, sz], [-sx, -sy, -sz], [sx, -sy, -sz], [sx, -sy, sz]], [0, -1, 0]),
+            ([[-sx, -sy, sz], [sx, -sy, sz], [sx, sy, sz], [-sx, sy, sz]], [0, 0, 1]),
+            ([[sx, -sy, -sz], [-sx, -sy, -sz], [-sx, sy, -sz], [sx, sy, -sz]], [0, 0, -1]),
+        ]
+        cy_rot, sy_rot = math.cos(rotation_y), math.sin(rotation_y)
+        cz_rot, sz_rot = math.cos(rotation_z), math.sin(rotation_z)
+
+        def rot(v):
+            x, y, z = v
+            x1 = x * cz_rot - y * sz_rot
+            y1 = x * sz_rot + y * cz_rot
+            z1 = z
+            x2 = x1 * cy_rot + z1 * sy_rot
+            y2 = y1
+            z2 = -x1 * sy_rot + z1 * cy_rot
+            return [x2, y2, z2]
+
+        for verts, norm in faces:
+            offset = len(self.positions)
+            rn = rot(norm)
+            for v in verts:
+                rv = rot(v)
+                self.positions.append([rv[0] + cx, rv[1] + cy, rv[2] + cz])
+                self.normals.append(rn)
+            self.indices.extend([offset, offset + 2, offset + 1, offset, offset + 3, offset + 2])
+
+    def add_cylinder_z(self, cx, cy, z0, z1, r_outer, r_inner=0.0, segs=48):
+        angles = np.linspace(0, 2 * math.pi, segs, endpoint=False)
+        grid = np.zeros((2, segs, 3), dtype=np.float32)
+        norm = np.zeros((2, segs, 3), dtype=np.float32)
+        for j, a in enumerate(angles):
+            ca, sa = math.cos(a), math.sin(a)
+            grid[0, j] = [cx + r_outer * ca, cy + r_outer * sa, z0]
+            grid[1, j] = [cx + r_outer * ca, cy + r_outer * sa, z1]
+            norm[0, j] = [ca, sa, 0.0]
+            norm[1, j] = [ca, sa, 0.0]
+        self.add_grid(grid, norm, flip=(z1 > z0), close_v=True)
+
+        for z_val, nz in [(z0, -1.0 if z1 > z0 else 1.0), (z1, 1.0 if z1 > z0 else -1.0)]:
+            ring_grid = np.zeros((2, segs, 3), dtype=np.float32)
+            ring_norm = np.zeros((2, segs, 3), dtype=np.float32)
+            for j, a in enumerate(angles):
+                ca, sa = math.cos(a), math.sin(a)
+                ring_grid[0, j] = [cx + r_inner * ca, cy + r_inner * sa, z_val]
+                ring_grid[1, j] = [cx + r_outer * ca, cy + r_outer * sa, z_val]
+                ring_norm[0, j] = [0.0, 0.0, nz]
+                ring_norm[1, j] = [0.0, 0.0, nz]
+            self.add_grid(ring_grid, ring_norm, flip=(nz < 0), close_v=True)
+
+    def add_cylinder_x(self, x0, x1, cy, cz, r_outer, r_inner=0.0, segs=36, bevel=0.0):
+        angles = np.linspace(0, 2 * math.pi, segs, endpoint=False)
+        grid = np.zeros((2, segs, 3), dtype=np.float32)
+        norm = np.zeros((2, segs, 3), dtype=np.float32)
+        for j, a in enumerate(angles):
+            ca, sa = math.cos(a), math.sin(a)
+            grid[0, j] = [x0, cy + r_outer * sa, cz + r_outer * ca]
+            grid[1, j] = [x1, cy + (r_outer - bevel) * sa, cz + (r_outer - bevel) * ca]
+            norm[0, j] = [0.0, sa, ca]
+            norm[1, j] = [0.0, sa, ca]
+        self.add_grid(grid, norm, flip=(x1 < x0), close_v=True)
+
+        for x_val, r_use, nx in [(x0, r_outer, -1.0 if x1 > x0 else 1.0), (x1, r_outer - bevel, 1.0 if x1 > x0 else -1.0)]:
+            ring_grid = np.zeros((2, segs, 3), dtype=np.float32)
+            ring_norm = np.zeros((2, segs, 3), dtype=np.float32)
+            for j, a in enumerate(angles):
+                ca, sa = math.cos(a), math.sin(a)
+                ring_grid[0, j] = [x_val, cy + r_inner * sa, cz + r_inner * ca]
+                ring_grid[1, j] = [x_val, cy + r_use * sa, cz + r_use * ca]
+                ring_norm[0, j] = [nx, 0.0, 0.0]
+                ring_norm[1, j] = [nx, 0.0, 0.0]
+            self.add_grid(ring_grid, ring_norm, flip=(nx < 0), close_v=True)
+
+
+def build_alfetta_gtv():
+    m_paint = MeshBuilder("Carrozzeria_AR727", 0)
+    m_chrome = MeshBuilder("Cromature_Inox", 1)
+    m_glass = MeshBuilder("Cristalli_Verdi", 2)
+    m_rubber = MeshBuilder("Gomma_E_Calandra", 3)
+    m_rim = MeshBuilder("Cerchi_Campagnolo_16Fori", 4)
+    m_headlight = MeshBuilder("Proiettori_Carello", 5)
+    m_amber = MeshBuilder("Indicatori_Ambra", 6)
+    m_taillight = MeshBuilder("Fanali_Posteriori", 7)
+    m_interior = MeshBuilder("Abitacolo_Interno", 8)
+    m_wood = MeshBuilder("Volante_Legno", 9)
+
+    # =========================================================================
+    # 1. PARAMETRIC SILHOUETTE & CROSS-SECTIONS OF THE ALFETTA GTV (1973/1976)
+    # =========================================================================
+    profile_pts = np.array([
+        # x,     y_center_top, y_fender_top, y_belt,  y_sill,  z_belt,  z_top,   z_bottom
+        [-0.955,  0.034,        0.038,       0.025,  -0.115,   0.315,   0.290,   0.270], # Front shark-nose tip
+        [-0.915,  0.048,        0.054,       0.032,  -0.158,   0.352,   0.324,   0.300], # Front grille recess
+        [-0.840,  0.064,        0.072,       0.038,  -0.176,   0.374,   0.342,   0.324], # Front fender lead
+        [-0.700,  0.080,        0.092,       0.044,  -0.184,   0.388,   0.352,   0.338], # Front wheel arch lead
+        [-0.575,  0.092,        0.105,       0.050,  -0.186,   0.394,   0.358,   0.345], # Front axle center
+        [-0.440,  0.102,        0.112,       0.055,  -0.186,   0.392,   0.358,   0.345], # Front wheel arch trail
+        [-0.310,  0.112,        0.116,       0.060,  -0.186,   0.392,   0.336,   0.345], # Base of windshield (cowl)
+        [-0.160,  0.208,        0.118,       0.065,  -0.186,   0.394,   0.302,   0.346], # Mid windshield
+        [-0.015,  0.292,        0.120,       0.070,  -0.186,   0.396,   0.278,   0.346], # Windshield header / A-pillar top
+        [ 0.155,  0.304,        0.123,       0.075,  -0.186,   0.396,   0.276,   0.346], # Roof peak / B-pillar
+        [ 0.355,  0.294,        0.128,       0.082,  -0.186,   0.395,   0.272,   0.345], # Rear roof crown
+        [ 0.500,  0.258,        0.136,       0.090,  -0.184,   0.395,   0.266,   0.344], # Fastback slope / C-pillar
+        [ 0.570,  0.238,        0.140,       0.094,  -0.182,   0.396,   0.262,   0.342], # Rear axle center
+        [ 0.720,  0.190,        0.142,       0.102,  -0.174,   0.386,   0.258,   0.332], # Lower fastback hatch
+        [ 0.855,  0.144,        0.140,       0.106,  -0.156,   0.368,   0.254,   0.314], # Rear decklid base of glass
+        [ 0.915,  0.130,        0.128,       0.102,  -0.132,   0.348,   0.248,   0.295], # Kamm tail sharp trailing edge
+        [ 0.932,  0.112,        0.110,       0.060,  -0.118,   0.335,   0.242,   0.282], # Kamm tail vertical face
+    ], dtype=np.float64)
+
+    xs_ctrl = profile_pts[:, 0]
+    f_y_center = PchipInterpolator(xs_ctrl, profile_pts[:, 1])
+    f_y_shoulder = PchipInterpolator(xs_ctrl, profile_pts[:, 2])
+    f_y_belt = PchipInterpolator(xs_ctrl, profile_pts[:, 3])
+    f_y_sill = PchipInterpolator(xs_ctrl, profile_pts[:, 4])
+    f_z_belt = PchipInterpolator(xs_ctrl, profile_pts[:, 5])
+    f_z_top = PchipInterpolator(xs_ctrl, profile_pts[:, 6])
+    f_z_bot = PchipInterpolator(xs_ctrl, profile_pts[:, 7])
+
+    FRONT_AXLE_X = -0.575
+    REAR_AXLE_X = 0.570
+    AXLE_Y = -0.145
+    ARCH_RADIUS = 0.192
+
+    def wheel_arch_cut(x):
+        y_cut = -1.0
+        flare = 0.0
+        for ax in (FRONT_AXLE_X, REAR_AXLE_X):
+            dx = x - ax
+            if abs(dx) < ARCH_RADIUS * 1.18:
+                inside = max(0.0, ARCH_RADIUS * ARCH_RADIUS - dx * dx)
+                arch_y = AXLE_Y + math.sqrt(inside)
+                w = max(0.0, 1.0 - (abs(dx) / (ARCH_RADIUS * 1.02)) ** 4)
+                y_cut = max(y_cut, AXLE_Y + (arch_y - AXLE_Y) * w)
+                if abs(dx) < ARCH_RADIUS * 1.12:
+                    flare = max(flare, 0.012 * math.exp(-((abs(dx) / ARCH_RADIUS - 0.65) ** 2) / 0.25))
+        return y_cut, flare
+
+    # =========================================================================
+    # A) LOWER BODY COACHWORK SHELL (Hood + Fenders + Doors + Rear Quarter + Kamm Tail)
+    # =========================================================================
+    nx = 180
+    xs = np.linspace(-0.955, 0.932, nx)
+    nv_half = 30
+    nv = nv_half * 2 - 1
+    body_grid = np.zeros((nx, nv, 3), dtype=np.float32)
+
+    for i, x in enumerate(xs):
+        yc = float(f_y_center(x))
+        ys = float(f_y_shoulder(x))
+        yb = float(f_y_belt(x))
+        ysill = float(f_y_sill(x))
+        zb = float(f_z_belt(x))
+        zt = float(f_z_top(x))
+        zbot = float(f_z_bot(x))
+
+        y_arch, z_flare = wheel_arch_cut(x)
+        ysill_eff = max(ysill, y_arch)
+
+        # In cabin zone (-0.305 < x < 0.855), the lower body shell stops at the window sill (ys)
+        # and drops into the interior tub, while the upper greenhouse is built by the unified
+        # top & side greenhouse surfaces below!
+        cabin_open = (
+            0.5 * (1.0 + math.tanh((x - (-0.305)) / 0.015))
+            * 0.5 * (1.0 + math.tanh((0.855 - x) / 0.015))
+        )
+        yc_lower = yc * (1.0 - cabin_open) + (ys - 0.008) * cabin_open
+        zt_lower = (zb * 0.955)
+
+        half_pts = []
+        # 1. Centerline to shoulder / window sill line (k=0..10)
+        for k in range(11):
+            t = k / 10.0
+            z = t * zt_lower
+            hood_crease = 0.0045 * math.exp(-((z / 0.024) ** 2)) * (1.0 - cabin_open) if x < -0.31 else 0.0
+            y = yc_lower - (yc_lower - ys) * (t ** 1.8) + hood_crease
+            half_pts.append((x, y, z))
+
+        # 2. Shoulder / window sill (ys, zt_lower) down to Giugiaro sharp beltline crease (yb, zb) (k=11..18)
+        for k in range(1, 9):
+            t = k / 8.0
+            z = zt_lower + (zb + z_flare * 0.6 - zt_lower) * (t ** 0.85)
+            y = ys + (yb - ys) * t
+            half_pts.append((x, y, z))
+
+        # 3. Beltline crease (yb, zb) down to wheel-arch / lower sill (ysill_eff, zbot) (k=19..27)
+        for k in range(1, 10):
+            t = k / 9.0
+            arch_lip = z_flare * math.exp(-((t - 0.75) ** 2) / 0.08)
+            z = zb + (zbot - zb) * (t ** 1.35) + arch_lip
+            y = yb + (ysill_eff - yb) * t
+            half_pts.append((x, y, z))
+
+        # 4. Flat horizontal underbody floor across z (k=28..29)
+        half_pts.append((x, ysill_eff, max(0.18, zbot - 0.045)))
+        half_pts.append((x, ysill, 0.0))
+
+        full_section = []
+        for k in range(nv_half - 1, 0, -1):
+            px, py, pz = half_pts[k]
+            full_section.append([px, py, -pz])
+        for k in range(nv_half):
+            px, py, pz = half_pts[k]
+            full_section.append([px, py, pz])
+
+        body_grid[i] = np.array(full_section, dtype=np.float32)
+
+    m_paint.add_grid(body_grid, flip=False)
+
+    # =========================================================================
+    # B) UNIFIED GREENHOUSE TOP SURFACE (Windshield + Painted Roof + Rear Fastback Glass)
+    # All evaluated on the same crown function y_crown(x, s) so they meet flush!
+    # =========================================================================
+    def greenhouse_top_point(x, s, offset_y=0.0):
+        """s in [-1, 1] across the width of the greenhouse top/glass."""
+        yc = float(f_y_center(x))
+        zt = float(f_z_top(x))
+        z = s * zt
+        y = yc - 0.014 * (s ** 2) + offset_y
+        return [x, y, z]
+
+    # 1. Front Laminated Windshield (-0.305 <= x <= -0.018, |s| <= 0.92)
+    ws_nx, ws_nv = 28, 30
+    ws_grid = np.zeros((ws_nx, ws_nv, 3), dtype=np.float32)
+    for i, x in enumerate(np.linspace(-0.305, -0.018, ws_nx)):
+        for j, s in enumerate(np.linspace(-0.92, 0.92, ws_nv)):
+            ws_grid[i, j] = greenhouse_top_point(x, s)
+    m_glass.add_grid(ws_grid, flip=False)
+
+    # Painted A-Pillars on the outer edges (0.91 <= |s| <= 1.0) of the windshield
+    for side in (-1.0, 1.0):
+        ap_grid = np.zeros((ws_nx, 5, 3), dtype=np.float32)
+        for i, x in enumerate(np.linspace(-0.305, -0.018, ws_nx)):
+            for j, s_abs in enumerate(np.linspace(0.90, 1.02, 5)):
+                ap_grid[i, j] = greenhouse_top_point(x, side * s_abs, offset_y=0.001)
+        m_paint.add_grid(ap_grid, flip=(side < 0))
+        # Chrome windshield side molding
+        cr_grid = np.zeros((ws_nx, 3, 3), dtype=np.float32)
+        for i, x in enumerate(np.linspace(-0.305, -0.018, ws_nx)):
+            for j, s_abs in enumerate(np.linspace(0.89, 0.92, 3)):
+                cr_grid[i, j] = greenhouse_top_point(x, side * s_abs, offset_y=0.002)
+        m_chrome.add_grid(cr_grid, flip=(side < 0))
+
+    # Chrome windshield top & bottom moldings
+    for x_edge in (-0.304, -0.019):
+        cr_bar = np.zeros((2, ws_nv, 3), dtype=np.float32)
+        for j, s in enumerate(np.linspace(-0.92, 0.92, ws_nv)):
+            cr_bar[0, j] = greenhouse_top_point(x_edge - 0.004, s, offset_y=0.002)
+            cr_bar[1, j] = greenhouse_top_point(x_edge + 0.004, s, offset_y=0.002)
+        m_chrome.add_grid(cr_bar, flip=False)
+
+    # 2. Painted Roof Panel Crown (-0.018 <= x <= 0.360, |s| <= 1.0)
+    roof_nx, roof_nv = 32, 30
+    roof_grid = np.zeros((roof_nx, roof_nv, 3), dtype=np.float32)
+    for i, x in enumerate(np.linspace(-0.018, 0.360, roof_nx)):
+        for j, s in enumerate(np.linspace(-1.0, 1.0, roof_nv)):
+            roof_grid[i, j] = greenhouse_top_point(x, s, offset_y=0.001)
+    m_paint.add_grid(roof_grid, flip=False)
+
+    # 3. Rear Fastback Hatch Window (0.360 <= x <= 0.855, |s| <= 0.88) — ZERO SPOILER!
+    rw_nx, rw_nv = 36, 30
+    rw_grid = np.zeros((rw_nx, rw_nv, 3), dtype=np.float32)
+    for i, x in enumerate(np.linspace(0.360, 0.855, rw_nx)):
+        for j, s in enumerate(np.linspace(-0.88, 0.88, rw_nv)):
+            rw_grid[i, j] = greenhouse_top_point(x, s)
+    m_glass.add_grid(rw_grid, flip=False)
+
+    # Painted Rear Hatch Side Pillars (0.87 <= |s| <= 1.0) & Chrome Rear Window Frame
+    for side in (-1.0, 1.0):
+        rh_grid = np.zeros((rw_nx, 5, 3), dtype=np.float32)
+        for i, x in enumerate(np.linspace(0.360, 0.855, rw_nx)):
+            for j, s_abs in enumerate(np.linspace(0.87, 1.00, 5)):
+                rh_grid[i, j] = greenhouse_top_point(x, side * s_abs, offset_y=0.001)
+        m_paint.add_grid(rh_grid, flip=(side < 0))
+
+        cr_rw = np.zeros((rw_nx, 3, 3), dtype=np.float32)
+        for i, x in enumerate(np.linspace(0.360, 0.855, rw_nx)):
+            for j, s_abs in enumerate(np.linspace(0.855, 0.885, 3)):
+                cr_rw[i, j] = greenhouse_top_point(x, side * s_abs, offset_y=0.002)
+        m_chrome.add_grid(cr_rw, flip=(side < 0))
+
+    for x_edge in (0.361, 0.854):
+        cr_bar = np.zeros((2, rw_nv, 3), dtype=np.float32)
+        for j, s in enumerate(np.linspace(-0.88, 0.88, rw_nv)):
+            cr_bar[0, j] = greenhouse_top_point(x_edge - 0.004, s, offset_y=0.002)
+            cr_bar[1, j] = greenhouse_top_point(x_edge + 0.004, s, offset_y=0.002)
+        m_chrome.add_grid(cr_bar, flip=False)
+
+    # =========================================================================
+    # C) UNIFIED GREENHOUSE SIDE TUMBLEHOME SURFACE (Side Windows + C-Pillar Sail Panel + Chrome Trim)
+    # Evaluated on one shared surface S_side(tx, ty) so there is ZERO gap or protruding bar!
+    # =========================================================================
+    def greenhouse_side_point(tx, ty, side, offset_z=0.0):
+        """
+        ty in [0, 1] from window sill (ys) up to roof rail (yc - 0.014).
+        tx in [0, 1] from front A-pillar (-0.305.. -0.018) to rear hatch edge (0.855.. 0.360).
+        """
+        x_front = -0.305 + ty * (-0.018 - (-0.305))
+        x_rear = 0.855 + ty * (0.360 - 0.855)
+        x = x_front + tx * (x_rear - x_front)
+
+        ys = float(f_y_shoulder(x))
+        y_top = float(f_y_center(x)) - 0.014
+        y = ys + ty * (y_top - ys)
+
+        z_sill = float(f_z_belt(x)) * 0.955
+        z_roof = float(f_z_top(x))
+        # Smooth tumblehome curve
+        z_abs = z_sill + (z_roof - z_sill) * (ty ** 0.92) + offset_z
+        return [x, y, side * z_abs]
+
+    for side in (-1.0, 1.0):
+        # 1. Side Window Glass (0.02 <= tx <= 0.72, 0.03 <= ty <= 0.96)
+        sw_nx, sw_ny = 40, 18
+        sw_grid = np.zeros((sw_nx, sw_ny, 3), dtype=np.float32)
+        for i, tx in enumerate(np.linspace(0.02, 0.72, sw_nx)):
+            for j, ty in enumerate(np.linspace(0.03, 0.96, sw_ny)):
+                sw_grid[i, j] = greenhouse_side_point(tx, ty, side, offset_z=0.0)
+        m_glass.add_grid(sw_grid, flip=(side > 0))
+
+        # 2. Giugiaro Painted C-Pillar Sail Panel (0.72 <= tx <= 1.00, 0.0 <= ty <= 1.0)
+        # Shares exact boundary tx=0.72 with the rear quarter window!
+        cp_nx, cp_ny = 20, 18
+        cp_grid = np.zeros((cp_nx, cp_ny, 3), dtype=np.float32)
+        for i, tx in enumerate(np.linspace(0.72, 1.00, cp_nx)):
+            for j, ty in enumerate(np.linspace(0.0, 1.0, cp_ny)):
+                cp_grid[i, j] = greenhouse_side_point(tx, ty, side, offset_z=0.001)
+        m_paint.add_grid(cp_grid, flip=(side > 0))
+
+        # 3. C-Pillar Black GTV Ventilation Louver + Chrome 'GTV' Script (flush on S_side!)
+        lv_nx, lv_ny = 10, 8
+        lv_grid = np.zeros((lv_nx, lv_ny, 3), dtype=np.float32)
+        for i, tx in enumerate(np.linspace(0.76, 0.93, lv_nx)):
+            for j, ty in enumerate(np.linspace(0.14, 0.36, lv_ny)):
+                lv_grid[i, j] = greenhouse_side_point(tx, ty, side, offset_z=0.003)
+        m_rubber.add_grid(lv_grid, flip=(side > 0))
+
+        gtv_grid = np.zeros((6, 4, 3), dtype=np.float32)
+        for i, tx in enumerate(np.linspace(0.79, 0.90, 6)):
+            for j, ty in enumerate(np.linspace(0.22, 0.28, 4)):
+                gtv_grid[i, j] = greenhouse_side_point(tx, ty, side, offset_z=0.0045)
+        m_chrome.add_grid(gtv_grid, flip=(side > 0))
+
+        # 4. Flush Chrome Window Perimeter Moldings, B-Pillar & Vent-Wing Divider (all on S_side!)
+        # Lower sill chrome strip (ty in [0.0, 0.045], tx in [0.0, 0.73])
+        sill_cr = np.zeros((32, 3, 3), dtype=np.float32)
+        for i, tx in enumerate(np.linspace(0.0, 0.73, 32)):
+            for j, ty in enumerate(np.linspace(0.0, 0.045, 3)):
+                sill_cr[i, j] = greenhouse_side_point(tx, ty, side, offset_z=0.0025)
+        m_chrome.add_grid(sill_cr, flip=(side > 0))
+
+        # Upper roof drip-rail chrome strip (ty in [0.95, 1.0], tx in [0.0, 0.73])
+        top_cr = np.zeros((32, 3, 3), dtype=np.float32)
+        for i, tx in enumerate(np.linspace(0.0, 0.73, 32)):
+            for j, ty in enumerate(np.linspace(0.95, 1.0, 3)):
+                top_cr[i, j] = greenhouse_side_point(tx, ty, side, offset_z=0.0025)
+        m_chrome.add_grid(top_cr, flip=(side > 0))
+
+        # Rear quarter window C-pillar chrome edge (tx in [0.71, 0.73], ty in [0.0, 1.0])
+        c_cr = np.zeros((3, 16, 3), dtype=np.float32)
+        for i, tx in enumerate(np.linspace(0.71, 0.73, 3)):
+            for j, ty in enumerate(np.linspace(0.0, 1.0, 16)):
+                c_cr[i, j] = greenhouse_side_point(tx, ty, side, offset_z=0.0025)
+        m_chrome.add_grid(c_cr, flip=(side > 0))
+
+        # Vertical B-Pillar Chrome Divider (tx in [0.435, 0.455], ty in [0.02, 0.98])
+        b_cr = np.zeros((3, 16, 3), dtype=np.float32)
+        for i, tx in enumerate(np.linspace(0.435, 0.455, 3)):
+            for j, ty in enumerate(np.linspace(0.02, 0.98, 16)):
+                b_cr[i, j] = greenhouse_side_point(tx, ty, side, offset_z=0.0025)
+        m_chrome.add_grid(b_cr, flip=(side > 0))
+
+        # Front Door Vent-Wing Chrome Divider (tx in [0.135, 0.148], ty in [0.02, 0.98]) — 100% flush with A-pillar!
+        vw_cr = np.zeros((3, 16, 3), dtype=np.float32)
+        for i, tx in enumerate(np.linspace(0.135, 0.148, 3)):
+            for j, ty in enumerate(np.linspace(0.02, 0.98, 16)):
+                vw_cr[i, j] = greenhouse_side_point(tx, ty, side, offset_z=0.0025)
+        m_chrome.add_grid(vw_cr, flip=(side > 0))
+
+        # Flush Door Handle (Black recess + Chrome pull bar)
+        m_rubber.add_box([0.105, 0.058, side * 0.394], [0.068, 0.020, 0.008])
+        m_chrome.add_box([0.105, 0.060, side * 0.397], [0.052, 0.007, 0.008])
+
+        # Front Fender Amber Side Repeater
+        m_amber.add_box([-0.755, 0.028, side * 0.382], [0.026, 0.014, 0.012])
+        m_chrome.add_box([-0.755, 0.028, side * 0.380], [0.030, 0.018, 0.008])
+
+    # Black Circular Fuel Filler Cap on Left Rear Quarter Panel (+Z)
+    m_rubber.add_cylinder_z(0.505, 0.118, 0.365, 0.376, 0.021, segs=32)
+
+    # Driver-side Chrome Exterior Mirror on Front Left Door (+Z)
+    m_chrome.add_box([-0.115, 0.125, 0.392], [0.014, 0.024, 0.028])
+    m_chrome.add_box([-0.110, 0.138, 0.408], [0.044, 0.028, 0.022])
+
+    # Twin Chrome Windshield Wipers
+    for z_wiper in (-0.11, 0.11):
+        m_chrome.add_box([-0.285, 0.120, z_wiper], [0.010, 0.005, 0.175], rotation_y=0.18)
+
+    # Front grille recess, lower valence, chin spoiler & rear Kamm tail panel
+    m_rubber.add_box([-0.942, -0.002, 0.0], [0.025, 0.072, 0.635])
+    m_paint.add_box([-0.915, -0.122, 0.0], [0.035, 0.055, 0.590], rotation_z=0.22)
+    m_rubber.add_box([-0.902, -0.158, 0.0], [0.028, 0.028, 0.550], rotation_z=0.15)
+    m_paint.add_box([0.924, 0.018, 0.0], [0.024, 0.210, 0.630], rotation_z=-0.06)
+
+    # Inner wheel arch liners & chassis underbody
+    m_rubber.add_box([0.0, -0.168, 0.0], [1.68, 0.035, 0.56])
+    for ax in (FRONT_AXLE_X, REAR_AXLE_X):
+        for side in (-1.0, 1.0):
+            m_rubber.add_cylinder_z(ax, AXLE_Y, side * 0.20, side * 0.34, ARCH_RADIUS * 0.97, r_inner=0.0, segs=40)
+
+    # =========================================================================
+    # 3. FRONT CALANDRA, SCUDETTO ALFA ROMEO, TWIN CHROME BARS & 4 CARELLO HEADLIGHTS
+    # =========================================================================
+    for y_slat in np.linspace(-0.028, 0.026, 6):
+        m_rubber.add_box([-0.950, y_slat, 0.0], [0.012, 0.004, 0.620])
+
+    for side in (-1.0, 1.0):
+        for y_bar in (-0.008, 0.008):
+            m_chrome.add_box([-0.954, y_bar, side * 0.105], [0.012, 0.0055, 0.105])
+
+    # Central 3D Chrome Alfa Romeo Scudetto Shield
+    m_chrome.add_box([-0.958, 0.024, 0.0], [0.014, 0.008, 0.092])
+    for side in (-1.0, 1.0):
+        for k in range(7):
+            t = k / 6.0
+            yk = 0.024 - t * 0.072
+            zk = side * (0.044 * (1.0 - t * 0.88))
+            m_chrome.add_box([-0.958, yk, zk], [0.015, 0.015, 0.009])
+    m_chrome.add_cylinder_x(-0.966, -0.955, 0.016, 0.0, 0.013, segs=24)
+
+    # 4 Circular Carello Headlights
+    for side in (-1.0, 1.0):
+        for z_pos, radius in [(0.258, 0.033), (0.180, 0.030)]:
+            cz = side * z_pos
+            cy = 0.000
+            m_chrome.add_cylinder_x(-0.962, -0.942, cy, cz, radius + 0.0045, r_inner=radius - 0.002, segs=36, bevel=0.001)
+            m_headlight.add_cylinder_x(-0.960, -0.948, cy, cz, radius - 0.001, r_inner=0.0, segs=36, bevel=0.002)
+
+    # =========================================================================
+    # 4. FRONT & REAR CHROME BLADE BUMPERS + RUBBER OVERRIDERS + TURN SIGNALS
+    # =========================================================================
+    m_chrome.add_box([-0.962, -0.068, 0.0], [0.032, 0.026, 0.660])
+    for side in (-1.0, 1.0):
+        m_chrome.add_box([-0.915, -0.068, side * 0.342], [0.095, 0.025, 0.028], rotation_y=side * 0.22)
+        m_rubber.add_box([-0.968, -0.066, side * 0.168], [0.038, 0.046, 0.034])
+        m_amber.add_box([-0.956, -0.068, side * 0.258], [0.026, 0.018, 0.068])
+
+    m_chrome.add_box([0.948, -0.055, 0.0], [0.032, 0.028, 0.650])
+    for side in (-1.0, 1.0):
+        m_chrome.add_box([0.900, -0.055, side * 0.336], [0.095, 0.026, 0.028], rotation_y=-side * 0.20)
+        m_rubber.add_box([0.955, -0.053, side * 0.175], [0.036, 0.046, 0.034])
+
+    m_chrome.add_cylinder_x(0.84, 0.965, -0.140, -0.195, 0.014, r_inner=0.010, segs=24)
+
+    for side in (-1.0, 1.0):
+        m_chrome.add_box([0.934, 0.042, side * 0.242], [0.014, 0.052, 0.148])
+        m_taillight.add_box([0.938, 0.033, side * 0.242], [0.014, 0.030, 0.140])
+        m_amber.add_box([0.938, 0.055, side * 0.242], [0.014, 0.016, 0.140])
+
+    m_chrome.add_cylinder_x(0.930, 0.940, 0.068, 0.0, 0.015, segs=24)
+
+    # =========================================================================
+    # 5. FOUR TRUE 3D CAMPAGNOLO / ALFA 16-SLOT WHEELS & PIRELLI TIRES
+    # =========================================================================
+    R_TIRE = 0.168
+    R_RIM = 0.106
+    R_HUB = 0.034
+
+    def add_wheel(ax, ay, side):
+        z_inner = side * 0.235
+        z_outer = side * 0.368
+        z_face = side * 0.356
+
+        u_segs = 14
+        v_segs = 48
+        tire_grid = np.zeros((u_segs, v_segs, 3), dtype=np.float32)
+        u_angles = np.linspace(-math.pi * 0.85, math.pi * 0.85, u_segs)
+        r_mid = 0.5 * (R_TIRE + R_RIM)
+        r_tube = 0.5 * (R_TIRE - R_RIM)
+        z_mid = 0.5 * (z_inner + z_outer)
+        z_half_w = 0.5 * abs(z_outer - z_inner)
+
+        for i, ua in enumerate(u_angles):
+            su = math.sin(ua)
+            cu = math.cos(ua)
+            r_curr = r_mid + r_tube * (abs(cu) ** 0.65) * (1.0 if cu >= 0 else -1.0)
+            z_curr = z_mid + side * z_half_w * (abs(su) ** 0.75) * (1.0 if su >= 0 else -1.0)
+            for j in range(v_segs):
+                va = (j / v_segs) * 2.0 * math.pi
+                tire_grid[i, j] = [
+                    ax + r_curr * math.cos(va),
+                    ay + r_curr * math.sin(va),
+                    z_curr,
+                ]
+        m_rubber.add_grid(tire_grid, flip=(side > 0), close_v=True)
+
+        m_rubber.add_cylinder_z(ax, ay, z_face - side * 0.012, z_face - side * 0.004, R_RIM * 0.96, segs=36)
+
+        r_segs = 12
+        a_segs = 64
+        rim_grid = np.zeros((r_segs, a_segs, 3), dtype=np.float32)
+        radii = np.linspace(R_HUB, R_RIM, r_segs)
+        for i, r in enumerate(radii):
+            t_r = (r - R_HUB) / (R_RIM - R_HUB)
+            dish_z = 0.008 * math.sin(t_r * math.pi * 1.6)
+            for j in range(a_segs):
+                va = (j / a_segs) * 2.0 * math.pi
+                slot_weight = math.sin(max(0.0, min(1.0, (t_r - 0.32) / 0.46)) * math.pi)
+                slot_depth = -0.0065 * slot_weight * max(0.0, math.cos(16.0 * va))
+                rim_grid[i, j] = [
+                    ax + r * math.cos(va),
+                    ay + r * math.sin(va),
+                    z_face + side * (dish_z + slot_depth),
+                ]
+        m_rim.add_grid(rim_grid, flip=(side < 0), close_v=True)
+
+        m_chrome.add_cylinder_z(ax, ay, z_face, z_face + side * 0.014, R_HUB, segs=32)
+        for k in range(5):
+            la = k * 2.0 * math.pi / 5.0
+            lx = ax + (R_HUB + 0.014) * math.cos(la)
+            ly = ay + (R_HUB + 0.014) * math.sin(la)
+            m_chrome.add_cylinder_z(lx, ly, z_face, z_face + side * 0.009, 0.0045, segs=12)
+
+    for ax in (FRONT_AXLE_X, REAR_AXLE_X):
+        for side in (-1.0, 1.0):
+            add_wheel(ax, AXLE_Y, side)
+
+    # =========================================================================
+    # 6. INTERIOR CABIN: DASHBOARD POD, WOOD STEERING WHEEL & BUCKET SEATS
+    # =========================================================================
+    m_interior.add_box([0.12, -0.04, 0.0], [0.85, 0.03, 0.58])
+    m_interior.add_box([0.58, 0.09, 0.0], [0.36, 0.03, 0.52])
+    m_interior.add_box([-0.22, 0.095, 0.0], [0.16, 0.065, 0.58])
+    m_interior.add_box([-0.17, 0.132, 0.145], [0.10, 0.042, 0.16])
+    for side in (-1.0, 1.0):
+        m_interior.add_box([0.06, 0.01, side * 0.145], [0.22, 0.06, 0.19])
+        m_interior.add_box([0.16, 0.115, side * 0.145], [0.06, 0.20, 0.18], rotation_z=-0.18)
+        m_interior.add_box([0.19, 0.225, side * 0.145], [0.045, 0.055, 0.11])
+        m_interior.add_box([0.42, 0.03, side * 0.135], [0.18, 0.05, 0.18])
+        m_interior.add_box([0.50, 0.12, side * 0.135], [0.05, 0.16, 0.18], rotation_z=-0.20)
+
+    sw_cx, sw_cy, sw_cz = -0.105, 0.125, 0.145
+    m_wood.add_cylinder_x(sw_cx - 0.006, sw_cx + 0.006, sw_cy, sw_cz, 0.058, r_inner=0.048, segs=32)
+    m_chrome.add_cylinder_x(sw_cx - 0.035, sw_cx + 0.004, sw_cy, sw_cz, 0.012, segs=16)
+
+    # =========================================================================
+    # 7. EXPORT COMPLETE MULTI-MESH, MULTI-MATERIAL GLB
+    # =========================================================================
+    builders = [
+        m_paint,
+        m_chrome,
+        m_glass,
+        m_rubber,
+        m_rim,
+        m_headlight,
+        m_amber,
+        m_taillight,
+        m_interior,
+        m_wood,
+    ]
+
+    materials = [
+        {
+            "name": "CarPaint",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.737, 0.780, 0.824, 1.0],
+                "metallicFactor": 0.52,
+                "roughnessFactor": 0.26,
+            },
+        },
+        {
+            "name": "Chrome",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.95, 0.97, 0.99, 1.0],
+                "metallicFactor": 0.96,
+                "roughnessFactor": 0.07,
+            },
+        },
+        {
+            "name": "Glass",
+            "alphaMode": "BLEND",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.12, 0.22, 0.20, 0.58],
+                "metallicFactor": 0.15,
+                "roughnessFactor": 0.04,
+            },
+        },
+        {
+            "name": "RubberBlack",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.075, 0.080, 0.088, 1.0],
+                "metallicFactor": 0.04,
+                "roughnessFactor": 0.84,
+            },
+        },
+        {
+            "name": "AlloyRim",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.83, 0.86, 0.90, 1.0],
+                "metallicFactor": 0.82,
+                "roughnessFactor": 0.20,
+            },
+        },
+        {
+            "name": "HeadlightLens",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.96, 0.98, 1.0, 1.0],
+                "metallicFactor": 0.25,
+                "roughnessFactor": 0.04,
+            },
+            "emissiveFactor": [0.15, 0.16, 0.18],
+        },
+        {
+            "name": "AmberLens",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.90, 0.45, 0.05, 1.0],
+                "metallicFactor": 0.10,
+                "roughnessFactor": 0.12,
+            },
+            "emissiveFactor": [0.08, 0.03, 0.0],
+        },
+        {
+            "name": "RedTaillight",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.72, 0.07, 0.09, 1.0],
+                "metallicFactor": 0.10,
+                "roughnessFactor": 0.12,
+            },
+            "emissiveFactor": [0.08, 0.01, 0.01],
+        },
+        {
+            "name": "InteriorDark",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.09, 0.095, 0.105, 1.0],
+                "metallicFactor": 0.05,
+                "roughnessFactor": 0.75,
+            },
+        },
+        {
+            "name": "InteriorWood",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.44, 0.22, 0.09, 1.0],
+                "metallicFactor": 0.08,
+                "roughnessFactor": 0.24,
+            },
+        },
+    ]
+
+    buffer_views = []
+    accessors = []
+    primitives = []
+    bin_chunks = bytearray()
+
+    for b in builders:
+        pos_arr = np.asarray(b.positions, dtype=np.float32)
+        norm_arr = np.asarray(b.normals, dtype=np.float32)
+        idx_arr = np.asarray(b.indices, dtype=np.uint32)
+
+        pos_bytes = pos_arr.tobytes()
+        norm_bytes = norm_arr.tobytes()
+        idx_bytes = idx_arr.tobytes()
+
+        bv_pos = len(buffer_views)
+        buffer_views.append({
+            "buffer": 0,
+            "byteOffset": len(bin_chunks),
+            "byteLength": len(pos_bytes),
+            "target": 34962,
+        })
+        bin_chunks.extend(pos_bytes)
+        acc_pos = len(accessors)
+        accessors.append({
+            "bufferView": bv_pos,
+            "componentType": 5126,
+            "count": len(pos_arr),
+            "type": "VEC3",
+            "min": pos_arr.min(axis=0).astype(float).tolist(),
+            "max": pos_arr.max(axis=0).astype(float).tolist(),
+        })
+
+        bv_norm = len(buffer_views)
+        buffer_views.append({
+            "buffer": 0,
+            "byteOffset": len(bin_chunks),
+            "byteLength": len(norm_bytes),
+            "target": 34962,
+        })
+        bin_chunks.extend(norm_bytes)
+        acc_norm = len(accessors)
+        accessors.append({
+            "bufferView": bv_norm,
+            "componentType": 5126,
+            "count": len(norm_arr),
+            "type": "VEC3",
+        })
+
+        bv_idx = len(buffer_views)
+        buffer_views.append({
+            "buffer": 0,
+            "byteOffset": len(bin_chunks),
+            "byteLength": len(idx_bytes),
+            "target": 34963,
+        })
+        bin_chunks.extend(idx_bytes)
+        acc_idx = len(accessors)
+        accessors.append({
+            "bufferView": bv_idx,
+            "componentType": 5125,
+            "count": len(idx_arr),
+            "type": "SCALAR",
+        })
+
+        primitives.append({
+            "attributes": {
+                "POSITION": acc_pos,
+                "NORMAL": acc_norm,
+            },
+            "indices": acc_idx,
+            "material": b.material_idx,
+        })
+
+    while len(bin_chunks) % 4 != 0:
+        bin_chunks.append(0)
+
+    gltf = {
+        "asset": {
+            "generator": "Alfa-Romeo-Centro-Stile-Parametric-CAD-v4",
+            "version": "2.0",
+        },
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [{"name": "Alfa_Romeo_Alfetta_GTV_1973", "mesh": 0}],
+        "meshes": [{"name": "Alfetta_GTV_MultiMaterial_Mesh", "primitives": primitives}],
+        "materials": materials,
+        "accessors": accessors,
+        "bufferViews": buffer_views,
+        "buffers": [{"byteLength": len(bin_chunks)}],
+    }
+
+    json_bytes = json.dumps(gltf, separators=(",", ":")).encode("utf-8")
+    while len(json_bytes) % 4 != 0:
+        json_bytes += b" "
+
+    total_len = 12 + 8 + len(json_bytes) + 8 + len(bin_chunks)
+    for out_path in ["public/models/alfa-romeo-1973.glb", "public/models/alfa-romeo-1973-cad.glb"]:
+        with open(out_path, "wb") as f:
+            f.write(struct.pack("<4sII", b"glTF", 2, total_len))
+            f.write(struct.pack("<I4s", len(json_bytes), b"JSON"))
+            f.write(json_bytes)
+            f.write(struct.pack("<I4s", len(bin_chunks), b"BIN\x00"))
+            f.write(bin_chunks)
+
+    total_verts = sum(len(b.positions) for b in builders)
+    total_tris = sum(len(b.indices) // 3 for b in builders)
+    print(f"Built coachbuilt multi-material GLB v4: {len(primitives)} sub-meshes, {total_verts} verts, {total_tris} tris, {total_len} bytes")
+
+
+if __name__ == "__main__":
+    build_alfetta_gtv()

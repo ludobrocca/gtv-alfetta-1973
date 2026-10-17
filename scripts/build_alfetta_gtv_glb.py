@@ -27,11 +27,20 @@ class MeshBuilder:
         if grid_norm is None:
             dP_du = np.zeros_like(P)
             dP_dv = np.zeros_like(P)
-            dP_du[1:-1] = P[2:] - P[:-2]
+
+            du_fwd = P[2:] - P[1:-1]
+            du_bwd = P[1:-1] - P[:-2]
+            lu_fwd = np.linalg.norm(du_fwd, axis=-1, keepdims=True) + 1e-8
+            lu_bwd = np.linalg.norm(du_bwd, axis=-1, keepdims=True) + 1e-8
+            dP_du[1:-1] = (du_fwd / lu_fwd) * lu_bwd + (du_bwd / lu_bwd) * lu_fwd
             dP_du[0] = P[1] - P[0]
             dP_du[-1] = P[-1] - P[-2]
 
-            dP_dv[:, 1:-1] = P[:, 2:] - P[:, :-2]
+            dv_fwd = P[:, 2:] - P[:, 1:-1]
+            dv_bwd = P[:, 1:-1] - P[:, :-2]
+            lv_fwd = np.linalg.norm(dv_fwd, axis=-1, keepdims=True) + 1e-8
+            lv_bwd = np.linalg.norm(dv_bwd, axis=-1, keepdims=True) + 1e-8
+            dP_dv[:, 1:-1] = (dv_fwd / lv_fwd) * lv_bwd + (dv_bwd / lv_bwd) * lv_fwd
             dP_dv[:, 0] = P[:, 1] - P[:, 0]
             dP_dv[:, -1] = P[:, -1] - P[:, -2]
 
@@ -163,15 +172,20 @@ def build_alfetta_gtv():
     # =========================================================================
     # 1. PARAMETRIC SILHOUETTE & CROSS-SECTIONS OF THE ALFETTA GTV (1973/1976)
     # =========================================================================
+    # Note on the 1st-Series Hood (Cofano Piatto 1974-1979):
+    # - y_center_top (yc) is gently cambered HIGHER than y_fender_top (ys) across the hood
+    #   so the hood has the authentic taut, flat-crowned Italian sheetmetal profile
+    #   with a crisp central longitudinal dihedral spine (nervatura centrale).
     profile_pts = np.array([
         # x,     y_center_top, y_fender_top, y_belt,  y_sill,  z_belt,  z_top,   z_bottom
-        [-0.955,  0.034,        0.038,       0.025,  -0.115,   0.315,   0.290,   0.270], # Front shark-nose tip
-        [-0.915,  0.048,        0.054,       0.032,  -0.158,   0.352,   0.324,   0.300], # Front grille recess
-        [-0.840,  0.064,        0.072,       0.038,  -0.176,   0.374,   0.342,   0.324], # Front fender lead
-        [-0.700,  0.080,        0.092,       0.044,  -0.184,   0.388,   0.352,   0.338], # Front wheel arch lead
-        [-0.575,  0.092,        0.105,       0.050,  -0.186,   0.394,   0.358,   0.345], # Front axle center
-        [-0.440,  0.102,        0.112,       0.055,  -0.186,   0.392,   0.358,   0.345], # Front wheel arch trail
-        [-0.310,  0.112,        0.116,       0.060,  -0.186,   0.392,   0.336,   0.345], # Base of windshield (cowl)
+        [-0.955,  0.042,        0.038,       0.025,  -0.115,   0.315,   0.290,   0.270], # Front shark-nose eyebrow tip
+        [-0.915,  0.056,        0.051,       0.032,  -0.158,   0.352,   0.324,   0.300], # Front hood transverse seam
+        [-0.840,  0.072,        0.066,       0.038,  -0.176,   0.374,   0.342,   0.324], # Front fender lead
+        [-0.700,  0.090,        0.083,       0.044,  -0.184,   0.388,   0.352,   0.338], # Front wheel arch lead
+        [-0.575,  0.102,        0.095,       0.050,  -0.186,   0.394,   0.358,   0.345], # Front axle center
+        [-0.440,  0.112,        0.105,       0.055,  -0.186,   0.392,   0.358,   0.345], # Front wheel arch trail / washer nozzles
+        [-0.355,  0.117,        0.111,       0.058,  -0.186,   0.392,   0.344,   0.345], # Rear hood seam before cowl louvers
+        [-0.310,  0.120,        0.115,       0.060,  -0.186,   0.392,   0.336,   0.345], # Base of windshield (cowl)
         [-0.160,  0.208,        0.118,       0.065,  -0.186,   0.394,   0.302,   0.346], # Mid windshield
         [-0.015,  0.292,        0.120,       0.070,  -0.186,   0.396,   0.278,   0.346], # Windshield header / A-pillar top
         [ 0.155,  0.304,        0.123,       0.075,  -0.186,   0.396,   0.276,   0.346], # Roof peak / B-pillar
@@ -212,62 +226,101 @@ def build_alfetta_gtv():
                     flare = max(flare, 0.012 * math.exp(-((abs(dx) / ARCH_RADIUS - 0.65) ** 2) / 0.25))
         return y_cut, flare
 
-    # =========================================================================
-    # A) LOWER BODY COACHWORK SHELL (Hood + Fenders + Doors + Rear Quarter + Kamm Tail)
-    # =========================================================================
-    nx = 180
-    xs = np.linspace(-0.955, 0.932, nx)
-    nv_half = 30
-    nv = nv_half * 2 - 1
-    body_grid = np.zeros((nx, nv, 3), dtype=np.float32)
-
-    for i, x in enumerate(xs):
+    def hood_surface_height(x, z_abs):
+        """
+        Evaluates the exact 3D height y(x, z) across the hood & upper fender deck (-0.955 <= x <= -0.310),
+        reproducing the authentic 1st-series Giugiaro Alfetta GTV hood from the reference photos:
+        1. True Giugiaro dual-plane dihedral camber from z=0 to the longitudinal hood seam at z_seam(x)
+        2. Crisp central longitudinal dihedral spine (nervatura centrale) along z=0
+        3. Recessed longitudinal character groove at the hood/fender shut-line (fuga laterale del cofano)
+        4. Taut outer fender top crown (sommità del parafango) outside the hood seam
+        """
         yc = float(f_y_center(x))
         ys = float(f_y_shoulder(x))
-        yb = float(f_y_belt(x))
-        ysill = float(f_y_sill(x))
         zb = float(f_z_belt(x))
-        zt = float(f_z_top(x))
-        zbot = float(f_z_bot(x))
+        zt_lower = zb * 0.955
 
-        y_arch, z_flare = wheel_arch_cut(x)
-        ysill_eff = max(ysill, y_arch)
-
-        # In cabin zone (-0.305 < x < 0.855), the lower body shell stops at the window sill (ys)
-        # and drops into the interior tub, while the upper greenhouse is built by the unified
-        # top & side greenhouse surfaces below!
         cabin_open = (
             0.5 * (1.0 + math.tanh((x - (-0.305)) / 0.015))
             * 0.5 * (1.0 + math.tanh((0.855 - x) / 0.015))
         )
+        hood_mask = 0.5 * (1.0 + math.tanh((-0.345 - x) / 0.014))
+        nose_mask = 1.0 - cabin_open
+
         yc_lower = yc * (1.0 - cabin_open) + (ys - 0.008) * cabin_open
-        zt_lower = (zb * 0.955)
+        t = min(1.0, z_abs / max(1e-6, zt_lower))
+
+        # True Giugiaro dihedral + cambered crown across the hood panel:
+        # Linear term (0.36 * t) creates the subtle V-dihedral slope across the two halves of the hood,
+        # while (t ** 1.65) adds the taut Italian sheetmetal camber toward the fenders.
+        profile_blend = 0.36 * t * hood_mask + (1.0 - 0.36 * hood_mask) * (t ** 1.65)
+        base_y = yc_lower - (yc_lower - ys) * profile_blend
+
+        # 1. Crisp central longitudinal dihedral spine (nervatura centrale sul cofano)
+        central_spine = 0.0020 * math.exp(-z_abs / 0.014) * hood_mask
+
+        # 2. Longitudinal hood-to-fender shut-line groove (fuga longitudinale cofano-parafango)
+        # Runs continuously from the front eyebrow (x=-0.955) back to the rear cowl seam (x=-0.352)
+        z_seam = zt_lower * 0.845
+        seam_groove = -0.0024 * math.exp(-(((z_abs - z_seam) / 0.0050) ** 2)) * hood_mask
+
+        # 3. Taut raised fender top crown just outside the hood seam (cresta superiore parafango)
+        fender_crest = 0.0025 * math.exp(-(((z_abs - (z_seam + 0.022)) / 0.018) ** 2)) * nose_mask
+
+        return base_y + central_spine + seam_groove + fender_crest
+
+    # =========================================================================
+    # A) LOWER BODY COACHWORK SHELL (Hood + Fenders + Doors + Rear Quarter + Kamm Tail)
+    # =========================================================================
+    nx = 200
+    xs = np.linspace(-0.955, 0.932, nx)
+    nv_half = 42
+    nv = nv_half * 2 - 1
+    body_grid = np.zeros((nx, nv, 3), dtype=np.float32)
+
+    # Non-uniform lateral sampling across the hood/deck (0..1) with higher density near z=0 (central spine)
+    # and near t=0.845 (the longitudinal hood-to-fender shut-line) for razor-sharp creases!
+    t_deck_samples = np.unique(np.concatenate([
+        np.linspace(0.0, 0.08, 6),
+        np.linspace(0.08, 0.78, 11),
+        np.linspace(0.78, 0.91, 7),
+        np.linspace(0.91, 1.00, 4),
+    ])) # 25 points across half-deck
+
+    for i, x in enumerate(xs):
+        ys = float(f_y_shoulder(x))
+        yb = float(f_y_belt(x))
+        ysill = float(f_y_sill(x))
+        zb = float(f_z_belt(x))
+        zbot = float(f_z_bot(x))
+
+        y_arch, z_flare = wheel_arch_cut(x)
+        ysill_eff = max(ysill, y_arch)
+        zt_lower = zb * 0.955
 
         half_pts = []
-        # 1. Centerline to shoulder / window sill line (k=0..10)
-        for k in range(11):
-            t = k / 10.0
-            z = t * zt_lower
-            hood_crease = 0.0045 * math.exp(-((z / 0.024) ** 2)) * (1.0 - cabin_open) if x < -0.31 else 0.0
-            y = yc_lower - (yc_lower - ys) * (t ** 1.8) + hood_crease
+        # 1. Centerline (z=0) across hood & fender top deck to shoulder / window sill line (25 pts)
+        for t in t_deck_samples:
+            z = float(t * zt_lower)
+            y = hood_surface_height(x, z)
             half_pts.append((x, y, z))
 
-        # 2. Shoulder / window sill (ys, zt_lower) down to Giugiaro sharp beltline crease (yb, zb) (k=11..18)
-        for k in range(1, 9):
-            t = k / 8.0
+        # 2. Shoulder / window sill (ys, zt_lower) down to Giugiaro sharp beltline crease (yb, zb) (7 pts)
+        for k in range(1, 8):
+            t = k / 7.0
             z = zt_lower + (zb + z_flare * 0.6 - zt_lower) * (t ** 0.85)
             y = ys + (yb - ys) * t
             half_pts.append((x, y, z))
 
-        # 3. Beltline crease (yb, zb) down to wheel-arch / lower sill (ysill_eff, zbot) (k=19..27)
-        for k in range(1, 10):
-            t = k / 9.0
+        # 3. Beltline crease (yb, zb) down to wheel-arch / lower sill (ysill_eff, zbot) (8 pts)
+        for k in range(1, 9):
+            t = k / 8.0
             arch_lip = z_flare * math.exp(-((t - 0.75) ** 2) / 0.08)
             z = zb + (zbot - zb) * (t ** 1.35) + arch_lip
             y = yb + (ysill_eff - yb) * t
             half_pts.append((x, y, z))
 
-        # 4. Flat horizontal underbody floor across z (k=28..29)
+        # 4. Flat horizontal underbody floor across z (2 pts -> total 25 + 7 + 8 + 2 = 42 = nv_half)
         half_pts.append((x, ysill_eff, max(0.18, zbot - 0.045)))
         half_pts.append((x, ysill, 0.0))
 
@@ -282,6 +335,47 @@ def build_alfetta_gtv():
         body_grid[i] = np.array(full_section, dtype=np.float32)
 
     m_paint.add_grid(body_grid, flip=False)
+
+    # =========================================================================
+    # A2) CRISP HOOD PERIMETER SHUT-LINE SEAMS & FRONT EYEBROW LIP (Fuga del Cofano & Palpebra)
+    # Follows the exact 3D hood surface:
+    # - Left & right longitudinal hood seams run all the way from the front nose lip (-0.954)
+    #   back to the rear cowl seam (-0.352), with a single rear transverse seam in front of the cowl grilles.
+    # =========================================================================
+    hood_xs = np.linspace(-0.954, -0.352, 60)
+    for side in (-1.0, 1.0):
+        seam_strip = np.zeros((len(hood_xs), 2, 3), dtype=np.float32)
+        for i, hx in enumerate(hood_xs):
+            zt_l = float(f_z_belt(hx)) * 0.955
+            z_s = zt_l * 0.845
+            y_s = hood_surface_height(hx, z_s) + 0.0005
+            seam_strip[i, 0] = [hx, y_s, side * (z_s - 0.0017)]
+            seam_strip[i, 1] = [hx, y_s, side * (z_s + 0.0017)]
+        m_rubber.add_grid(seam_strip, flip=(side < 0))
+
+    # Rear Transverse Hood Shut-Line at x = -0.352 (in front of the stamped cowl ventilation grilles)
+    x_trans = -0.352
+    zt_l = float(f_z_belt(x_trans)) * 0.955
+    z_max = zt_l * 0.845
+    zs_trans = np.linspace(-z_max, z_max, 48)
+    trans_strip = np.zeros((2, len(zs_trans), 3), dtype=np.float32)
+    for j, hz in enumerate(zs_trans):
+        y_h = hood_surface_height(x_trans, abs(hz)) + 0.0005
+        trans_strip[0, j] = [x_trans - 0.0016, y_h, hz]
+        trans_strip[1, j] = [x_trans + 0.0016, y_h, hz]
+    m_rubber.add_grid(trans_strip, flip=False)
+
+    # Sculpted Front Hood Leading-Edge Eyebrow Lip (Palpebra Anteriore Sopra Fari e Scudetto)
+    zt_front = float(f_z_belt(-0.955)) * 0.955
+    zs_lip = np.linspace(-zt_front, zt_front, 55)
+    lip_grid = np.zeros((4, len(zs_lip), 3), dtype=np.float32)
+    for j, zl in enumerate(zs_lip):
+        y_top_lip = hood_surface_height(-0.955, abs(zl))
+        lip_grid[0, j] = [-0.955, y_top_lip, zl]
+        lip_grid[1, j] = [-0.961, y_top_lip - 0.0025, zl]
+        lip_grid[2, j] = [-0.960, y_top_lip - 0.0075, zl]
+        lip_grid[3, j] = [-0.946, y_top_lip - 0.0105, zl]
+    m_paint.add_grid(lip_grid, flip=True)
 
     # =========================================================================
     # B) UNIFIED GREENHOUSE TOP SURFACE (Windshield + Painted Roof + Rear Fastback Glass)
@@ -468,14 +562,24 @@ def build_alfetta_gtv():
     m_chrome.add_box([-0.115, 0.125, 0.392], [0.014, 0.024, 0.028])
     m_chrome.add_box([-0.110, 0.138, 0.408], [0.044, 0.028, 0.022])
 
-    # Twin Chrome Windshield Wipers + Hood Cowl Louvers + Washer Nozzles (from alfa-raduno.jpeg)
-    for z_wiper in (-0.11, 0.11):
-        m_chrome.add_box([-0.285, 0.120, z_wiper], [0.010, 0.005, 0.175], rotation_y=0.18)
+    # Articulated Twin Windshield Wipers + 20-Slot Stamped Cowl Grilles + Flush Hood Washer Nozzles
+    for z_pivot in (-0.165, 0.055):
+        y_piv = hood_surface_height(-0.318, abs(z_pivot)) + 0.003
+        # Wiper pivot nut, metallic arm & matte-black rubber blade at base of windshield
+        m_chrome.add_box([-0.318, y_piv, z_pivot], [0.008, 0.006, 0.008])
+        m_chrome.add_box([-0.302, y_piv + 0.005, z_pivot + 0.055], [0.008, 0.004, 0.115], rotation_y=0.14)
+        m_rubber.add_box([-0.292, y_piv + 0.009, z_pivot + 0.095], [0.006, 0.005, 0.165], rotation_y=0.08)
+
     for side in (-1.0, 1.0):
-        # Cowl air intake grille slots at base of windshield
-        m_rubber.add_box([-0.335, 0.114, side * 0.125], [0.032, 0.004, 0.145], rotation_z=0.04)
-        # Tiny black hood windshield washer nozzles
-        m_rubber.add_box([-0.465, 0.104, side * 0.145], [0.009, 0.006, 0.006])
+        # 20 individual stamped longitudinal air intake slots in the painted cowl panel (from alfa-raduno.jpeg)
+        for z_slot in np.linspace(0.048, 0.218, 20):
+            y_slot = hood_surface_height(-0.331, z_slot) + 0.0007
+            m_rubber.add_box([-0.331, y_slot, side * z_slot], [0.024, 0.0016, 0.0036], rotation_z=0.05)
+
+        # Dual-jet black windshield washer nozzles mounted flush on the hood panel
+        x_noz, z_noz = -0.455, 0.148
+        y_noz = hood_surface_height(x_noz, z_noz) + 0.0025
+        m_rubber.add_box([x_noz, y_noz, side * z_noz], [0.010, 0.0055, 0.0065], rotation_z=0.06)
 
     # Front grille recess, lower valence, chin spoiler & rear Kamm tail panel
     m_rubber.add_box([-0.942, 0.002, 0.0], [0.025, 0.066, 0.635])

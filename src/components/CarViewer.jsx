@@ -1456,30 +1456,16 @@ export default function CarViewer({
                 />
               </Bounds>
 
-              {/* Ground Contact Shadows */}
-              <ContactShadows
-                position={[0, -0.01, 0]}
-                opacity={0.7}
-                scale={10}
-                blur={2}
-                far={4}
-              />
-
               {/* Luxury Showroom Reflective Floor Disc */}
               <mesh
                 rotation={[-Math.PI / 2, 0, 0]}
-                position={[0, -0.015, 0]}
+                position={[0, -0.005, 0]}
               >
                 <circleGeometry args={[12, 64]} />
                 <MeshReflectorMaterial
-                  blur={[300, 80]}
                   resolution={1024}
-                  mixBlur={0.9}
-                  mixStrength={isLight ? 0.2 : 0.5}
-                  roughness={isLight ? 0.68 : 0.4}
-                  depthScale={1}
-                  minDepthThreshold={0.4}
-                  maxDepthThreshold={1.4}
+                  mixStrength={isLight ? 0.3 : 0.65}
+                  roughness={isLight ? 0.65 : 0.35}
                   color={isLight ? '#dcd9d0' : '#131418'}
                   metalness={isLight ? 0.12 : 0.4}
                 />

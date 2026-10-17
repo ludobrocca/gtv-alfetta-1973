@@ -119,10 +119,32 @@ export default function App() {
     return 'showroom';
   });
   const [autoRotate, setAutoRotate] = useState(true);
-  const [lightingMode, setLightingMode] = useState('night'); // 'night' | 'studio'
+  const [lightingMode, setLightingMode] = useState(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('theme') === 'studio') return 'studio';
+    } catch {}
+    return 'night';
+  });
   const [activePaintId, setActivePaintId] = useState('ar727-reale');
-  const [activePresetId, setActivePresetId] = useState('hero');
-  const [cameraRequest, setCameraRequest] = useState(null);
+  const [activePresetId, setActivePresetId] = useState(() => {
+    try {
+      const url = new URL(window.location.href);
+      return url.searchParams.get('preset') || 'hero';
+    } catch {}
+    return 'hero';
+  });
+  const [cameraRequest, setCameraRequest] = useState(() => {
+    try {
+      const url = new URL(window.location.href);
+      const p = url.searchParams.get('preset');
+      if (p) {
+        const found = CAMERA_PRESETS.find((c) => c.id === p);
+        if (found) return found;
+      }
+    } catch {}
+    return null;
+  });
 
   const [showSpecs, setShowSpecs] = useState(false);
   const [showRealPhoto, setShowRealPhoto] = useState(false);

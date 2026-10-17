@@ -18,31 +18,31 @@ const MODEL_PATH = '/models/alfa-romeo-1973.glb';
 
 export const PAINT_FINISHES = [
   {
-    id: 'ar727-reale',
-    name: 'Grigio Chiaro Metallizzato AR 727 (Livrea Reale)',
+    id: 'argento',
+    name: 'Grigio Chiaro Metallizzato AR 727 (Originale)',
     yearCode: 'AR 727 • TARGA 463880 PD',
-    swatch: 'linear-gradient(135deg, #d4dde6 0%, #9aa6b4 55%, #1e2024 100%)',
+    swatchColor: '#BCC6D0',
+    color: '#b8c3ce',
+    useRealDetails: false,
+    metalness: 0.48,
+    roughness: 0.31,
+    clearcoat: 0.85,
+    clearcoatRoughness: 0.14,
+    envMapIntensity: 0.9,
+  },
+  {
+    id: 'ar727-reale',
+    name: 'Grigio AR 727 (Bicolore Soft Vetri/Ruote)',
+    yearCode: 'AR 727 • DETTAGLI SFUMATI',
+    swatch: 'linear-gradient(135deg, #d4dde6 0%, #9aa6b4 55%, #2b3038 100%)',
     swatchColor: '#C4CED8',
     color: '#ffffff',
     useRealDetails: true,
-    metalness: 0.78,
-    roughness: 0.22,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.06,
-    envMapIntensity: 1.6,
-  },
-  {
-    id: 'argento',
-    name: 'Grigio Chiaro Metallizzato AR 727 (Puro)',
-    yearCode: 'AR 727 • ORIGINALE 1973',
-    swatchColor: '#BCC6D0',
-    color: '#c2cbd4',
-    useRealDetails: false,
-    metalness: 0.86,
-    roughness: 0.19,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.06,
-    envMapIntensity: 1.6,
+    metalness: 0.45,
+    roughness: 0.33,
+    clearcoat: 0.82,
+    clearcoatRoughness: 0.15,
+    envMapIntensity: 0.88,
   },
   {
     id: 'rosso',
@@ -51,50 +51,50 @@ export const PAINT_FINISHES = [
     swatchColor: '#9E1B24',
     color: '#96141d',
     useRealDetails: false,
-    metalness: 0.35,
-    roughness: 0.16,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.05,
-    envMapIntensity: 1.45,
+    metalness: 0.28,
+    roughness: 0.24,
+    clearcoat: 0.92,
+    clearcoatRoughness: 0.1,
+    envMapIntensity: 0.9,
   },
   {
     id: 'blu',
     name: 'Blu Olandese',
     yearCode: 'AR 343 • 1973',
     swatchColor: '#1B2E4B',
-    color: '#162740',
+    color: '#182b47',
     useRealDetails: false,
-    metalness: 0.65,
-    roughness: 0.2,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.06,
-    envMapIntensity: 1.5,
+    metalness: 0.45,
+    roughness: 0.28,
+    clearcoat: 0.88,
+    clearcoatRoughness: 0.12,
+    envMapIntensity: 0.9,
   },
   {
     id: 'verde',
     name: 'Verde Pino',
     yearCode: 'AR 216 • 1973',
     swatchColor: '#1E3F2E',
-    color: '#193526',
+    color: '#1b3a2a',
     useRealDetails: false,
-    metalness: 0.58,
-    roughness: 0.2,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.06,
-    envMapIntensity: 1.45,
+    metalness: 0.42,
+    roughness: 0.28,
+    clearcoat: 0.88,
+    clearcoatRoughness: 0.12,
+    envMapIntensity: 0.9,
   },
   {
     id: 'clay',
     name: 'Studio Clay • Centro Stile',
     yearCode: 'ITALDESIGN • PROTOTIPO',
     swatchColor: '#D8D2C7',
-    color: '#d7d1c6',
+    color: '#d4cec3',
     useRealDetails: false,
-    metalness: 0.12,
-    roughness: 0.42,
-    clearcoat: 0.35,
-    clearcoatRoughness: 0.22,
-    envMapIntensity: 1.1,
+    metalness: 0.08,
+    roughness: 0.52,
+    clearcoat: 0.25,
+    clearcoatRoughness: 0.3,
+    envMapIntensity: 0.75,
     preserveOriginalIfTextured: true,
   },
 ];
@@ -133,143 +133,76 @@ export const CAMERA_PRESETS = [
 ];
 
 /**
- * Computes vertex colors for the Meshy AI geometry to faithfully reproduce
- * the real car's details from the reference photo (Targa 463880 PD):
- * - Body: Grigio Chiaro Metallizzato AR 727 (#c4ced8)
- * - Tires: Classic Michelin/Pirelli dark rubber (#1b1d21)
- * - Rims & Hubcaps: Campagnolo/Alfa alloy silver (#dfe5ec) with chrome center
- * - Front Carello quad headlights & chrome Scudetto grille
- * - Front chrome blade bumper with black rubber overriders & amber turn signals
- * - Tinted glass windows & C-pillar ventilation louvers
+ * Generates smooth, multi-pass diffused vertex colors with smoothstep feathering
+ * so there are zero jagged triangle boundaries while subtly darkening tires,
+ * underbody, and tinted cabin glass.
  */
-function applyRealCarVertexColors(geometry) {
+function applySmoothFeatheredVertexColors(geometry) {
   const posAttr = geometry.attributes.position;
   const normAttr = geometry.attributes.normal;
+  const indexAttr = geometry.index;
   if (!posAttr) return;
 
   const count = posAttr.count;
   const colors = new Float32Array(count * 3);
 
-  const cBody = new THREE.Color('#c3cdd7'); // Grigio Chiaro Metallizzato AR 727
-  const cBodyHighlight = new THREE.Color('#d2dce6'); // Sky reflection on hood/roof
-  const cTire = new THREE.Color('#18191c'); // Matte black tire rubber
-  const cRim = new THREE.Color('#dde3ea'); // Silver steel/alloy wheel rim
-  const cHubcap = new THREE.Color('#f2f6fa'); // Chrome center cap
-  const cUnderbody = new THREE.Color('#1f2226'); // Chassis & wheel arch wells
-  const cGrille = new THREE.Color('#1a1c20'); // Matte black radiator grille
-  const cChrome = new THREE.Color('#eef3f8'); // Chrome bumpers, Scudetto & trim
-  const cHeadlight = new THREE.Color('#f7fbff'); // Carello glass headlights
-  const cAmber = new THREE.Color('#e07a16'); // Amber turn signals & side repeaters
-  const cTaillight = new THREE.Color('#9e1b22'); // Rear tail light clusters
-  const cGlass = new THREE.Color('#27323d'); // Tinted cabin glass
+  const cBody = new THREE.Color('#bcc7d2'); // Grigio Chiaro Metallizzato AR 727
+  const cBodyTop = new THREE.Color('#cad4de'); // Subtle zenith highlight
+  const cTire = new THREE.Color('#23262b'); // Soft charcoal rubber
+  const cRim = new THREE.Color('#d6dde5'); // Alloy rim
+  const cGlass = new THREE.Color('#3b4654'); // Soft smoked cabin glass
+  const cGrille = new THREE.Color('#2d323a'); // Soft dark radiator grille
 
   const tmpColor = new THREE.Color();
+  const smoothstep = THREE.MathUtils.smoothstep;
 
   for (let i = 0; i < count; i++) {
-    const x = posAttr.getX(i); // -0.95 (front nose) to +0.95 (rear tail)
-    const y = posAttr.getY(i); // -0.314 (bottom tires) to +0.307 (roof)
-    const z = posAttr.getZ(i); // -0.416 to +0.414 (left/right width)
+    const x = posAttr.getX(i);
+    const y = posAttr.getY(i);
+    const z = posAttr.getZ(i);
     const absZ = Math.abs(z);
 
-    const nx = normAttr ? normAttr.getX(i) : 0;
     const ny = normAttr ? normAttr.getY(i) : 1;
     const nz = normAttr ? normAttr.getZ(i) : 0;
     const absNz = Math.abs(nz);
 
-    // Default: AR 727 Grigio Chiaro Metallizzato with subtle upward sky sheen
-    tmpColor.copy(cBody).lerp(cBodyHighlight, Math.max(0, ny * 0.45));
+    tmpColor.copy(cBody).lerp(cBodyTop, Math.max(0, ny * 0.35));
 
-    // 1. Front & Rear Wheels + Tires
+    // Smoothly feathered wheels & tires
     const distFrontWheel = Math.hypot(x - -0.558, y - -0.14);
     const distRearWheel = Math.hypot(x - 0.535, y - -0.138);
     const wheelDist = Math.min(distFrontWheel, distRearWheel);
 
-    if (wheelDist < 0.182 && absZ > 0.25) {
-      if (wheelDist < 0.045 && absZ > 0.345) {
-        tmpColor.copy(cHubcap); // Chrome hubcap
-      } else if (wheelDist < 0.105 && absZ > 0.335) {
-        tmpColor.copy(cRim); // Silver wheel rim
-      } else {
-        tmpColor.copy(cTire); // Tire tread & sidewall
-      }
-    } else if (wheelDist < 0.205 && y < 0.05 && absZ > 0.24 && absNz < 0.65) {
-      // Inner wheel arch shadow
-      tmpColor.copy(cUnderbody);
-    } else if (y < -0.21) {
-      // Lower chassis undertray
-      tmpColor.copy(cUnderbody);
+    if (wheelDist < 0.19 && absZ > 0.24) {
+      const outerFade = 1.0 - smoothstep(wheelDist, 0.145, 0.185);
+      const rimBlend = 1.0 - smoothstep(wheelDist, 0.085, 0.115);
+      const zFade = smoothstep(absZ, 0.24, 0.31);
+      const wheelColor = cTire.clone().lerp(cRim, rimBlend);
+      tmpColor.lerp(wheelColor, outerFade * zFade);
     }
 
-    // 2. Cabin Windows (Windshield, Side Windows, Rear Fastback Glass)
-    if (y > 0.085 && y < 0.275 && x > -0.34 && x < 0.72) {
-      // Windshield (front slope facing -X/+Y)
-      const isWindshield =
-        x > -0.34 && x < -0.02 && absZ < 0.31 && nx < -0.22 && ny > 0.25;
-      // Rear fastback hatch glass (facing +X/+Y)
-      const isRearGlass =
-        x > 0.36 && x < 0.72 && absZ < 0.29 && nx > 0.2 && ny > 0.3;
-      // Side windows (facing +/-Z)
-      const isSideWindow =
-        x > -0.16 &&
-        x < 0.52 &&
-        y > 0.095 &&
-        y < 0.255 &&
-        absZ > 0.27 &&
-        absNz > 0.55;
-
-      if (isWindshield || isRearGlass || isSideWindow) {
-        tmpColor.copy(cGlass);
-      }
+    // Smoothly feathered underbody shadow
+    if (y < -0.18) {
+      const underFade = 1.0 - smoothstep(y, -0.24, -0.18);
+      tmpColor.lerp(cTire, underFade * 0.85);
     }
 
-    // 3. Front Nose: Carello Quad Headlights, Black Grille, Chrome Scudetto & Bumper
-    if (x < -0.87) {
-      // Front bumper blade & rubber overriders
-      if (y > -0.145 && y < -0.075) {
-        if (absZ > 0.14 && absZ < 0.21) {
-          tmpColor.copy(cUnderbody); // Black rubber bumper overriders (rostri)
-        } else {
-          tmpColor.copy(cChrome); // Chrome bumper blade
-        }
-      }
-      // Front amber turn signal indicators under bumper edge
-      else if (y >= -0.075 && y < -0.035 && absZ > 0.18 && absZ < 0.31) {
-        tmpColor.copy(cAmber);
-      }
-      // Upper radiator grille, Scudetto & Carello quad headlights
-      else if (y >= -0.035 && y < 0.035 && absZ < 0.34) {
-        const outerLight = Math.hypot(absZ - 0.255, y - 0.0);
-        const innerLight = Math.hypot(absZ - 0.165, y - 0.0);
-        if (outerLight < 0.038 || innerLight < 0.035) {
-          tmpColor.copy(cHeadlight); // Quad round Carello lamps
-        } else if (absZ < 0.055) {
-          tmpColor.copy(cChrome); // Central Alfa Romeo Scudetto shield
-        } else {
-          tmpColor.copy(cGrille); // Matte black horizontal grille
-        }
-      }
+    // Smoothly feathered cabin glass
+    if (y > 0.08 && y < 0.27 && x > -0.32 && x < 0.68) {
+      const yFade = smoothstep(y, 0.085, 0.12) * (1.0 - smoothstep(y, 0.235, 0.268));
+      const xFade = smoothstep(x, -0.31, -0.22) * (1.0 - smoothstep(x, 0.58, 0.67));
+      const glassNormalWeight = smoothstep(1.0 - ny, 0.18, 0.55);
+      const sideGlass = smoothstep(absNz, 0.5, 0.82);
+      const blend = Math.max(glassNormalWeight * 0.65, sideGlass) * yFade * xFade;
+      tmpColor.lerp(cGlass, blend * 0.78);
     }
 
-    // 4. Side Fender Amber Repeater (Freccia laterale parafango anteriore)
-    if (
-      Math.abs(x - -0.72) < 0.025 &&
-      Math.abs(y - -0.01) < 0.018 &&
-      absZ > 0.35
-    ) {
-      tmpColor.copy(cAmber);
-    }
-
-    // 5. Rear Kamm Tail: Taillights & Rear Chrome Bumper
-    if (x > 0.88) {
-      if (y > -0.12 && y < -0.05) {
-        if (absZ > 0.15 && absZ < 0.21) {
-          tmpColor.copy(cUnderbody);
-        } else {
-          tmpColor.copy(cChrome);
-        }
-      } else if (y >= -0.02 && y < 0.055 && absZ > 0.16 && absZ < 0.33) {
-        tmpColor.copy(cTaillight);
-      }
+    // Smoothly feathered front radiator recess
+    if (x < -0.87 && y > -0.045 && y < 0.035 && absZ > 0.055 && absZ < 0.32) {
+      const frontFade = 1.0 - smoothstep(x, -0.93, -0.87);
+      const yFade =
+        smoothstep(y, -0.045, -0.02) * (1.0 - smoothstep(y, 0.015, 0.035));
+      tmpColor.lerp(cGrille, frontFade * yFade * 0.7);
     }
 
     colors[i * 3] = tmpColor.r;
@@ -277,12 +210,60 @@ function applyRealCarVertexColors(geometry) {
     colors[i * 3 + 2] = tmpColor.b;
   }
 
+  // Topological vertex color diffusion (4 passes) to eliminate any triangle stair-stepping
+  if (indexAttr) {
+    const idx = indexAttr.array;
+    const neighborSum = new Float32Array(count * 3);
+    const neighborCount = new Uint16Array(count);
+
+    for (let pass = 0; pass < 4; pass++) {
+      neighborSum.fill(0);
+      neighborCount.fill(0);
+
+      for (let t = 0; t < idx.length; t += 3) {
+        const a = idx[t];
+        const b = idx[t + 1];
+        const c = idx[t + 2];
+
+        const pairs = [
+          [a, b],
+          [b, c],
+          [c, a],
+        ];
+        for (let p = 0; p < 3; p++) {
+          const u = pairs[p][0];
+          const v = pairs[p][1];
+          neighborSum[u * 3] += colors[v * 3];
+          neighborSum[u * 3 + 1] += colors[v * 3 + 1];
+          neighborSum[u * 3 + 2] += colors[v * 3 + 2];
+          neighborCount[u]++;
+
+          neighborSum[v * 3] += colors[u * 3];
+          neighborSum[v * 3 + 1] += colors[u * 3 + 1];
+          neighborSum[v * 3 + 2] += colors[u * 3 + 2];
+          neighborCount[v]++;
+        }
+      }
+
+      for (let i = 0; i < count; i++) {
+        const k = neighborCount[i];
+        if (k > 0) {
+          colors[i * 3] = 0.45 * colors[i * 3] + 0.55 * (neighborSum[i * 3] / k);
+          colors[i * 3 + 1] =
+            0.45 * colors[i * 3 + 1] + 0.55 * (neighborSum[i * 3 + 1] / k);
+          colors[i * 3 + 2] =
+            0.45 * colors[i * 3 + 2] + 0.55 * (neighborSum[i * 3 + 2] / k);
+        }
+      }
+    }
+  }
+
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 }
 
 /**
  * Authentic 1973 Padova Vintage Black License Plate ("463880 PD")
- * mounted under the front-right bumper just like the reference photo.
+ * tucked flush beneath the front-right bumper.
  */
 function VintageLicensePlate() {
   const plateTexture = useMemo(() => {
@@ -291,16 +272,13 @@ function VintageLicensePlate() {
     canvas.height = 128;
     const ctx = canvas.getContext('2d');
 
-    // Matte black vintage Italian plate background
     ctx.fillStyle = '#0f1012';
     ctx.fillRect(0, 0, 512, 128);
 
-    // Subtle metallic border
     ctx.strokeStyle = '#d8dee6';
     ctx.lineWidth = 5;
     ctx.strokeRect(6, 6, 500, 116);
 
-    // Crisp white vintage typography "463880 PD"
     ctx.fillStyle = '#f4f6f8';
     ctx.font = 'bold 74px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
@@ -313,19 +291,17 @@ function VintageLicensePlate() {
     return tex;
   }, []);
 
-  // In raw model coords: -X is front nose (~ -0.945), Y is height (~ -0.155 under bumper),
-  // +Z is driver's left side (which appears on the right when looking at the front of the car).
   return (
     <mesh
-      position={[-0.942, -0.152, 0.085]}
+      position={[-0.908, -0.155, 0.088]}
       rotation={[0, -Math.PI / 2, 0]}
       castShadow
     >
-      <boxGeometry args={[0.165, 0.042, 0.006]} />
+      <boxGeometry args={[0.155, 0.038, 0.006]} />
       <meshStandardMaterial
         map={plateTexture}
-        roughness={0.35}
-        metalness={0.15}
+        roughness={0.4}
+        metalness={0.12}
       />
     </mesh>
   );
@@ -387,8 +363,7 @@ function ShowroomLoader({ lightingMode }) {
 }
 
 /**
- * Loads the 1973 Alfa Romeo GLB model, computes smooth vertex normals if absent,
- * computes real-car vertex colors from the reference photo, and applies clearcoat shaders.
+ * Loads the Taubin-smoothed 1973 Alfa Romeo GLB model and applies satin metallic clearcoat.
  */
 function AlfaRomeoModel({ activePaintId }) {
   const { scene } = useGLTF(MODEL_PATH);
@@ -400,7 +375,6 @@ function AlfaRomeoModel({ activePaintId }) {
     [activePaintId]
   );
 
-  // Clone scene once, compute smooth vertex normals, and generate real-car vertex colors
   const preparedScene = useMemo(() => {
     const cloned = scene.clone(true);
 
@@ -412,7 +386,7 @@ function AlfaRomeoModel({ activePaintId }) {
           child.geometry.computeVertexNormals();
         }
 
-        applyRealCarVertexColors(child.geometry);
+        applySmoothFeatheredVertexColors(child.geometry);
 
         child.castShadow = true;
         child.receiveShadow = true;
@@ -426,7 +400,6 @@ function AlfaRomeoModel({ activePaintId }) {
     return cloned;
   }, [scene]);
 
-  // Create physical automotive material for the active paint finish
   const carPaintMaterial = useMemo(() => {
     return new THREE.MeshPhysicalMaterial({
       color: new THREE.Color(selectedPaint.color),
@@ -436,7 +409,7 @@ function AlfaRomeoModel({ activePaintId }) {
       clearcoat: selectedPaint.clearcoat,
       clearcoatRoughness: selectedPaint.clearcoatRoughness,
       envMapIntensity: selectedPaint.envMapIntensity,
-      reflectivity: 0.92,
+      reflectivity: 0.78,
     });
   }, [selectedPaint]);
 
@@ -498,7 +471,7 @@ function CameraRig({ cameraRequest, controlsRef }) {
 }
 
 /**
- * Synchronizes scene background and atmospheric fog with the active lighting theme.
+ * Synchronizes scene background and balanced studio/night lighting.
  */
 function ShowroomAtmosphere({ lightingMode }) {
   const isLight = lightingMode === 'studio';
@@ -507,19 +480,22 @@ function ShowroomAtmosphere({ lightingMode }) {
   return (
     <>
       <color attach="background" args={[bgColor]} />
-      <fog attach="fog" args={[bgColor, 8.5, 22]} />
+      <fog attach="fog" args={[bgColor, 9, 24]} />
 
-      {/* Base Ambient Illumination */}
-      <ambientLight
-        intensity={isLight ? 0.85 : 0.42}
-        color={isLight ? '#fffdf9' : '#d8e2f2'}
+      {/* Soft Hemisphere Fill so silver paint never has harsh black horizon bands */}
+      <hemisphereLight
+        args={[
+          isLight ? '#ffffff' : '#dce6f5',
+          isLight ? '#c8c4bc' : '#2a2d34',
+          isLight ? 0.95 : 0.65,
+        ]}
       />
 
-      {/* Primary Key Directional Light with High-Res Soft Shadows */}
+      {/* Primary Key Directional Light with Soft Shadows */}
       <directionalLight
         position={[5, 8, 5]}
-        intensity={isLight ? 2.2 : 1.85}
-        color={isLight ? '#fffaf0' : '#f5f8ff'}
+        intensity={isLight ? 1.35 : 1.45}
+        color={isLight ? '#fffdf8' : '#f4f7ff'}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.00015}
@@ -534,16 +510,16 @@ function ShowroomAtmosphere({ lightingMode }) {
       {/* Warm Italian Showroom Rim Spotlight */}
       <spotLight
         position={[-6, 6, -5]}
-        angle={0.45}
-        penumbra={0.9}
-        intensity={isLight ? 1.4 : 2.4}
+        angle={0.5}
+        penumbra={1}
+        intensity={isLight ? 0.95 : 1.65}
         color={isLight ? '#ffffff' : '#ebd4b7'}
       />
 
-      {/* Subtle Front Fill Light for Carello Quad Headlights & Scudetto Alfa Romeo */}
+      {/* Subtle Front Fill Light for Carello Headlights & Scudetto Alfa Romeo */}
       <directionalLight
         position={[0, 2.2, 6]}
-        intensity={isLight ? 0.95 : 0.75}
+        intensity={isLight ? 0.65 : 0.55}
         color={isLight ? '#ffffff' : '#d6e0f0'}
       />
 
@@ -571,7 +547,7 @@ export default function CarViewer({
         gl={{
           antialias: true,
           toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: isLight ? 1.08 : 1.15,
+          toneMappingExposure: isLight ? 0.92 : 1.02,
         }}
       >
         <ShowroomAtmosphere lightingMode={lightingMode} />
@@ -605,13 +581,13 @@ export default function CarViewer({
               blur={[300, 80]}
               resolution={1024}
               mixBlur={0.9}
-              mixStrength={isLight ? 0.22 : 0.55}
-              roughness={isLight ? 0.65 : 0.38}
+              mixStrength={isLight ? 0.2 : 0.5}
+              roughness={isLight ? 0.68 : 0.4}
               depthScale={1}
               minDepthThreshold={0.4}
               maxDepthThreshold={1.4}
               color={isLight ? '#dcd9d0' : '#131418'}
-              metalness={isLight ? 0.15 : 0.45}
+              metalness={isLight ? 0.12 : 0.4}
             />
           </mesh>
         </Suspense>

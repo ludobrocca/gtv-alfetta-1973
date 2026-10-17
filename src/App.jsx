@@ -62,7 +62,7 @@ const HISTORICAL_SPECS = [
 export default function App() {
   const [autoRotate, setAutoRotate] = useState(true);
   const [lightingMode, setLightingMode] = useState('night'); // 'night' | 'studio'
-  const [activePaintId, setActivePaintId] = useState('ar727-reale');
+  const [activePaintId, setActivePaintId] = useState('argento');
   const [activePresetId, setActivePresetId] = useState('hero');
   const [cameraRequest, setCameraRequest] = useState(null);
 

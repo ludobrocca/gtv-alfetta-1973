@@ -14,7 +14,7 @@ import {
   useProgress,
 } from '@react-three/drei';
 
-const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=8';
+const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=9';
 
 export const PAINT_FINISHES = [
   {

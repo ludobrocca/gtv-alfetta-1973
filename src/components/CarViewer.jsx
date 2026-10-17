@@ -14,7 +14,7 @@ import {
   useProgress,
 } from '@react-three/drei';
 
-const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=9';
+const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=10';
 
 export const PAINT_FINISHES = [
   {
@@ -893,6 +893,143 @@ function AlfaRomeoEmblems() {
     };
   }, []);
 
+  /**
+   * 3. 4 Historical Vintage Club & ASI Window Decals (Vetrofanie Storiche)
+   *    Visible along the lower edge of the rear pointed quarter window in alfa-profilo.jpeg & alfa-parco.jpeg:
+   *    1) Red Triangular "Club Alfetta / RIAR" decal
+   *    2) Blue & Red Heraldic "ASI / Club Storico" shield decal
+   *    3) White Circular Vintage Club decal with green/gold emblem ring
+   *    4) Horizontal Green Rally/Pass rounded plaque decal
+   */
+  const { windowStickersTexture, windowStickersGeo } = useMemo(() => {
+    const w = 1024;
+    const h = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+
+    // 1. Red Triangular Sticker (x: 40..240)
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(140, 26);
+    ctx.lineTo(236, 224);
+    ctx.lineTo(44, 224);
+    ctx.closePath();
+    ctx.fillStyle = '#c81d25';
+    ctx.fill();
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = '#f4f4f0';
+    ctx.stroke();
+
+    ctx.fillStyle = '#f4f4f0';
+    ctx.fillRect(68, 178, 144, 26);
+    ctx.fillStyle = '#18181b';
+    ctx.font = '700 15px "Plus Jakarta Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('CLUB ALFETTA', 140, 196);
+    ctx.fillStyle = '#e5c158';
+    ctx.beginPath();
+    ctx.arc(140, 132, 22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // 2. Blue & Red Heraldic ASI Shield Sticker (x: 280..450)
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(295, 36);
+    ctx.lineTo(435, 36);
+    ctx.lineTo(435, 138);
+    ctx.quadraticCurveTo(435, 210, 365, 228);
+    ctx.quadraticCurveTo(295, 210, 295, 138);
+    ctx.closePath();
+    ctx.fillStyle = '#163a70';
+    ctx.fill();
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = '#b91c24';
+    ctx.fillRect(365, 76, 80, 160);
+    ctx.fillStyle = '#f5f5f2';
+    ctx.fillRect(290, 36, 150, 38);
+    ctx.fillStyle = '#163a70';
+    ctx.font = '800 22px "Plus Jakarta Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('A S I', 365, 63);
+    ctx.restore();
+    ctx.lineWidth = 7;
+    ctx.strokeStyle = '#e5c158';
+    ctx.stroke();
+    ctx.restore();
+
+    // 3. White Circular Club Emblem Sticker (center x: 565, y: 134, r: 88)
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(565, 134, 86, 0, Math.PI * 2);
+    ctx.fillStyle = '#f6f6f2';
+    ctx.fill();
+    ctx.lineWidth = 7;
+    ctx.strokeStyle = '#1f6f43';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(565, 134, 64, 0, Math.PI * 2);
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = '#c5a059';
+    ctx.stroke();
+
+    ctx.fillStyle = '#1f6f43';
+    ctx.beginPath();
+    ctx.arc(565, 128, 34, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#e5c158';
+    ctx.beginPath();
+    ctx.arc(565, 128, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // 4. Horizontal Green Rally / Club Plaque Sticker (x: 690..975, y: 125..205)
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(690, 122, 280, 78, 22);
+    ctx.fillStyle = '#2e7d32';
+    ctx.fill();
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = '#f4f5f0';
+    ctx.stroke();
+    ctx.fillStyle = '#f4f5f0';
+    ctx.font = '700 22px "Plus Jakarta Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('REGISTRO STORICO', 830, 168);
+    ctx.restore();
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    tex.needsUpdate = true;
+
+    // Conformal 3D quad matching the exact rear quarter glass vertices (BL, BR, TL, TR) on side +Z
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array([
+      0.332, 0.141, 0.3328, // 0: Bottom-Left (near intermediate vertical bar)
+      0.476, 0.155, 0.3245, // 1: Bottom-Right (toward pointed rear apex)
+      0.334, 0.167, 0.3214, // 2: Top-Left
+      0.480, 0.176, 0.3118, // 3: Top-Right
+    ]);
+    const uvs = new Float32Array([
+      0, 0,
+      1, 0,
+      0, 1,
+      1, 1,
+    ]);
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geo.setIndex([0, 1, 3, 0, 3, 2]);
+    geo.computeVertexNormals();
+
+    return { windowStickersTexture: tex, windowStickersGeo: geo };
+  }, []);
+
   const wheelCapPositions = [
     { x: -0.575, y: -0.145, z: 0.3702, rotY: 0 },
     { x: 0.570, y: -0.145, z: 0.3702, rotY: 0 },
@@ -931,6 +1068,19 @@ function AlfaRomeoEmblems() {
           clearcoat={1.0}
           clearcoatRoughness={0.04}
           envMapIntensity={1.4}
+        />
+      </mesh>
+
+      {/* Historical Vintage Club & ASI Decals on Left Rear Pointed Quarter Window (+Z) */}
+      <mesh geometry={windowStickersGeo}>
+        <meshPhysicalMaterial
+          map={windowStickersTexture}
+          transparent
+          alphaTest={0.08}
+          roughness={0.18}
+          metalness={0.05}
+          clearcoat={1.0}
+          side={THREE.DoubleSide}
         />
       </mesh>
 

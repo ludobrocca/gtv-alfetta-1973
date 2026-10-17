@@ -926,11 +926,34 @@ def build_alfetta_gtv():
     m_rubber.add_box([-0.912, -0.106, 0.0], [0.024, 0.022, 0.520], rotation_z=0.22)
     m_paint.add_box([0.924, 0.018, 0.0], [0.024, 0.210, 0.610], rotation_z=-0.06)
 
-    # Matte-black underbody floor pan & solid inner wheel-well walls behind the tires
-    m_rubber.add_box([0.0, -0.168, 0.0], [1.72, 0.032, 0.62])
+    # Slim matte-black underbody floor pan, tucked inside the sills and kept clear of the tyres:
+    # - central section between the wheel arches spans the full width up to the rocker sills
+    # - nose & tail sections stay narrower than the tyres' inner faces (|z| = 0.235)
+    FLOOR_Y = -0.172
+    m_rubber.add_box([-0.003, FLOOR_Y, 0.0], [0.770, 0.010, 0.660])            # between the arches
+    m_rubber.add_box([-0.655, FLOOR_Y + 0.010, 0.0], [0.520, 0.010, 0.420])    # front, between the wheels
+    m_rubber.add_box([0.650, FLOOR_Y + 0.010, 0.0], [0.520, 0.010, 0.420])     # rear, between the wheels
+
+    # Open wheel-arch liners: thin curved shells ABOVE the tyres (never solid discs) + an inner wall
+    # that only fills the arch region above the floor, so nothing pokes out below the tyres.
+    LINER_R = 0.180
+    LINER_Z_IN = 0.212
+    a_floor = math.asin(max(-1.0, min(1.0, (FLOOR_Y - AXLE_Y) / LINER_R)))
+    liner_angles = np.linspace(a_floor, math.pi - a_floor, 40)
     for ax in (FRONT_AXLE_X, REAR_AXLE_X):
         for side in (-1.0, 1.0):
-            m_rubber.add_cylinder_z(ax, AXLE_Y, side * 0.16, side * 0.230, ARCH_RADIUS * 1.02, r_inner=0.0, segs=48)
+            z_out = float(f_z_bot(ax)) - 0.004
+            shell = np.zeros((len(liner_angles), 2, 3), dtype=np.float32)
+            wall = np.zeros((len(liner_angles), 2, 3), dtype=np.float32)
+            for i, a in enumerate(liner_angles):
+                px = ax + LINER_R * math.cos(a)
+                py = AXLE_Y + LINER_R * math.sin(a)
+                shell[i, 0] = [px, py, side * LINER_Z_IN]
+                shell[i, 1] = [px, py, side * z_out]
+                wall[i, 0] = [px, py, side * LINER_Z_IN]
+                wall[i, 1] = [px, FLOOR_Y, side * LINER_Z_IN]
+            m_rubber.add_grid(shell, flip=(side < 0))
+            m_rubber.add_grid(wall, flip=(side > 0))
 
     # =========================================================================
     # 3. FRONT CALANDRA, SCUDETTO ALFA ROMEO, CHROME BAFFO & 4 CARELLO HEADLIGHTS
@@ -1057,7 +1080,9 @@ def build_alfetta_gtv():
     R_RIM = 0.108
     R_HUB = 0.023
 
-    def add_wheel(ax, ay, side):
+    def add_wheel(ax, ay, side, m_rubber, m_rim, m_chrome):
+        """Builds one wheel into the given builders. Called with ax=ay=0 so the geometry is
+        centred on the hub and the exported node can spin around its local Z axis."""
         z_inner = side * 0.235
         z_outer = side * 0.368
         z_face = side * 0.354
@@ -1222,9 +1247,20 @@ def build_alfetta_gtv():
             segs=48
         )
 
-    for ax in (FRONT_AXLE_X, REAR_AXLE_X):
-        for side in (-1.0, 1.0):
-            add_wheel(ax, AXLE_Y, side)
+    # Each wheel gets its own builders (same material indices as the body) so it exports as a
+    # separate node: Wheel_FL / Wheel_FR / Wheel_RL / Wheel_RR ("L" = +Z side, "R" = -Z side).
+    wheel_sets = []
+    for ax, axle_tag in ((FRONT_AXLE_X, "F"), (REAR_AXLE_X, "R")):
+        for side, side_tag in ((1.0, "L"), (-1.0, "R")):
+            w_rubber = MeshBuilder("Wheel_Rubber", m_rubber.material_idx)
+            w_rim = MeshBuilder("Wheel_Rim", m_rim.material_idx)
+            w_chrome = MeshBuilder("Wheel_Chrome", m_chrome.material_idx)
+            add_wheel(0.0, 0.0, side, w_rubber, w_rim, w_chrome)
+            wheel_sets.append({
+                "name": f"Wheel_{axle_tag}{side_tag}",
+                "translation": [float(ax), float(AXLE_Y), 0.0],
+                "builders": [w_chrome, w_rubber, w_rim],
+            })
 
     # =========================================================================
     # 6. INTERIOR CABIN: DASHBOARD POD, WOOD STEERING WHEEL & BUCKET SEATS
@@ -1349,89 +1385,104 @@ def build_alfetta_gtv():
 
     buffer_views = []
     accessors = []
-    primitives = []
     bin_chunks = bytearray()
 
-    for b in builders:
-        pos_arr = np.asarray(b.positions, dtype=np.float32)
-        norm_arr = np.asarray(b.normals, dtype=np.float32)
-        idx_arr = np.asarray(b.indices, dtype=np.uint32)
+    def pack_primitives(builder_list):
+        """Writes each non-empty builder into the shared binary buffer and returns its glTF primitives."""
+        primitives = []
+        for b in builder_list:
+            if not b.indices:
+                continue
+            pos_arr = np.asarray(b.positions, dtype=np.float32)
+            norm_arr = np.asarray(b.normals, dtype=np.float32)
+            idx_arr = np.asarray(b.indices, dtype=np.uint32)
 
-        pos_bytes = pos_arr.tobytes()
-        norm_bytes = norm_arr.tobytes()
-        idx_bytes = idx_arr.tobytes()
+            pos_bytes = pos_arr.tobytes()
+            norm_bytes = norm_arr.tobytes()
+            idx_bytes = idx_arr.tobytes()
 
-        bv_pos = len(buffer_views)
-        buffer_views.append({
-            "buffer": 0,
-            "byteOffset": len(bin_chunks),
-            "byteLength": len(pos_bytes),
-            "target": 34962,
-        })
-        bin_chunks.extend(pos_bytes)
-        acc_pos = len(accessors)
-        accessors.append({
-            "bufferView": bv_pos,
-            "componentType": 5126,
-            "count": len(pos_arr),
-            "type": "VEC3",
-            "min": pos_arr.min(axis=0).astype(float).tolist(),
-            "max": pos_arr.max(axis=0).astype(float).tolist(),
-        })
+            bv_pos = len(buffer_views)
+            buffer_views.append({
+                "buffer": 0,
+                "byteOffset": len(bin_chunks),
+                "byteLength": len(pos_bytes),
+                "target": 34962,
+            })
+            bin_chunks.extend(pos_bytes)
+            acc_pos = len(accessors)
+            accessors.append({
+                "bufferView": bv_pos,
+                "componentType": 5126,
+                "count": len(pos_arr),
+                "type": "VEC3",
+                "min": pos_arr.min(axis=0).astype(float).tolist(),
+                "max": pos_arr.max(axis=0).astype(float).tolist(),
+            })
 
-        bv_norm = len(buffer_views)
-        buffer_views.append({
-            "buffer": 0,
-            "byteOffset": len(bin_chunks),
-            "byteLength": len(norm_bytes),
-            "target": 34962,
-        })
-        bin_chunks.extend(norm_bytes)
-        acc_norm = len(accessors)
-        accessors.append({
-            "bufferView": bv_norm,
-            "componentType": 5126,
-            "count": len(norm_arr),
-            "type": "VEC3",
-        })
+            bv_norm = len(buffer_views)
+            buffer_views.append({
+                "buffer": 0,
+                "byteOffset": len(bin_chunks),
+                "byteLength": len(norm_bytes),
+                "target": 34962,
+            })
+            bin_chunks.extend(norm_bytes)
+            acc_norm = len(accessors)
+            accessors.append({
+                "bufferView": bv_norm,
+                "componentType": 5126,
+                "count": len(norm_arr),
+                "type": "VEC3",
+            })
 
-        bv_idx = len(buffer_views)
-        buffer_views.append({
-            "buffer": 0,
-            "byteOffset": len(bin_chunks),
-            "byteLength": len(idx_bytes),
-            "target": 34963,
-        })
-        bin_chunks.extend(idx_bytes)
-        acc_idx = len(accessors)
-        accessors.append({
-            "bufferView": bv_idx,
-            "componentType": 5125,
-            "count": len(idx_arr),
-            "type": "SCALAR",
-        })
+            bv_idx = len(buffer_views)
+            buffer_views.append({
+                "buffer": 0,
+                "byteOffset": len(bin_chunks),
+                "byteLength": len(idx_bytes),
+                "target": 34963,
+            })
+            bin_chunks.extend(idx_bytes)
+            acc_idx = len(accessors)
+            accessors.append({
+                "bufferView": bv_idx,
+                "componentType": 5125,
+                "count": len(idx_arr),
+                "type": "SCALAR",
+            })
 
-        primitives.append({
-            "attributes": {
-                "POSITION": acc_pos,
-                "NORMAL": acc_norm,
-            },
-            "indices": acc_idx,
-            "material": b.material_idx,
-        })
+            primitives.append({
+                "attributes": {
+                    "POSITION": acc_pos,
+                    "NORMAL": acc_norm,
+                },
+                "indices": acc_idx,
+                "material": b.material_idx,
+            })
+        return primitives
+
+    body_primitives = pack_primitives(builders)
+    meshes = [{"name": "Alfetta_GTV_Body_Mesh", "primitives": body_primitives}]
+    nodes = [
+        {"name": "Alfa_Romeo_Alfetta_GTV_1973", "children": list(range(1, 2 + len(wheel_sets)))},
+        {"name": "Body", "mesh": 0},
+    ]
+    for ws in wheel_sets:
+        meshes.append({"name": ws["name"] + "_Mesh", "primitives": pack_primitives(ws["builders"])})
+        nodes.append({"name": ws["name"], "mesh": len(meshes) - 1, "translation": ws["translation"]})
 
     while len(bin_chunks) % 4 != 0:
         bin_chunks.append(0)
 
     gltf = {
         "asset": {
-            "generator": "Alfa-Romeo-Centro-Stile-Parametric-CAD-v4",
+            "generator": "Alfa-Romeo-Centro-Stile-Parametric-CAD-v5",
             "version": "2.0",
         },
         "scene": 0,
         "scenes": [{"nodes": [0]}],
-        "nodes": [{"name": "Alfa_Romeo_Alfetta_GTV_1973", "mesh": 0}],
-        "meshes": [{"name": "Alfetta_GTV_MultiMaterial_Mesh", "primitives": primitives}],
+        "nodes": nodes,
+        "meshes": meshes,
         "materials": materials,
         "accessors": accessors,
         "bufferViews": buffer_views,
@@ -1451,9 +1502,10 @@ def build_alfetta_gtv():
             f.write(struct.pack("<I4s", len(bin_chunks), b"BIN\x00"))
             f.write(bin_chunks)
 
-    total_verts = sum(len(b.positions) for b in builders)
-    total_tris = sum(len(b.indices) // 3 for b in builders)
-    print(f"Built coachbuilt multi-material GLB v4: {len(primitives)} sub-meshes, {total_verts} verts, {total_tris} tris, {total_len} bytes")
+    all_builders = builders + [b for ws in wheel_sets for b in ws["builders"]]
+    total_verts = sum(len(b.positions) for b in all_builders)
+    total_tris = sum(len(b.indices) // 3 for b in all_builders)
+    print(f"Built coachbuilt GLB v5: {len(nodes)} nodes (Body + {len(wheel_sets)} wheels), {total_verts} verts, {total_tris} tris, {total_len} bytes")
 
 
 if __name__ == "__main__":

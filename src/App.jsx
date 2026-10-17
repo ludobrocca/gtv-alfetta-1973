@@ -7,6 +7,7 @@ import {
   Eye,
   EyeOff,
   FileText,
+  Gauge,
   Image as ImageIcon,
   MapPin,
   Moon,
@@ -23,6 +24,9 @@ import CarViewer, {
   CAMERA_PRESETS,
   PAINT_FINISHES,
 } from './components/CarViewer.jsx';
+import { driveStore } from './components/drive/driveStore';
+import { Speedometer } from './components/drive/Speedometer';
+import { useEngineSound } from './components/drive/useEngineSound';
 
 const DEDICATION_STORAGE_KEY = 'alfa_romeo_1973_dedication';
 const DEFAULT_DEDICATION = 'Per Papà — Passione senza tempo';
@@ -104,6 +108,7 @@ const HISTORICAL_SPECS = [
 ];
 
 export default function App() {
+  const [sceneMode, setSceneMode] = useState('showroom'); // 'showroom' | 'drive'
   const [autoRotate, setAutoRotate] = useState(true);
   const [lightingMode, setLightingMode] = useState('night'); // 'night' | 'studio'
   const [activePaintId, setActivePaintId] = useState('ar727-reale');
@@ -114,6 +119,9 @@ export default function App() {
   const [showRealPhoto, setShowRealPhoto] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [hudHidden, setHudHidden] = useState(false);
+
+  // Synthesize twin-cam Bialbero engine sound when enabled
+  useEngineSound();
 
   // Dedication state persisted in localStorage
   const [dedication, setDedication] = useState(() => {
@@ -136,6 +144,19 @@ export default function App() {
 
   const isLight = lightingMode === 'studio';
   const glassClass = isLight ? 'glass-panel-light' : 'glass-panel-dark';
+
+  const handleEnterDrive = () => {
+    driveStore.setMode('drive');
+    setSceneMode('drive');
+    setAutoRotate(false);
+    setShowSpecs(false);
+    setShowRealPhoto(false);
+  };
+
+  const handleExitDrive = () => {
+    driveStore.setMode('showroom');
+    setSceneMode('showroom');
+  };
 
   const handleSelectCameraPreset = (preset) => {
     setActivePresetId(preset.id);
@@ -177,15 +198,21 @@ export default function App() {
         isLight ? 'bg-[#e8e6e1] text-zinc-900' : 'bg-[#111113] text-zinc-100'
       }`}
     >
-      {/* 3D Interactive Showroom Canvas */}
+      {/* 3D Interactive Showroom / Drive Canvas */}
       <div className="absolute inset-0 z-0">
         <CarViewer
           autoRotate={autoRotate}
           lightingMode={lightingMode}
           activePaintId={activePaintId}
           cameraRequest={cameraRequest}
+          sceneMode={sceneMode}
         />
       </div>
+
+      {/* Speedometer HUD & Driving Controls in Drive Mode */}
+      {sceneMode === 'drive' && (
+        <Speedometer onExitDrive={handleExitDrive} />
+      )}
 
       {/* Subtle Ambient Vignette (non-blocking) */}
       <div
@@ -198,146 +225,159 @@ export default function App() {
       />
 
       {/* TOP HEADER OVERLAY */}
-      <header
-        className={`pointer-events-none absolute top-0 left-0 right-0 z-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 sm:p-6 lg:px-8 transition-all duration-500 ${
-          hudHidden
-            ? 'opacity-0 -translate-y-4'
-            : 'opacity-100 translate-y-0'
-        }`}
-      >
-        {/* Brand Title, Vintage Plate Badge & Customizable Dedication */}
-        <div
-          className={`pointer-events-auto rounded-2xl px-4 py-3 sm:px-5 sm:py-3.5 transition-all duration-300 ${glassClass}`}
+      {sceneMode === 'showroom' && (
+        <header
+          className={`pointer-events-none absolute top-0 left-0 right-0 z-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 sm:p-6 lg:px-8 transition-all duration-500 ${
+            hudHidden
+              ? 'opacity-0 -translate-y-4'
+              : 'opacity-100 translate-y-0'
+          }`}
         >
-          <div className="flex flex-wrap items-center gap-2.5 mb-1.5">
-            <span className="inline-block w-2 h-2 rounded-full bg-[#9E1B24] shadow-[0_0_8px_#C8102E]" />
-            <span className="font-mono text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-alfa-gold font-medium">
-              CENTRO STILE • MILANO 1973
-            </span>
-            {/* Authentic Vintage Black License Plate Badge */}
-            <span
-              className="inline-flex items-center px-2 py-0.5 rounded bg-[#0c0d0f] border border-zinc-500/60 font-mono text-[10px] font-bold tracking-[0.18em] text-zinc-100 shadow-inner"
-              title="Targa Nera Storica Originale di Padova"
-            >
-              463880 PD
-            </span>
-          </div>
-
-          <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-semibold tracking-tight leading-none">
-            Alfa Romeo Alfetta GTV{' '}
-            <span className="italic font-normal text-alfa-gold">(1973)</span>
-          </h1>
-
-          {/* Customizable Dedication for Dad */}
-          <div className="mt-2 pt-2 border-t border-current/10 flex items-center gap-2">
-            {isEditingDedication ? (
-              <form
-                onSubmit={handleSaveDedication}
-                className="flex items-center gap-1.5 w-full"
+          {/* Brand Title, Vintage Plate Badge & Customizable Dedication */}
+          <div
+            className={`pointer-events-auto rounded-2xl px-4 py-3 sm:px-5 sm:py-3.5 transition-all duration-300 ${glassClass}`}
+          >
+            <div className="flex flex-wrap items-center gap-2.5 mb-1.5">
+              <span className="inline-block w-2 h-2 rounded-full bg-[#9E1B24] shadow-[0_0_8px_#C8102E]" />
+              <span className="font-mono text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-alfa-gold font-medium">
+                CENTRO STILE • MILANO 1973
+              </span>
+              {/* Authentic Vintage Black License Plate Badge */}
+              <span
+                className="inline-flex items-center px-2 py-0.5 rounded bg-[#0c0d0f] border border-zinc-500/60 font-mono text-[10px] font-bold tracking-[0.18em] text-zinc-100 shadow-inner"
+                title="Targa Nera Storica Originale di Padova"
               >
-                <input
-                  type="text"
-                  value={draftDedication}
-                  onChange={(e) => setDraftDedication(e.target.value)}
-                  maxLength={60}
-                  autoFocus
-                  aria-label="Dedica personalizzata"
-                  className={`text-xs sm:text-sm font-serif italic px-2 py-0.5 rounded border outline-none w-52 sm:w-64 ${
-                    isLight
-                      ? 'bg-white/90 border-zinc-300 text-zinc-900'
-                      : 'bg-zinc-900/90 border-zinc-700 text-zinc-100'
-                  }`}
-                />
-                <button
-                  type="submit"
-                  title="Salva dedica"
-                  className="p-1 rounded-md bg-[#9E1B24] text-white hover:bg-[#C8102E] transition"
+                463880 PD
+              </span>
+            </div>
+
+            <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-semibold tracking-tight leading-none">
+              Alfa Romeo Alfetta GTV{' '}
+              <span className="italic font-normal text-alfa-gold">(1973)</span>
+            </h1>
+
+            {/* Customizable Dedication for Dad */}
+            <div className="mt-2 pt-2 border-t border-current/10 flex items-center gap-2">
+              {isEditingDedication ? (
+                <form
+                  onSubmit={handleSaveDedication}
+                  className="flex items-center gap-1.5 w-full"
                 >
-                  <Check className="w-3.5 h-3.5" />
-                </button>
-              </form>
-            ) : (
-              <>
-                <Sparkles className="w-3.5 h-3.5 text-alfa-gold shrink-0" />
-                <p
-                  className={`font-serif italic text-sm sm:text-base tracking-wide ${
-                    isLight ? 'text-zinc-700' : 'text-zinc-200'
-                  }`}
-                >
-                  “{dedication}”
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraftDedication(dedication);
-                    setIsEditingDedication(true);
-                  }}
-                  title="Personalizza la dedica"
-                  className={`ml-1 p-1 rounded-md transition ${
-                    isLight
-                      ? 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-900/5'
-                      : 'text-zinc-400 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  <Pencil className="w-3 h-3" />
-                </button>
-              </>
-            )}
+                  <input
+                    type="text"
+                    value={draftDedication}
+                    onChange={(e) => setDraftDedication(e.target.value)}
+                    maxLength={60}
+                    autoFocus
+                    aria-label="Dedica personalizzata"
+                    className={`text-xs sm:text-sm font-serif italic px-2 py-0.5 rounded border outline-none w-52 sm:w-64 ${
+                      isLight
+                        ? 'bg-white/90 border-zinc-300 text-zinc-900'
+                        : 'bg-zinc-900/90 border-zinc-700 text-zinc-100'
+                    }`}
+                  />
+                  <button
+                    type="submit"
+                    title="Salva dedica"
+                    className="p-1 rounded-md bg-[#9E1B24] text-white hover:bg-[#C8102E] transition"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5 text-alfa-gold shrink-0" />
+                  <p
+                    className={`font-serif italic text-sm sm:text-base tracking-wide ${
+                      isLight ? 'text-zinc-700' : 'text-zinc-200'
+                    }`}
+                  >
+                    “{dedication}”
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraftDedication(dedication);
+                      setIsEditingDedication(true);
+                    }}
+                    title="Personalizza la dedica"
+                    className={`ml-1 p-1 rounded-md transition ${
+                      isLight
+                        ? 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-900/5'
+                        : 'text-zinc-400 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Top-Right Quick Actions */}
-        <div className="pointer-events-auto flex items-center gap-2 self-end sm:self-start">
-          <button
-            type="button"
-            onClick={() => {
-              setShowRealPhoto((prev) => !prev);
-              setShowSpecs(false);
-            }}
-            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 ${glassClass} ${
-              showRealPhoto
-                ? 'ring-1 ring-alfa-gold text-alfa-gold'
-                : isLight
-                ? 'hover:bg-white/90 text-zinc-800'
-                : 'hover:bg-white/10 text-zinc-200'
-            }`}
-          >
-            <ImageIcon className="w-4 h-4 text-alfa-gold" />
-            <span>Foto Reali (5)</span>
-          </button>
+          {/* Top-Right Quick Actions */}
+          <div className="pointer-events-auto flex items-center gap-2 self-end sm:self-start">
+            {/* Primary Action: Launch Drive Mode */}
+            <button
+              type="button"
+              onClick={handleEnterDrive}
+              className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 bg-gradient-to-r from-[#9E1B24] via-[#b51f29] to-[#C8102E] text-white shadow-[0_0_16px_rgba(200,16,46,0.45)] hover:shadow-[0_0_24px_rgba(200,16,46,0.7)] hover:scale-[1.02] active:scale-95"
+              title="Avvia la modalità In Corsa (animazione su strada alpina)"
+            >
+              <Gauge className="w-4 h-4 text-alfa-gold animate-pulse" />
+              <span>In Corsa</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setShowSpecs((prev) => !prev);
-              setShowRealPhoto(false);
-            }}
-            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 ${glassClass} ${
-              showSpecs
-                ? 'ring-1 ring-alfa-gold text-alfa-gold'
-                : isLight
-                ? 'hover:bg-white/90 text-zinc-800'
-                : 'hover:bg-white/10 text-zinc-200'
-            }`}
-          >
-            <FileText className="w-4 h-4 text-alfa-gold" />
-            <span>Scheda Tecnica</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowRealPhoto((prev) => !prev);
+                setShowSpecs(false);
+              }}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 ${glassClass} ${
+                showRealPhoto
+                  ? 'ring-1 ring-alfa-gold text-alfa-gold'
+                  : isLight
+                  ? 'hover:bg-white/90 text-zinc-800'
+                  : 'hover:bg-white/10 text-zinc-200'
+              }`}
+            >
+              <ImageIcon className="w-4 h-4 text-alfa-gold" />
+              <span>Foto Reali (5)</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setHudHidden(true)}
-            title="Nascondi interfaccia per vista pura"
-            className={`p-2.5 rounded-xl transition-all duration-200 ${glassClass} ${
-              isLight
-                ? 'hover:bg-white/90 text-zinc-700'
-                : 'hover:bg-white/10 text-zinc-300'
-            }`}
-          >
-            <EyeOff className="w-4 h-4" />
-          </button>
-        </div>
-      </header>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSpecs((prev) => !prev);
+                setShowRealPhoto(false);
+              }}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 ${glassClass} ${
+                showSpecs
+                  ? 'ring-1 ring-alfa-gold text-alfa-gold'
+                  : isLight
+                  ? 'hover:bg-white/90 text-zinc-800'
+                  : 'hover:bg-white/10 text-zinc-200'
+              }`}
+            >
+              <FileText className="w-4 h-4 text-alfa-gold" />
+              <span>Scheda Tecnica</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setHudHidden(true)}
+              title="Nascondi interfaccia per vista pura"
+              className={`p-2.5 rounded-xl transition-all duration-200 ${glassClass} ${
+                isLight
+                  ? 'hover:bg-white/90 text-zinc-700'
+                  : 'hover:bg-white/10 text-zinc-300'
+              }`}
+            >
+              <EyeOff className="w-4 h-4" />
+            </button>
+          </div>
+        </header>
+      )}
 
       {/* FLOATING RESTORE HUD BUTTON WHEN HIDDEN */}
       {hudHidden && (
@@ -503,131 +543,143 @@ export default function App() {
       )}
 
       {/* BOTTOM GLASSMORPHISM CONTROL DOCK */}
-      <footer
-        className={`pointer-events-none absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center p-3 sm:p-5 transition-all duration-500 ${
-          hudHidden
-            ? 'opacity-0 translate-y-6'
-            : 'opacity-100 translate-y-0'
-        }`}
-      >
-        <div
-          className={`pointer-events-auto w-full max-w-4xl rounded-2xl p-3 sm:p-4 transition-all duration-300 ${glassClass}`}
+      {sceneMode === 'showroom' && (
+        <footer
+          className={`pointer-events-none absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center p-3 sm:p-5 transition-all duration-500 ${
+            hudHidden
+              ? 'opacity-0 translate-y-6'
+              : 'opacity-100 translate-y-0'
+          }`}
         >
-          {/* Top Row inside Dock: Paint Finish Selector & Camera Angle Presets */}
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pb-3 mb-3 border-b border-current/10">
-            {/* Paint Selector */}
-            <div className="flex items-center justify-between sm:justify-start gap-3">
-              <div className="flex items-center gap-1.5 text-xs font-medium shrink-0">
-                <Palette className="w-3.5 h-3.5 text-alfa-gold" />
-                <span className="font-mono text-[10px] uppercase tracking-[0.15em] opacity-75">
-                  Finitura:
+          <div
+            className={`pointer-events-auto w-full max-w-4xl rounded-2xl p-3 sm:p-4 transition-all duration-300 ${glassClass}`}
+          >
+            {/* Top Row inside Dock: Paint Finish Selector & Camera Angle Presets */}
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pb-3 mb-3 border-b border-current/10">
+              {/* Paint Selector */}
+              <div className="flex items-center justify-between sm:justify-start gap-3">
+                <div className="flex items-center gap-1.5 text-xs font-medium shrink-0">
+                  <Palette className="w-3.5 h-3.5 text-alfa-gold" />
+                  <span className="font-mono text-[10px] uppercase tracking-[0.15em] opacity-75">
+                    Finitura:
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {PAINT_FINISHES.map((paint) => {
+                    const isSelected = paint.id === activePaintId;
+                    return (
+                      <button
+                        key={paint.id}
+                        type="button"
+                        onClick={() => setActivePaintId(paint.id)}
+                        title={`${paint.name} (${paint.yearCode})`}
+                        aria-label={paint.name}
+                        className={`group relative w-6 h-6 rounded-full transition-transform duration-200 ${
+                          isSelected
+                            ? 'scale-110 ring-2 ring-alfa-gold ring-offset-2 ring-offset-black/40'
+                            : 'opacity-80 hover:opacity-100 hover:scale-105'
+                        }`}
+                        style={{
+                          background: paint.swatch || paint.swatchColor,
+                        }}
+                      >
+                        <span className="sr-only">{paint.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <span
+                  className={`hidden sm:inline-block text-xs font-serif italic truncate max-w-[230px] ${
+                    isLight ? 'text-zinc-700' : 'text-zinc-300'
+                  }`}
+                >
+                  {currentPaint.name}
                 </span>
               </div>
 
-              <div className="flex items-center gap-2">
-                {PAINT_FINISHES.map((paint) => {
-                  const isSelected = paint.id === activePaintId;
+              {/* Camera Angle Quick Presets */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                <span className="hidden xl:inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-[0.15em] opacity-70 mr-1 shrink-0">
+                  <Camera className="w-3 h-3 text-alfa-gold" />
+                  Vista:
+                </span>
+                {CAMERA_PRESETS.map((preset) => {
+                  const isActive = activePresetId === preset.id;
                   return (
                     <button
-                      key={paint.id}
+                      key={preset.id}
                       type="button"
-                      onClick={() => setActivePaintId(paint.id)}
-                      title={`${paint.name} (${paint.yearCode})`}
-                      aria-label={paint.name}
-                      className={`group relative w-6 h-6 rounded-full transition-transform duration-200 ${
-                        isSelected
-                          ? 'scale-110 ring-2 ring-alfa-gold ring-offset-2 ring-offset-black/40'
-                          : 'opacity-80 hover:opacity-100 hover:scale-105'
+                      onClick={() => handleSelectCameraPreset(preset)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap transition-all ${
+                        isActive
+                          ? 'bg-[#9E1B24] text-white shadow-sm'
+                          : isLight
+                          ? 'bg-zinc-900/5 text-zinc-700 hover:bg-zinc-900/10'
+                          : 'bg-white/5 text-zinc-300 hover:bg-white/10'
                       }`}
-                      style={{
-                        background: paint.swatch || paint.swatchColor,
-                      }}
                     >
-                      <span className="sr-only">{paint.name}</span>
+                      {preset.label}
                     </button>
                   );
                 })}
               </div>
-
-              <span
-                className={`hidden sm:inline-block text-xs font-serif italic truncate max-w-[230px] ${
-                  isLight ? 'text-zinc-700' : 'text-zinc-300'
-                }`}
-              >
-                {currentPaint.name}
-              </span>
             </div>
 
-            {/* Camera Angle Quick Presets */}
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              <span className="hidden xl:inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-[0.15em] opacity-70 mr-1 shrink-0">
-                <Camera className="w-3 h-3 text-alfa-gold" />
-                Vista:
-              </span>
-              {CAMERA_PRESETS.map((preset) => {
-                const isActive = activePresetId === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => handleSelectCameraPreset(preset)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap transition-all ${
-                      isActive
-                        ? 'bg-[#9E1B24] text-white shadow-sm'
-                        : isLight
-                        ? 'bg-zinc-900/5 text-zinc-700 hover:bg-zinc-900/10'
-                        : 'bg-white/5 text-zinc-300 hover:bg-white/10'
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+            {/* Primary Controls Row: Auto-Rotate, Reset View, In Corsa, Lighting Selector */}
+            <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-4">
+              <div className="flex items-center gap-2">
+                {/* Play / Pause Auto-Rotation */}
+                <button
+                  type="button"
+                  onClick={() => setAutoRotate((prev) => !prev)}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                    autoRotate
+                      ? 'bg-[#9E1B24] text-white shadow-[0_0_20px_rgba(158,27,36,0.4)] hover:bg-[#b51f29]'
+                      : isLight
+                      ? 'bg-zinc-900/10 text-zinc-800 hover:bg-zinc-900/15'
+                      : 'bg-white/10 text-zinc-200 hover:bg-white/15'
+                  }`}
+                >
+                  {autoRotate ? (
+                    <>
+                      <Pause className="w-3.5 h-3.5 fill-current" />
+                      <span>Pausa Rotazione</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>Avvia Rotazione</span>
+                    </>
+                  )}
+                </button>
 
-          {/* Primary Controls Row: Auto-Rotate, Reset View, Lighting Selector */}
-          <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-4">
-            <div className="flex items-center gap-2">
-              {/* Play / Pause Auto-Rotation */}
-              <button
-                type="button"
-                onClick={() => setAutoRotate((prev) => !prev)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
-                  autoRotate
-                    ? 'bg-[#9E1B24] text-white shadow-[0_0_20px_rgba(158,27,36,0.4)] hover:bg-[#b51f29]'
-                    : isLight
-                    ? 'bg-zinc-900/10 text-zinc-800 hover:bg-zinc-900/15'
-                    : 'bg-white/10 text-zinc-200 hover:bg-white/15'
-                }`}
-              >
-                {autoRotate ? (
-                  <>
-                    <Pause className="w-3.5 h-3.5 fill-current" />
-                    <span>Pausa Rotazione</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Avvia Rotazione</span>
-                  </>
-                )}
-              </button>
+                {/* Reset Vista Button */}
+                <button
+                  type="button"
+                  onClick={handleResetView}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                    isLight
+                      ? 'bg-zinc-900/10 text-zinc-800 hover:bg-zinc-900/15'
+                      : 'bg-white/10 text-zinc-200 hover:bg-white/15'
+                  }`}
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-alfa-gold" />
+                  <span>Reset Vista</span>
+                </button>
 
-              {/* Reset Vista Button */}
-              <button
-                type="button"
-                onClick={handleResetView}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
-                  isLight
-                    ? 'bg-zinc-900/10 text-zinc-800 hover:bg-zinc-900/15'
-                    : 'bg-white/10 text-zinc-200 hover:bg-white/15'
-                }`}
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-alfa-gold" />
-                <span>Reset Vista</span>
-              </button>
-            </div>
+                {/* In Corsa (Running Scene Animation Mode) */}
+                <button
+                  type="button"
+                  onClick={handleEnterDrive}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-gradient-to-r from-[#9E1B24] via-[#b51f29] to-[#C8102E] text-white shadow-[0_0_20px_rgba(200,16,46,0.45)] hover:shadow-[0_0_28px_rgba(200,16,46,0.7)] hover:scale-[1.03] active:scale-95"
+                  title="Avvia la modalità In Corsa (animazione su strada alpina)"
+                >
+                  <Gauge className="w-4 h-4 text-alfa-gold animate-pulse" />
+                  <span>In Corsa</span>
+                </button>
+              </div>
 
             {/* Interactive Hint */}
             <div
@@ -675,6 +727,7 @@ export default function App() {
           </div>
         </div>
       </footer>
+      )}
     </main>
   );
 }

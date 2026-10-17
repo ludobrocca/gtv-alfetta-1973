@@ -1,6 +1,6 @@
 import React, { Suspense, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   Bounds,
   Center,
@@ -13,8 +13,11 @@ import {
   useGLTF,
   useProgress,
 } from '@react-three/drei';
+import { driveStore } from './drive/driveStore';
+import { DriveWorld } from './drive/DriveWorld';
+import { DriveCameraDirector } from './drive/DriveCameraDirector';
 
-const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=11';
+const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=12';
 
 export const PAINT_FINISHES = [
   {
@@ -335,7 +338,7 @@ function VintageLicensePlates() {
  * - Left half: Red Cross of Milan (Croce Rossa su campo bianco)
  * - Right half: Crowned Visconti Serpent (Biscione verde coronato d'oro con fanciullo rosso)
  */
-function AlfaRomeoEmblems() {
+function AlfaRomeoEmblems({ wheelCapRefs }) {
   const emblemTexture = useMemo(() => {
     const size = 1024;
     const cx = size / 2;
@@ -1088,6 +1091,11 @@ function AlfaRomeoEmblems() {
       {wheelCapPositions.map((cap, idx) => (
         <mesh
           key={idx}
+          ref={(el) => {
+            if (wheelCapRefs && wheelCapRefs.current) {
+              wheelCapRefs.current[idx] = el;
+            }
+          }}
           position={[cap.x, cap.y, cap.z]}
           rotation={[0, cap.rotY, 0]}
         >
@@ -1168,8 +1176,11 @@ function ShowroomLoader({ lightingMode }) {
  * and binds dedicated PBR materials to each sub-mesh (CarPaint, Chrome, Glass,
  * RubberBlack, AlloyRim, HeadlightLens, AmberLens, RedTaillight, Interior).
  */
-function AlfaRomeoModel({ activePaintId }) {
+function AlfaRomeoModel({ activePaintId, sceneMode }) {
   const { scene } = useGLTF(MODEL_PATH);
+  const wheelNodesRef = useRef([]);
+  const wheelCapRefs = useRef([]);
+  const bodyGroupRef = useRef();
 
   const selectedPaint = useMemo(
     () =>
@@ -1217,18 +1228,74 @@ function AlfaRomeoModel({ activePaintId }) {
       }
     });
 
+    // Query and cache spinnable wheel nodes
+    const wheels = [];
+    preparedScene.traverse((child) => {
+      if (child.name && child.name.startsWith('Wheel_')) {
+        wheels.push(child);
+      }
+    });
+    wheelNodesRef.current = wheels;
+
     return () => {
       Object.values(materialsMap).forEach((mat) => mat.dispose());
     };
   }, [preparedScene, materialsMap]);
 
+  useFrame((_, delta) => {
+    if (sceneMode === 'drive') {
+      driveStore.update(delta);
+      const rot = driveStore.wheelRotation;
+
+      // Rotate all 4 Campagnolo alloy wheels forward around their hub Z axis
+      wheelNodesRef.current.forEach((wheel) => {
+        wheel.rotation.z = rot;
+      });
+
+      // Synchronize 4 metallic Biscione wheel center cap medallions
+      wheelCapRefs.current.forEach((cap, idx) => {
+        if (cap) {
+          const isRight = idx >= 2;
+          cap.rotation.z = isRight ? -rot : rot;
+        }
+      });
+
+      // Subtle suspension road bobbing and acceleration/braking pitch
+      if (bodyGroupRef.current) {
+        const speed = driveStore.speedKmh;
+        const speedFactor = Math.min(1, speed / 25);
+        const bob =
+          (Math.sin(driveStore.roadOffset * 6.5) * 0.0022 +
+            Math.sin(driveStore.roadOffset * 13.0) * 0.0011) *
+          speedFactor;
+        const targetPitch =
+          driveStore.throttle * -0.01 + driveStore.brake * 0.018;
+
+        bodyGroupRef.current.position.y = bob;
+        bodyGroupRef.current.rotation.z = THREE.MathUtils.lerp(
+          bodyGroupRef.current.rotation.z,
+          targetPitch,
+          0.1
+        );
+      }
+    } else {
+      // In showroom mode, reset body suspension
+      if (bodyGroupRef.current) {
+        bodyGroupRef.current.position.y = 0;
+        bodyGroupRef.current.rotation.z = 0;
+      }
+    }
+  });
+
   return (
     <Center top>
       {/* Rotate +90° around Y so the -X front shark-nose faces +Z toward the front camera */}
       <group rotation={[0, Math.PI / 2, 0]}>
-        <primitive object={preparedScene} />
-        <VintageLicensePlates />
-        <AlfaRomeoEmblems />
+        <group ref={bodyGroupRef}>
+          <primitive object={preparedScene} />
+          <VintageLicensePlates />
+          <AlfaRomeoEmblems wheelCapRefs={wheelCapRefs} />
+        </group>
       </group>
     </Center>
   );
@@ -1261,38 +1328,60 @@ function CameraRig({ cameraRequest, controlsRef }) {
 /**
  * Synchronizes scene background and balanced studio/night lighting.
  */
-function ShowroomAtmosphere({ lightingMode }) {
+function ShowroomAtmosphere({ lightingMode, sceneMode }) {
   const isLight = lightingMode === 'studio';
-  const bgColor = isLight ? '#e8e6e1' : '#111113';
+  const isDrive = sceneMode === 'drive';
+
+  const bgColor = isDrive
+    ? isLight
+      ? '#9bb3c8'
+      : '#080c14'
+    : isLight
+    ? '#e8e6e1'
+    : '#111113';
+  const fogNear = isDrive ? 18 : 9;
+  const fogFar = isDrive ? 95 : 24;
 
   return (
     <>
       <color attach="background" args={[bgColor]} />
-      <fog attach="fog" args={[bgColor, 9, 24]} />
+      <fog attach="fog" args={[bgColor, fogNear, fogFar]} />
 
       {/* Soft Hemisphere Fill */}
       <hemisphereLight
         args={[
-          isLight ? '#ffffff' : '#dce6f5',
-          isLight ? '#c8c4bc' : '#2a2d34',
-          isLight ? 0.9 : 0.65,
+          isDrive
+            ? isLight
+              ? '#d8e6f5'
+              : '#4a5b78'
+            : isLight
+            ? '#ffffff'
+            : '#dce6f5',
+          isDrive
+            ? isLight
+              ? '#556b38'
+              : '#182414'
+            : isLight
+            ? '#c8c4bc'
+            : '#2a2d34',
+          isLight ? 0.95 : 0.65,
         ]}
       />
 
       {/* Primary Key Directional Light with Soft Shadows */}
       <directionalLight
-        position={[5, 8, 5]}
+        position={isDrive ? [15, 25, 20] : [5, 8, 5]}
         intensity={isLight ? 1.4 : 1.55}
         color={isLight ? '#fffdf8' : '#f4f7ff'}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.00015}
         shadow-camera-near={0.5}
-        shadow-camera-far={20}
-        shadow-camera-left={-4}
-        shadow-camera-right={4}
-        shadow-camera-top={4}
-        shadow-camera-bottom={-4}
+        shadow-camera-far={isDrive ? 60 : 20}
+        shadow-camera-left={isDrive ? -15 : -4}
+        shadow-camera-right={isDrive ? 15 : 4}
+        shadow-camera-top={isDrive ? 15 : 4}
+        shadow-camera-bottom={isDrive ? -15 : -4}
       />
 
       {/* Warm Italian Showroom Rim Spotlight */}
@@ -1322,6 +1411,7 @@ export default function CarViewer({
   lightingMode,
   activePaintId,
   cameraRequest,
+  sceneMode = 'showroom',
 }) {
   const controlsRef = useRef(null);
   const isLight = lightingMode === 'studio';
@@ -1338,46 +1428,65 @@ export default function CarViewer({
           toneMappingExposure: isLight ? 0.96 : 1.05,
         }}
       >
-        <ShowroomAtmosphere lightingMode={lightingMode} />
+        <ShowroomAtmosphere
+          lightingMode={lightingMode}
+          sceneMode={sceneMode}
+        />
 
         <Suspense fallback={<ShowroomLoader lightingMode={lightingMode} />}>
-          <Bounds fit clip observe margin={1.2}>
-            <AlfaRomeoModel activePaintId={activePaintId} />
-            <CameraRig
-              cameraRequest={cameraRequest}
-              controlsRef={controlsRef}
-            />
-          </Bounds>
+          {sceneMode === 'drive' ? (
+            <>
+              <AlfaRomeoModel
+                activePaintId={activePaintId}
+                sceneMode={sceneMode}
+              />
+              <DriveWorld lightingMode={lightingMode} />
+              <DriveCameraDirector controlsRef={controlsRef} />
+            </>
+          ) : (
+            <>
+              <Bounds fit clip observe margin={1.2}>
+                <AlfaRomeoModel
+                  activePaintId={activePaintId}
+                  sceneMode={sceneMode}
+                />
+                <CameraRig
+                  cameraRequest={cameraRequest}
+                  controlsRef={controlsRef}
+                />
+              </Bounds>
 
-          {/* Ground Contact Shadows */}
-          <ContactShadows
-            position={[0, -0.01, 0]}
-            opacity={0.7}
-            scale={10}
-            blur={2}
-            far={4}
-          />
+              {/* Ground Contact Shadows */}
+              <ContactShadows
+                position={[0, -0.01, 0]}
+                opacity={0.7}
+                scale={10}
+                blur={2}
+                far={4}
+              />
 
-          {/* Luxury Showroom Reflective Floor Disc */}
-          <mesh
-            rotation={[-Math.PI / 2, 0, 0]}
-            position={[0, -0.015, 0]}
-            receiveShadow
-          >
-            <circleGeometry args={[12, 64]} />
-            <MeshReflectorMaterial
-              blur={[300, 80]}
-              resolution={1024}
-              mixBlur={0.9}
-              mixStrength={isLight ? 0.2 : 0.5}
-              roughness={isLight ? 0.68 : 0.4}
-              depthScale={1}
-              minDepthThreshold={0.4}
-              maxDepthThreshold={1.4}
-              color={isLight ? '#dcd9d0' : '#131418'}
-              metalness={isLight ? 0.12 : 0.4}
-            />
-          </mesh>
+              {/* Luxury Showroom Reflective Floor Disc */}
+              <mesh
+                rotation={[-Math.PI / 2, 0, 0]}
+                position={[0, -0.015, 0]}
+                receiveShadow
+              >
+                <circleGeometry args={[12, 64]} />
+                <MeshReflectorMaterial
+                  blur={[300, 80]}
+                  resolution={1024}
+                  mixBlur={0.9}
+                  mixStrength={isLight ? 0.2 : 0.5}
+                  roughness={isLight ? 0.68 : 0.4}
+                  depthScale={1}
+                  minDepthThreshold={0.4}
+                  maxDepthThreshold={1.4}
+                  color={isLight ? '#dcd9d0' : '#131418'}
+                  metalness={isLight ? 0.12 : 0.4}
+                />
+              </mesh>
+            </>
+          )}
         </Suspense>
 
         <OrbitControls
@@ -1385,13 +1494,23 @@ export default function CarViewer({
           makeDefault
           enablePan={false}
           minPolarAngle={0}
-          maxPolarAngle={Math.PI / 2.05}
-          minDistance={0.65}
-          maxDistance={10}
-          autoRotate={autoRotate}
+          maxPolarAngle={sceneMode === 'drive' ? Math.PI / 2.02 : Math.PI / 2.05}
+          minDistance={sceneMode === 'drive' ? 1.0 : 0.65}
+          maxDistance={sceneMode === 'drive' ? 18 : 10}
+          autoRotate={sceneMode === 'drive' ? false : autoRotate}
           autoRotateSpeed={0.8}
           enableDamping
           dampingFactor={0.05}
+          onStart={() => {
+            if (sceneMode === 'drive') {
+              driveStore.markUserInteraction();
+            }
+          }}
+          onChange={() => {
+            if (sceneMode === 'drive') {
+              driveStore.markUserInteraction();
+            }
+          }}
         />
       </Canvas>
     </div>

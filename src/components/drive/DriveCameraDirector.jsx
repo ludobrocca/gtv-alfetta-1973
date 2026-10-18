@@ -1,99 +1,76 @@
-// Cinematic Camera Director for Drive Mode
-// Smoothly cycles through dynamic automotive cinematography angles (rear chase,
-// side tracking, low-angle front hero, high helicopter, wheel close-up)
-// with seamless handoff to manual user OrbitControls and speed-dependent vibration.
+// Dynamic 3rd-Person Chase Camera Director for 3-Lane Runner
+// Keeps the Alfetta centered during lane changes, handles Elvis FOV nitro zoom,
+// camera shake, and crash dramatic freeze frame.
 
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { driveStore } from './driveStore';
 
-const CINEMATIC_SHOTS = [
-  {
-    name: 'chase',
-    pos: [0.6, 0.95, -3.6],
-    target: [0.0, 0.38, 0.8],
-    fov: 42,
-    duration: 8.5,
-  },
-  {
-    name: 'side',
-    pos: [4.2, 0.75, 0.3],
-    target: [0.0, 0.34, 0.2],
-    fov: 38,
-    duration: 7.5,
-  },
-  {
-    name: 'low_front',
-    pos: [-1.5, 0.42, 3.2],
-    target: [0.0, 0.36, 0.0],
-    fov: 44,
-    duration: 8.0,
-  },
-  {
-    name: 'helicopter',
-    pos: [-2.6, 2.4, 2.8],
-    target: [0.0, 0.30, 0.0],
-    fov: 46,
-    duration: 9.0,
-  },
-  {
-    name: 'wheel_gtv',
-    pos: [2.2, 0.45, -0.7],
-    target: [0.35, 0.22, -0.2],
-    fov: 36,
-    duration: 7.0,
-  },
-];
-
 export function DriveCameraDirector({ controlsRef }) {
   const { camera } = useThree();
-  const shotIndexRef = useRef(0);
-  const shotTimerRef = useRef(0);
-  const currentPosRef = useRef(new THREE.Vector3(0.6, 0.95, -3.6));
-  const currentTargetRef = useRef(new THREE.Vector3(0, 0.38, 0.8));
+  const currentPosRef = useRef(new THREE.Vector3(0, 1.25, -3.4));
+  const currentTargetRef = useRef(new THREE.Vector3(0, 0.38, 2.0));
+  const targetFovRef = useRef(45);
 
-  // Reset when entering drive mode
   useEffect(() => {
-    shotIndexRef.current = 0;
-    shotTimerRef.current = 0;
-  }, []);
+    currentPosRef.current.set(0, 1.25, -3.4);
+    currentTargetRef.current.set(0, 0.38, 2.0);
+    camera.fov = 45;
+    camera.updateProjectionMatrix();
+  }, [camera]);
 
   useFrame((_, delta) => {
     if (driveStore.mode !== 'drive') return;
 
-    // Check if user is actively manually manipulating OrbitControls
+    // Check if user is actively touching OrbitControls
     if (driveStore.userInteracting) {
       return;
     }
 
-    const currentShot = CINEMATIC_SHOTS[shotIndexRef.current];
-    shotTimerRef.current += delta;
+    const dt = Math.min(delta, 0.1);
+    const carX = driveStore.carX;
+    const isGameOver = driveStore.gameState === 'gameover';
+    const isElvisActive = driveStore.activePowerups.elvis > 0;
+    const speed = driveStore.speedKmh;
 
-    if (shotTimerRef.current > currentShot.duration) {
-      shotTimerRef.current = 0;
-      shotIndexRef.current = (shotIndexRef.current + 1) % CINEMATIC_SHOTS.length;
+    // Base target position behind car
+    let targetX = carX * 0.72;
+    let targetY = 1.28;
+    let targetZ = -3.4;
+
+    let lookX = carX;
+    let lookY = 0.38;
+    let lookZ = 1.8;
+
+    if (isGameOver) {
+      // Pull back dramatically on crash
+      targetX = carX - 1.2;
+      targetY = 1.65;
+      targetZ = -4.2;
+      lookZ = 0.5;
     }
 
-    const targetShot = CINEMATIC_SHOTS[shotIndexRef.current];
-    const targetPos = new THREE.Vector3(...targetShot.pos);
-    const targetLookAt = new THREE.Vector3(...targetShot.target);
-
-    // Subtle speed-dependent camera shake
-    const speed = driveStore.speedKmh;
-    const shakeIntensity = (speed / 200) * 0.008;
+    // Speed camera shake
+    const shakeIntensity = (speed / 200) * 0.009;
     const shakeX = (Math.random() - 0.5) * shakeIntensity;
     const shakeY = (Math.random() - 0.5) * shakeIntensity;
-    const shakeZ = (Math.random() - 0.5) * shakeIntensity;
 
-    targetPos.x += shakeX;
-    targetPos.y += shakeY;
-    targetPos.z += shakeZ;
+    const targetPos = new THREE.Vector3(targetX + shakeX, targetY + shakeY, targetZ);
+    const targetLookAt = new THREE.Vector3(lookX, lookY, lookZ);
 
-    // Smoothly interpolate camera position & lookAt target
-    const lerpSpeed = Math.min(1, delta * 2.2);
-    currentPosRef.current.lerp(targetPos, lerpSpeed);
-    currentTargetRef.current.lerp(targetLookAt, lerpSpeed);
+    // Elvis Nitro FOV expansion (+12 degrees)
+    const targetFov = isElvisActive ? 57 : (speed > 100 ? 49 : 45);
+    targetFovRef.current = THREE.MathUtils.lerp(targetFovRef.current, targetFov, 0.08);
+    if (Math.abs(camera.fov - targetFovRef.current) > 0.1) {
+      camera.fov = targetFovRef.current;
+      camera.updateProjectionMatrix();
+    }
+
+    // Smooth camera interpolation
+    const lerpRate = isGameOver ? 3.0 : 8.0;
+    currentPosRef.current.lerp(targetPos, Math.min(1, dt * lerpRate));
+    currentTargetRef.current.lerp(targetLookAt, Math.min(1, dt * lerpRate));
 
     camera.position.copy(currentPosRef.current);
 

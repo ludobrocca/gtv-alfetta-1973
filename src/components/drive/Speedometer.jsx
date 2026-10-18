@@ -1,19 +1,27 @@
-// Authentic 1970s Veglia Borletti Speedometer HUD & Drive Controls
-// Styled after classic Alfa Romeo Alfetta GTV dual round instrument binnacle
+// Authentic 1970s Veglia Borletti Speedometer & 3-Lane Arcade Minigame HUD
+// Features score, personal best in localStorage, active Tex/Elvis power-up meters,
+// 90° Temple Run turn alert banners, touch buttons + swipe controls, and Game Over dialog.
 
-import React, { useEffect, useState } from 'react';
-import { Volume2, VolumeX, ArrowLeft, Gauge, Zap } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Volume2, VolumeX, ArrowLeft, Trophy, Zap, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 import { driveStore } from './driveStore';
 
 export function Speedometer({ onExitDrive }) {
   const [speed, setSpeed] = useState(0);
   const [gear, setGear] = useState(1);
-  const [rpm, setRpm] = useState(950);
   const [distance, setDistance] = useState(0);
-  const [soundEnabled, setSoundEnabled] = useState(false);
-  const [throttleActive, setThrottleActive] = useState(false);
-  const [brakeActive, setBrakeActive] = useState(false);
-  const [cruiseSpeed, setCruiseSpeed] = useState(driveStore.cruiseSpeed);
+  const [score, setScore] = useState(0);
+  const [bestScore, setBestScore] = useState(driveStore.bestScore);
+  const [coins, setCoins] = useState(0);
+  const [soundEnabled, setSoundEnabled] = useState(driveStore.soundEnabled);
+  const [gameState, setGameState] = useState('playing');
+  const [activeTex, setActiveTex] = useState(0);
+  const [activeElvis, setActiveElvis] = useState(0);
+  const [turnEvent, setTurnEvent] = useState({ active: false, direction: 'R' });
+  const [activeLane, setActiveLane] = useState(0);
+
+  const touchStartXRef = useRef(0);
+  const touchStartYRef = useRef(0);
 
   useEffect(() => {
     let animId;
@@ -21,125 +29,250 @@ export function Speedometer({ onExitDrive }) {
 
     const tick = (now) => {
       animId = requestAnimationFrame(tick);
-      // Update HUD at 25Hz to maintain high UI responsiveness
-      if (now - lastUpdate > 40) {
+      if (now - lastUpdate > 33) { // 30Hz HUD refresh
         lastUpdate = now;
         setSpeed(Math.round(driveStore.speedKmh));
         setGear(driveStore.gear);
-        setRpm(Math.round(driveStore.rpm));
-        setDistance(driveStore.distanceMeters);
+        setDistance(Math.round(driveStore.distanceMeters));
+        setScore(driveStore.score);
+        setBestScore(driveStore.bestScore);
+        setCoins(driveStore.coinsCollected);
         setSoundEnabled(driveStore.soundEnabled);
-        setCruiseSpeed(driveStore.cruiseSpeed);
+        setGameState(driveStore.gameState);
+        setActiveTex(driveStore.activePowerups.tex);
+        setActiveElvis(driveStore.activePowerups.elvis);
+        setTurnEvent({
+          active: driveStore.turnEvent.active && !driveStore.turnEvent.windowPassed,
+          direction: driveStore.turnEvent.direction,
+        });
+        setActiveLane(driveStore.targetLane);
       }
     };
     animId = requestAnimationFrame(tick);
 
-    // Keyboard controls: ArrowUp/W for accelerate, ArrowDown/S for brake, Space for handbrake
+    // Keyboard controls for 3 lanes and 90° turns
     const handleKeyDown = (e) => {
-      if (e.repeat) return;
-      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
-        driveStore.setThrottle(1);
-        setThrottleActive(true);
-      } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S' || e.key === ' ') {
-        driveStore.setBrake(1);
-        setBrakeActive(true);
+      if (driveStore.gameState === 'gameover') {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          driveStore.resetGame();
+        }
+        return;
+      }
+
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+        e.preventDefault();
+        if (driveStore.turnEvent.active && !driveStore.turnEvent.windowPassed) {
+          driveStore.handleTurn('L');
+        } else {
+          driveStore.changeLane(-1);
+        }
+      } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        e.preventDefault();
+        if (driveStore.turnEvent.active && !driveStore.turnEvent.windowPassed) {
+          driveStore.handleTurn('R');
+        } else {
+          driveStore.changeLane(1);
+        }
       }
     };
 
-    const handleKeyUp = (e) => {
-      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
-        driveStore.setThrottle(0);
-        setThrottleActive(false);
-      } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S' || e.key === ' ') {
-        driveStore.setBrake(0);
-        setBrakeActive(false);
-      }
+    // Mobile Touch Swipe Gesture Handling
+    const handleTouchStart = (e) => {
+      if (!e.touches || e.touches.length === 0) return;
+      touchStartXRef.current = e.touches[0].clientX;
+      touchStartYRef.current = e.touches[0].clientY;
     };
 
-    // Safety: if the user releases the mouse button anywhere on screen or switches windows, release throttle and brake
-    const handleGlobalRelease = () => {
-      driveStore.setThrottle(0);
-      driveStore.setBrake(0);
-      setThrottleActive(false);
-      setBrakeActive(false);
+    const handleTouchEnd = (e) => {
+      if (!e.changedTouches || e.changedTouches.length === 0) return;
+      const dx = e.changedTouches[0].clientX - touchStartXRef.current;
+      const dy = e.changedTouches[0].clientY - touchStartYRef.current;
+
+      // Ensure horizontal swipe
+      if (Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy)) {
+        if (dx < 0) {
+          // Swipe Left
+          if (driveStore.turnEvent.active && !driveStore.turnEvent.windowPassed) {
+            driveStore.handleTurn('L');
+          } else {
+            driveStore.changeLane(-1);
+          }
+        } else {
+          // Swipe Right
+          if (driveStore.turnEvent.active && !driveStore.turnEvent.windowPassed) {
+            driveStore.handleTurn('R');
+          } else {
+            driveStore.changeLane(1);
+          }
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('mouseup', handleGlobalRelease);
-    window.addEventListener('blur', handleGlobalRelease);
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
 
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('mouseup', handleGlobalRelease);
-      window.removeEventListener('blur', handleGlobalRelease);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
     };
   }, []);
 
-  // Needle angle: 0 km/h = -135deg, 220 km/h = +135deg (total 270 deg sweep)
   const needleDeg = -135 + (Math.min(220, speed) / 220) * 270;
 
-  // Format mechanical odometer km
-  const totalKm = (46388 + distance / 1000).toFixed(1);
-
   return (
-    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 sm:p-6 z-20">
-      {/* Top Bar: Return to Showroom & Audio Toggle */}
+    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 sm:p-5 z-20 select-none">
+      {/* Top Header Bar: Showroom Return, Live Scores, and Audio Toggle */}
       <div className="flex items-center justify-between w-full pointer-events-auto">
+        {/* Return Button */}
         <button
           onClick={onExitDrive}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/20 bg-black/60 backdrop-blur-md text-white text-xs font-mono uppercase tracking-wider hover:border-alfa-gold hover:text-alfa-gold transition-all shadow-xl active:scale-95"
+          className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl border border-white/20 bg-black/60 backdrop-blur-md text-white text-xs font-mono uppercase tracking-wider hover:border-alfa-gold hover:text-alfa-gold transition-all shadow-xl active:scale-95"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Torna allo Showroom</span>
+          <span className="hidden sm:inline">Showroom</span>
         </button>
 
-        <div className="flex items-center gap-3">
-          {/* Sound Toggle */}
+        {/* Score & Personal Best Arcade Display */}
+        <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-5 py-1.5 rounded-2xl border border-amber-500/30 bg-black/75 backdrop-blur-md shadow-2xl">
+          {/* Current Score */}
+          <div className="flex flex-col items-center">
+            <span className="text-[9px] font-mono uppercase text-zinc-400 tracking-wider">Punti</span>
+            <span className="text-base sm:text-xl font-bold font-mono text-amber-400">
+              {score.toLocaleString('it-IT')}
+            </span>
+          </div>
+
+          <div className="w-[1px] h-6 bg-white/15" />
+
+          {/* Alfa Coins */}
+          <div className="flex flex-col items-center">
+            <span className="text-[9px] font-mono uppercase text-zinc-400 tracking-wider">Monete</span>
+            <span className="text-sm sm:text-base font-bold font-mono text-amber-300 flex items-center gap-1">
+              <span>🪙</span>
+              {coins}
+            </span>
+          </div>
+
+          <div className="w-[1px] h-6 bg-white/15" />
+
+          {/* Personal Best */}
+          <div className="flex flex-col items-center">
+            <span className="text-[9px] font-mono uppercase text-zinc-400 tracking-wider flex items-center gap-0.5">
+              <Trophy className="w-2.5 h-2.5 text-alfa-gold" /> Record
+            </span>
+            <span className="text-sm sm:text-base font-bold font-mono text-zinc-200">
+              {bestScore.toLocaleString('it-IT')}
+            </span>
+          </div>
+        </div>
+
+        {/* Sound Toggle */}
+        <div className="flex items-center gap-2">
           <button
             onClick={() => driveStore.toggleSound()}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl border backdrop-blur-md text-xs font-mono tracking-wider transition-all shadow-xl active:scale-95 ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border backdrop-blur-md text-xs font-mono tracking-wider transition-all shadow-xl active:scale-95 ${
               soundEnabled
                 ? 'border-alfa-gold bg-alfa-gold/20 text-alfa-gold'
                 : 'border-white/20 bg-black/60 text-zinc-400 hover:text-white'
             }`}
-            title="Bialbero 1779cc Sound Synthesizer"
+            title="Audio bialbero e musica"
           >
             {soundEnabled ? (
-              <>
-                <Volume2 className="w-4 h-4 text-alfa-gold animate-pulse" />
-                <span className="hidden sm:inline">Bialbero Audio: ON</span>
-              </>
+              <Volume2 className="w-4 h-4 text-alfa-gold animate-pulse" />
             ) : (
-              <>
-                <VolumeX className="w-4 h-4 text-zinc-400" />
-                <span className="hidden sm:inline">Audio: OFF</span>
-              </>
+              <VolumeX className="w-4 h-4 text-zinc-400" />
             )}
+            <span className="hidden md:inline">{soundEnabled ? 'ON' : 'OFF'}</span>
           </button>
-
-          {/* Mode Pill */}
-          <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-500/30 bg-emerald-950/40 backdrop-blur-md text-emerald-400 text-xs font-mono uppercase tracking-wider">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span>In Corsa • 1779cc</span>
-          </div>
         </div>
       </div>
 
-      {/* Bottom Center: Veglia Borletti Speedometer Dial + Acceleration Controls */}
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pointer-events-auto mx-auto mb-2">
-        {/* Speedometer Instrument Dial */}
-        <div className="relative w-44 h-44 sm:w-52 sm:h-52 rounded-full p-2 bg-gradient-to-b from-zinc-700 via-zinc-900 to-black shadow-2xl border-4 border-zinc-600/80 flex items-center justify-center">
-          {/* Outer Chrome Bezel */}
-          <div className="absolute inset-1 rounded-full border border-white/25 pointer-events-none" />
+      {/* Active Power-Up Timers Banners (Tex Willer & Elvis Presley) */}
+      <div className="flex flex-col items-center gap-2 w-full max-w-sm mx-auto pointer-events-none mt-2">
+        {activeTex > 0 && (
+          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-950/80 via-black/80 to-amber-950/80 backdrop-blur-md shadow-amber-500/30 shadow-lg animate-pulse">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🤠</span>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold font-mono text-amber-300 uppercase tracking-wide">
+                  TEX WILLER • INVULNERABILE!
+                </span>
+                <span className="text-[10px] text-amber-200/80">Distruggi gli ostacoli</span>
+              </div>
+            </div>
+            <span className="text-sm font-mono font-bold text-amber-400">
+              {activeTex.toFixed(1)}s
+            </span>
+          </div>
+        )}
 
-          {/* Dial Face */}
+        {activeElvis > 0 && (
+          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-fuchsia-400 bg-gradient-to-r from-fuchsia-950/80 via-black/80 to-fuchsia-950/80 backdrop-blur-md shadow-fuchsia-500/30 shadow-lg animate-pulse">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🎸</span>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold font-mono text-fuchsia-300 uppercase tracking-wide">
+                  ELVIS • ROCK'N'ROLL NITRO 2X!
+                </span>
+                <span className="text-[10px] text-fuchsia-200/80">Super velocità & punti doppi</span>
+              </div>
+            </div>
+            <span className="text-sm font-mono font-bold text-fuchsia-300">
+              {activeElvis.toFixed(1)}s
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* 90° Turn Junction Alert (Temple Run style) */}
+      {turnEvent.active && (
+        <div className="flex flex-col items-center justify-center pointer-events-none animate-bounce my-auto">
+          <div className="px-6 py-3 rounded-2xl border-4 border-yellow-400 bg-black/90 backdrop-blur-lg shadow-2xl flex items-center gap-3">
+            {turnEvent.direction === 'L' ? (
+              <ChevronLeft className="w-8 h-8 text-yellow-400 animate-ping" />
+            ) : null}
+            <div className="flex flex-col items-center">
+              <span className="text-sm font-mono font-black text-yellow-400 uppercase tracking-widest">
+                CURVA SECCA A {turnEvent.direction === 'L' ? 'SINISTRA' : 'DESTRA'}!
+              </span>
+              <span className="text-xs font-mono text-white/90">
+                PREMI {turnEvent.direction === 'L' ? '◀ (A)' : '▶ (D)'} O FAI SWIPE!
+              </span>
+            </div>
+            {turnEvent.direction === 'R' ? (
+              <ChevronRight className="w-8 h-8 text-yellow-400 animate-ping" />
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* Bottom Center: Veglia Borletti Speedometer & Mobile Touch Steering Controls */}
+      <div className="flex items-center justify-between w-full max-w-4xl mx-auto pointer-events-auto">
+        {/* Left Thumb Button (Mobile Steering) */}
+        <button
+          onClick={() => {
+            if (driveStore.turnEvent.active && !driveStore.turnEvent.windowPassed) {
+              driveStore.handleTurn('L');
+            } else {
+              driveStore.changeLane(-1);
+            }
+          }}
+          className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-white/30 bg-black/70 backdrop-blur-md text-white shadow-2xl active:scale-90 active:bg-alfa-gold/30 active:border-alfa-gold transition-all"
+          title="Corsia Sinistra"
+        >
+          <ChevronLeft className="w-8 h-8 sm:w-10 sm:h-10 text-alfa-gold" />
+        </button>
+
+        {/* Center: Veglia Borletti Mechanical Speedometer */}
+        <div className="relative w-36 h-36 sm:w-44 sm:h-44 rounded-full p-2 bg-gradient-to-b from-zinc-700 via-zinc-900 to-black shadow-2xl border-4 border-zinc-600/80 flex items-center justify-center">
+          <div className="absolute inset-1 rounded-full border border-white/25 pointer-events-none" />
           <div className="relative w-full h-full rounded-full bg-[#111417] flex items-center justify-center overflow-hidden shadow-inner">
-            {/* Speed Dial Radial Hash Ticks & Numbers */}
+            {/* Speed Dial Radial Hash Ticks */}
             <svg className="absolute inset-0 w-full h-full p-2" viewBox="0 0 200 200">
-              {/* Radial tick marks from -135deg to +135deg */}
               {Array.from({ length: 23 }).map((_, i) => {
                 const km = i * 10;
                 const deg = -135 + (km / 220) * 270;
@@ -162,18 +295,18 @@ export function Speedometer({ onExitDrive }) {
                       y1={y1}
                       x2={x2}
                       y2={y2}
-                      stroke={isMajor ? '#f5f7fa' : '#9ba3af'}
-                      strokeWidth={isMajor ? 2.2 : 1.2}
+                      stroke={isMajor ? '#e5e7eb' : '#71717a'}
+                      strokeWidth={isMajor ? '2.5' : '1.2'}
                     />
                     {isMajor && (
                       <text
                         x={tx}
                         y={ty}
-                        fill="#e5e7eb"
-                        fontSize="9"
-                        fontWeight="600"
-                        fontFamily="monospace"
                         textAnchor="middle"
+                        fill="#d4d4d8"
+                        fontSize="11"
+                        fontFamily="monospace"
+                        fontWeight="600"
                       >
                         {km}
                       </text>
@@ -183,168 +316,128 @@ export function Speedometer({ onExitDrive }) {
               })}
             </svg>
 
-            {/* Brand Marking */}
-            <div className="absolute top-11 text-center pointer-events-none">
-              <p className="text-[8px] font-mono tracking-[0.2em] uppercase text-zinc-400">VEGLIA</p>
-              <p className="text-[6px] font-mono tracking-[0.16em] uppercase text-zinc-500">BORLETTI</p>
+            {/* Veglia Borletti Brand Badge */}
+            <div className="absolute top-7 flex flex-col items-center">
+              <span className="text-[8px] font-mono tracking-widest text-zinc-400 font-semibold uppercase">
+                VEGLIA BORLETTI
+              </span>
+              <span className="text-[6px] tracking-wider text-zinc-500">MILANO • 1973</span>
             </div>
 
-            {/* Mechanical Rolling Odometer */}
-            <div className="absolute top-20 px-2 py-0.5 rounded bg-black/90 border border-zinc-700/80 font-mono text-[9px] text-zinc-300 tracking-wider shadow-inner">
-              {totalKm} km
-            </div>
-
-            {/* Digital Speed & Gear readout */}
-            <div className="absolute bottom-9 text-center pointer-events-none">
-              <span className="text-2xl sm:text-3xl font-mono font-bold text-white tracking-tight">
+            {/* Live Speed Digital Display */}
+            <div className="absolute top-1/2 -translate-y-1/2 flex flex-col items-center">
+              <span className="text-xl sm:text-2xl font-mono font-bold tracking-tight text-white drop-shadow">
                 {speed}
               </span>
-              <span className="text-[10px] font-mono text-zinc-400 block -mt-1">km/h</span>
+              <span className="text-[9px] font-mono text-zinc-400 block -mt-1">km/h</span>
             </div>
 
-            {/* Transaxle Gear Badge */}
-            <div className="absolute bottom-3 px-2 py-0.5 rounded-full border border-alfa-gold/40 bg-alfa-gold/15 text-alfa-gold text-[9px] font-mono font-semibold tracking-wider">
-              MARCIA {gear}ª
+            {/* 3-Lane Position Indicator Dots */}
+            <div className="absolute bottom-2.5 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/60 border border-white/10">
+              <span className={`w-2 h-2 rounded-full transition-all ${activeLane === -1 ? 'bg-amber-400 scale-125' : 'bg-zinc-600'}`} />
+              <span className={`w-2 h-2 rounded-full transition-all ${activeLane === 0 ? 'bg-amber-400 scale-125' : 'bg-zinc-600'}`} />
+              <span className={`w-2 h-2 rounded-full transition-all ${activeLane === 1 ? 'bg-amber-400 scale-125' : 'bg-zinc-600'}`} />
             </div>
 
             {/* Orange-Red Classic Needle */}
             <div
               className="absolute w-1 bg-gradient-to-t from-red-600 via-orange-500 to-amber-300 rounded-full shadow-lg origin-bottom transition-transform duration-75 ease-out pointer-events-none"
               style={{
-                height: '74px',
+                height: '66px',
                 bottom: '50%',
                 transform: `rotate(${needleDeg}deg)`,
               }}
             />
 
             {/* Center Chrome Hub */}
-            <div className="absolute w-5 h-5 rounded-full bg-gradient-to-br from-zinc-300 via-zinc-600 to-black border border-white/60 shadow-md" />
+            <div className="absolute w-4 h-4 rounded-full bg-gradient-to-br from-zinc-300 via-zinc-600 to-black border border-white/60 shadow-md" />
           </div>
         </div>
 
-        {/* Driving Controls: Accel / Brake Pedals & Quick Cruising Buttons */}
-        <div className="flex flex-col gap-2">
-          {/* Controls guidance hint */}
-          <div className="text-center text-[10px] font-mono text-zinc-400 tracking-wider select-none">
-            <span className="text-alfa-gold">W</span> ACCELERA &nbsp;•&nbsp; RILASCIA PER FRENO MOTORE &nbsp;•&nbsp; <span className="text-red-400">S</span> FRENO
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Brake Button */}
-            <button
-              onMouseDown={() => {
-                driveStore.setBrake(1);
-                setBrakeActive(true);
-              }}
-              onMouseUp={() => {
-                driveStore.setBrake(0);
-                setBrakeActive(false);
-              }}
-              onMouseLeave={() => {
-                driveStore.setBrake(0);
-                setBrakeActive(false);
-              }}
-              onTouchStart={(e) => {
-                e.preventDefault();
-                driveStore.setBrake(1);
-                setBrakeActive(true);
-              }}
-              onTouchEnd={(e) => {
-                e.preventDefault();
-                driveStore.setBrake(0);
-                setBrakeActive(false);
-              }}
-              onTouchCancel={() => {
-                driveStore.setBrake(0);
-                setBrakeActive(false);
-              }}
-              className={`flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl border font-mono text-xs uppercase tracking-wider shadow-xl select-none transition-all ${
-                brakeActive
-                  ? 'border-red-500 bg-red-600 text-white scale-95 shadow-red-900/50 shadow-lg'
-                  : 'border-red-500/40 bg-red-950/40 text-red-300 hover:bg-red-900/50'
-              }`}
-            >
-              <span>FRENA (S)</span>
-            </button>
-
-            {/* Accelerate Button */}
-            <button
-              onMouseDown={() => {
-                driveStore.setThrottle(1);
-                setThrottleActive(true);
-              }}
-              onMouseUp={() => {
-                driveStore.setThrottle(0);
-                setThrottleActive(false);
-              }}
-              onMouseLeave={() => {
-                driveStore.setThrottle(0);
-                setThrottleActive(false);
-              }}
-              onTouchStart={(e) => {
-                e.preventDefault();
-                driveStore.setThrottle(1);
-                setThrottleActive(true);
-              }}
-              onTouchEnd={(e) => {
-                e.preventDefault();
-                driveStore.setThrottle(0);
-                setThrottleActive(false);
-              }}
-              onTouchCancel={() => {
-                driveStore.setThrottle(0);
-                setThrottleActive(false);
-              }}
-              className={`flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl border font-mono text-xs uppercase tracking-wider shadow-xl select-none transition-all ${
-                throttleActive
-                  ? 'border-emerald-400 bg-emerald-500 text-black font-bold scale-95 shadow-emerald-900/50 shadow-lg'
-                  : 'border-emerald-500/40 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5" />
-              <span>ACCELERA (W)</span>
-            </button>
-          </div>
-
-          {/* Quick Cruise Speed Presets & Status Indicator */}
-          <div className="flex items-center justify-between gap-1.5 px-3 py-2 rounded-xl border border-white/10 bg-black/60 backdrop-blur-md text-[11px] font-mono">
-            <div className="flex items-center gap-1.5">
-              <span className="text-zinc-500">Modalità:</span>
-              {cruiseSpeed !== null ? (
-                <span className="px-1.5 py-0.5 rounded bg-alfa-gold/25 text-alfa-gold text-[10px] font-bold border border-alfa-gold/40">
-                  CRUISE {cruiseSpeed}
-                </span>
-              ) : (
-                <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px] border border-white/10">
-                  MANUALE (W/S)
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1">
-              <span className="text-zinc-500 mr-0.5">Cruise:</span>
-              {[60, 95, 130, 175].map((targetKmh) => {
-                const isCurrentCruise = cruiseSpeed === targetKmh;
-                return (
-                  <button
-                    key={targetKmh}
-                    onClick={() => driveStore.setCruise(isCurrentCruise ? null : targetKmh)}
-                    className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${
-                      isCurrentCruise
-                        ? 'bg-alfa-gold text-black font-bold shadow-md ring-1 ring-white/50'
-                        : 'bg-white/10 text-zinc-300 hover:bg-white/20'
-                    }`}
-                    title={isCurrentCruise ? 'Disattiva Cruise Control' : `Attiva Cruise a ${targetKmh} km/h`}
-                  >
-                    {targetKmh}
-                  </button>
-                );
-              })}
-              <span className="text-zinc-500 ml-0.5">km/h</span>
-            </div>
-          </div>
-        </div>
+        {/* Right Thumb Button (Mobile Steering) */}
+        <button
+          onClick={() => {
+            if (driveStore.turnEvent.active && !driveStore.turnEvent.windowPassed) {
+              driveStore.handleTurn('R');
+            } else {
+              driveStore.changeLane(1);
+            }
+          }}
+          className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-white/30 bg-black/70 backdrop-blur-md text-white shadow-2xl active:scale-90 active:bg-alfa-gold/30 active:border-alfa-gold transition-all"
+          title="Corsia Destra"
+        >
+          <ChevronRight className="w-8 h-8 sm:w-10 sm:h-10 text-alfa-gold" />
+        </button>
       </div>
+
+      {/* Game Over Modal Screen */}
+      {gameState === 'gameover' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 pointer-events-auto animate-fadeIn">
+          <div className="relative w-full max-w-md p-6 sm:p-8 rounded-3xl border-2 border-red-500/40 bg-gradient-to-b from-zinc-900 via-black to-zinc-950 shadow-2xl shadow-red-950/50 text-center flex flex-col items-center">
+            {/* Header Badge */}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-red-500/50 bg-red-950/50 text-red-400 text-xs font-mono uppercase tracking-widest mb-3">
+              <span>⚠️ FUORI PISTA</span>
+            </div>
+
+            <h2 className="text-2xl sm:text-3xl font-serif text-white mb-1">
+              Partita Terminata
+            </h2>
+            <p className="text-xs text-zinc-400 mb-6 font-mono">
+              Alfa Romeo Alfetta GTV 1973
+            </p>
+
+            {/* Score Grid */}
+            <div className="grid grid-cols-2 gap-3 w-full mb-6">
+              <div className="flex flex-col p-3 rounded-2xl border border-white/10 bg-white/5">
+                <span className="text-[10px] font-mono uppercase text-zinc-400">Punti Totali</span>
+                <span className="text-xl sm:text-2xl font-mono font-bold text-amber-400">
+                  {score.toLocaleString('it-IT')}
+                </span>
+              </div>
+              <div className="flex flex-col p-3 rounded-2xl border border-white/10 bg-white/5">
+                <span className="text-[10px] font-mono uppercase text-zinc-400">Distanza</span>
+                <span className="text-xl sm:text-2xl font-mono font-bold text-white">
+                  {distance} m
+                </span>
+              </div>
+            </div>
+
+            {/* Personal Best Achievement */}
+            <div className="w-full p-3.5 rounded-2xl border border-alfa-gold/30 bg-alfa-gold/10 flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2.5">
+                <Trophy className="w-5 h-5 text-alfa-gold" />
+                <span className="text-xs font-mono uppercase text-zinc-300">Record Personale:</span>
+              </div>
+              <span className="text-base font-mono font-bold text-alfa-gold">
+                {bestScore.toLocaleString('it-IT')} pts
+              </span>
+            </div>
+
+            {/* Tribute to Dad */}
+            <div className="italic text-xs text-zinc-300 mb-6 bg-white/5 px-4 py-2.5 rounded-xl border border-white/10 w-full">
+              "Grande manche, Papà! Una vera Alfa Romeo non si ferma mai."
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3 w-full">
+              <button
+                onClick={() => driveStore.resetGame()}
+                className="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl border border-amber-400 bg-amber-500 hover:bg-amber-400 text-black font-mono text-sm font-bold uppercase tracking-wider shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Riprova (Spazio)</span>
+              </button>
+
+              <button
+                onClick={onExitDrive}
+                className="px-5 py-3.5 rounded-2xl border border-white/20 bg-white/10 hover:bg-white/20 text-white font-mono text-xs uppercase tracking-wider transition-all active:scale-95"
+              >
+                Showroom
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

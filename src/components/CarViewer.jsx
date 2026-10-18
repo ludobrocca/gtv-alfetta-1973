@@ -1936,6 +1936,8 @@ function AlfaRomeoModel({ activePaintId, sceneMode }) {
   const wheelNodesRef = useRef([]);
   const wheelCapRefs = useRef([]);
   const bodyGroupRef = useRef();
+  const carDriveGroupRef = useRef();
+  const texShieldRef = useRef();
 
   const selectedPaint = useMemo(
     () =>
@@ -2015,6 +2017,23 @@ function AlfaRomeoModel({ activePaintId, sceneMode }) {
         }
       });
 
+      // Lateral position and banking into lanes
+      if (carDriveGroupRef.current) {
+        carDriveGroupRef.current.position.x = driveStore.carX;
+        carDriveGroupRef.current.rotation.z = driveStore.carRoll;
+        carDriveGroupRef.current.rotation.y = driveStore.carYaw;
+      }
+
+      // Tex Willer Golden Shield Aura animation
+      if (texShieldRef.current) {
+        const isTex = driveStore.activePowerups.tex > 0;
+        texShieldRef.current.visible = isTex;
+        if (isTex) {
+          texShieldRef.current.rotation.y += delta * 2.8;
+          texShieldRef.current.rotation.x += delta * 1.4;
+        }
+      }
+
       // Subtle suspension road bobbing and acceleration/braking pitch
       if (bodyGroupRef.current) {
         const speed = driveStore.speedKmh;
@@ -2034,7 +2053,15 @@ function AlfaRomeoModel({ activePaintId, sceneMode }) {
         );
       }
     } else {
-      // In showroom mode, reset body suspension
+      // In showroom mode, reset body suspension and lateral position
+      if (carDriveGroupRef.current) {
+        carDriveGroupRef.current.position.x = 0;
+        carDriveGroupRef.current.rotation.z = 0;
+        carDriveGroupRef.current.rotation.y = 0;
+      }
+      if (texShieldRef.current) {
+        texShieldRef.current.visible = false;
+      }
       if (bodyGroupRef.current) {
         bodyGroupRef.current.position.y = 0;
         bodyGroupRef.current.rotation.z = 0;
@@ -2043,17 +2070,32 @@ function AlfaRomeoModel({ activePaintId, sceneMode }) {
   });
 
   return (
-    <Center top>
-      {/* Rotate +90° around Y so the -X front shark-nose faces +Z toward the front camera */}
-      <group rotation={[0, Math.PI / 2, 0]}>
-        <group ref={bodyGroupRef}>
-          <primitive object={preparedScene} />
-          <VintageLicensePlates />
-          <AlfaRomeoEmblems wheelCapRefs={wheelCapRefs} />
-          <CockpitInstrumentsAndDetails />
+    <group ref={carDriveGroupRef}>
+      <Center top>
+        {/* Rotate +90° around Y so the -X front shark-nose faces +Z toward the front camera */}
+        <group rotation={[0, Math.PI / 2, 0]}>
+          <group ref={bodyGroupRef}>
+            <primitive object={preparedScene} />
+            <VintageLicensePlates />
+            <AlfaRomeoEmblems wheelCapRefs={wheelCapRefs} />
+            <CockpitInstrumentsAndDetails />
+          </group>
         </group>
-      </group>
-    </Center>
+      </Center>
+
+      {/* Tex Willer Golden Shield Aura (Visible during invulnerability) */}
+      <mesh ref={texShieldRef} position={[0, 0.42, 0]} visible={false}>
+        <sphereGeometry args={[1.52, 20, 16]} />
+        <meshStandardMaterial
+          color="#ffd700"
+          transparent
+          opacity={0.35}
+          wireframe
+          emissive="#ffb700"
+          emissiveIntensity={0.65}
+        />
+      </mesh>
+    </group>
   );
 }
 

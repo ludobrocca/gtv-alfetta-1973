@@ -17,7 +17,7 @@ import { driveStore } from './drive/driveStore';
 import { DriveWorld } from './drive/DriveWorld';
 import { DriveCameraDirector } from './drive/DriveCameraDirector';
 
-const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=14';
+const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=15';
 
 export const PAINT_FINISHES = [
   {
@@ -163,6 +163,18 @@ function createShowroomMaterials(selectedPaint) {
       clearcoatRoughness: selectedPaint.clearcoatRoughness,
       envMapIntensity: selectedPaint.envMapIntensity,
       reflectivity: 0.9,
+      side: THREE.DoubleSide,
+    }),
+    // Tail panel + lamp bezels: same hue as the body but a much less metallic, softer finish
+    // (the photo shows solid light-silver paint there; only the bumper is real chrome)
+    CarPaintRear: new THREE.MeshPhysicalMaterial({
+      name: 'CarPaintRear',
+      color: new THREE.Color(selectedPaint.color).lerp(new THREE.Color('#ffffff'), 0.12),
+      metalness: Math.min(selectedPaint.metalness, 0.14),
+      roughness: 0.5,
+      clearcoat: 0.25,
+      clearcoatRoughness: 0.35,
+      envMapIntensity: 0.55,
       side: THREE.DoubleSide,
     }),
     Chrome: new THREE.MeshPhysicalMaterial({

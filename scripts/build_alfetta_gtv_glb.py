@@ -277,6 +277,7 @@ def build_alfetta_gtv():
     m_taillight = MeshBuilder("Fanali_Posteriori", 7)
     m_interior = MeshBuilder("Abitacolo_Interno", 8)
     m_wood = MeshBuilder("Volante_Legno", 9)
+    m_paint_rear = MeshBuilder("Carrozzeria_Posteriore_Pastello", 10)  # tail panel: solid-looking paint, far less metallic
 
     # =========================================================================
     # 1. PARAMETRIC SILHOUETTE & CROSS-SECTIONS OF THE ALFETTA GTV (1973/1976)
@@ -1031,7 +1032,7 @@ def build_alfetta_gtv():
     m_paint.add_box([-0.930, -0.082, 0.0], [0.028, 0.032, 0.560], rotation_z=0.28)
     m_rubber.add_box([-0.912, -0.106, 0.0], [0.024, 0.022, 0.520], rotation_z=0.22)
     TAIL_YC = 0.0365  # slab centre height; face leans 0.06 rad (top further back)
-    m_paint.add_box([0.924, TAIL_YC, 0.0], [0.024, 0.167, 0.610], rotation_z=-0.06)
+    m_paint_rear.add_box([0.924, TAIL_YC, 0.0], [0.024, 0.167, 0.610], rotation_z=-0.06)
 
     # Slim matte-black underbody floor pan, tucked inside the sills and kept clear of the tyres:
     # - central section between the wheel arches spans the full width up to the rocker sills
@@ -1192,7 +1193,7 @@ def build_alfetta_gtv():
             return [(side * z, y) for z, y in poly]
 
         bezel = [(0.142, 0.105), (0.300, 0.105), (0.305, 0.090), (0.305, 0.028), (0.300, 0.0125), (0.142, 0.0125)]
-        add_prism_x(m_paint, S(bezel), 0.930, 0.944)
+        add_prism_x(m_paint_rear, S(bezel), 0.930, 0.944)
 
         # Red tail lamp: vertical inner end, slanted outer end
         red = [(0.153, 0.0975), (0.2785, 0.0975), (0.298, 0.0675), (0.153, 0.0675)]
@@ -1482,6 +1483,7 @@ def build_alfetta_gtv():
         m_taillight,
         m_interior,
         m_wood,
+        m_paint_rear,
     ]
 
     materials = [
@@ -1567,6 +1569,14 @@ def build_alfetta_gtv():
                 "baseColorFactor": [0.44, 0.22, 0.09, 1.0],
                 "metallicFactor": 0.08,
                 "roughnessFactor": 0.24,
+            },
+        },
+        {
+            "name": "CarPaintRear",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.737, 0.780, 0.824, 1.0],
+                "metallicFactor": 0.12,
+                "roughnessFactor": 0.48,
             },
         },
     ]

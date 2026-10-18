@@ -278,6 +278,9 @@ def build_alfetta_gtv():
     m_interior = MeshBuilder("Abitacolo_Interno", 8)
     m_wood = MeshBuilder("Volante_Legno", 9)
     m_paint_rear = MeshBuilder("Carrozzeria_Posteriore_Pastello", 10)  # tail panel: solid-looking paint, far less metallic
+    m_carpet = MeshBuilder("Moquette_Borgogna", 11)
+    m_seat_cream = MeshBuilder("Sedili_Panna", 12)
+    m_door_tan = MeshBuilder("Pannelli_Porta_Oliva", 13)
 
     # =========================================================================
     # 1. PARAMETRIC SILHOUETTE & CROSS-SECTIONS OF THE ALFETTA GTV (1973/1976)
@@ -1452,22 +1455,281 @@ def build_alfetta_gtv():
             })
 
     # =========================================================================
-    # 6. INTERIOR CABIN: DASHBOARD POD, WOOD STEERING WHEEL & BUCKET SEATS
+    # 6. INTERIOR CABIN: 1ST-SERIES SPLIT-POD DASHBOARD, 3-SPOKE WOOD WHEEL,
+    #    HVAC/RADIO CONSOLE, WOODEN SHIFT LEVER, PEDALS, MATS & CREAM SEATS
+    #    (Faithfully modeled from WhatsApp Image 2026-10-18 at 19.39.07.jpeg)
     # =========================================================================
-    m_interior.add_box([0.12, -0.04, 0.0], [0.85, 0.03, 0.58])
-    m_interior.add_box([0.58, 0.09, 0.0], [0.36, 0.03, 0.52])
-    m_interior.add_box([-0.22, 0.095, 0.0], [0.16, 0.065, 0.58])
-    m_interior.add_box([-0.17, 0.132, 0.145], [0.10, 0.042, 0.16])
-    for side in (-1.0, 1.0):
-        m_interior.add_box([0.06, 0.01, side * 0.145], [0.22, 0.06, 0.19])
-        m_interior.add_box([0.16, 0.115, side * 0.145], [0.06, 0.20, 0.18], rotation_z=-0.18)
-        m_interior.add_box([0.19, 0.225, side * 0.145], [0.045, 0.055, 0.11])
-        m_interior.add_box([0.42, 0.03, side * 0.135], [0.18, 0.05, 0.18])
-        m_interior.add_box([0.50, 0.12, side * 0.135], [0.05, 0.16, 0.18], rotation_z=-0.20)
 
-    sw_cx, sw_cy, sw_cz = -0.105, 0.125, 0.145
-    m_wood.add_cylinder_x(sw_cx - 0.006, sw_cx + 0.006, sw_cy, sw_cz, 0.058, r_inner=0.048, segs=32)
-    m_chrome.add_cylinder_x(sw_cx - 0.035, sw_cx + 0.004, sw_cy, sw_cz, 0.012, segs=16)
+    # 6A. Lower Cabin Tub, Burgundy Carpet (Moquette Borgogna) & Black Ribbed Floor Mats
+    m_carpet.add_box([0.04, -0.112, 0.0], [0.76, 0.016, 0.60])
+    m_carpet.add_box([-0.295, -0.015, 0.0], [0.024, 0.195, 0.60])
+    m_carpet.add_box([-0.02, -0.058, 0.0], [0.58, 0.095, 0.132])
+    m_interior.add_box([0.58, 0.09, 0.0], [0.36, 0.03, 0.52])
+
+    for side in (-1.0, 1.0):
+        # Inner lower sill carpet wall
+        m_carpet.add_box([-0.02, -0.068, side * 0.295], [0.58, 0.085, 0.018])
+        # Black ribbed rubber grid floor mat (tappetino in gomma nera a quadretti)
+        mat_z = side * 0.172
+        m_rubber.add_box([-0.115, -0.101, mat_z], [0.29, 0.006, 0.176])
+        for rx in np.linspace(-0.235, 0.005, 7):
+            m_interior.add_box([float(rx), -0.097, mat_z], [0.005, 0.003, 0.166])
+        for rz in np.linspace(-0.072, 0.072, 5):
+            m_interior.add_box([-0.115, -0.097, mat_z + float(rz)], [0.275, 0.003, 0.005])
+
+    # 6B. Interior Door Cards (Pannelli Porta Oliva/Beige con Bracciolo Nero e Manovella Alzavetro Cromata)
+    for side in (-1.0, 1.0):
+        z_card = side * 0.312
+        m_door_tan.add_box([-0.025, 0.006, z_card], [0.53, 0.168, 0.012])
+        m_interior.add_box([-0.025, 0.096, side * 0.308], [0.53, 0.022, 0.018])
+        # Sculpted horizontal black door armrest
+        m_interior.add_box([-0.035, 0.018, side * 0.292], [0.235, 0.026, 0.032])
+        m_chrome.add_box([-0.035, 0.031, side * 0.282], [0.195, 0.003, 0.008])
+        # Chrome interior door release latch
+        m_chrome.add_box([-0.068, 0.056, side * 0.302], [0.032, 0.012, 0.010])
+        # Chrome window crank handle (manovella alzavetro) clearly visible on left door in photo
+        crank_x, crank_y, crank_z = -0.142, 0.048, side * 0.303
+        m_chrome.add_cylinder_z(crank_x, crank_y, crank_z - side * 0.004, crank_z + side * 0.004, 0.011, segs=18)
+        m_chrome.add_box([crank_x - 0.014, crank_y - 0.012, crank_z - side * 0.007], [0.036, 0.008, 0.005], rotation_z=0.65)
+        m_rubber.add_cylinder_z(crank_x - 0.026, crank_y - 0.022, crank_z - side * 0.016, crank_z - side * 0.007, 0.0065, segs=14)
+
+    # 6C. Full-Width Polyurethane Dashboard Structure & Split Instrument Binnacles
+    # Main dashboard beam and upper anti-glare top pad
+    m_interior.add_box([-0.225, 0.088, 0.0], [0.150, 0.068, 0.608])
+    m_interior.add_box([-0.218, 0.120, 0.0], [0.142, 0.016, 0.608], rotation_z=0.06)
+    # Lower under-dash knee bolster lip
+    m_interior.add_box([-0.172, 0.055, 0.0], [0.045, 0.014, 0.604])
+
+    # LEFT POD: Standalone Hooded Tachometer Binnacle (Contagiri Veglia behind steering wheel at z = +0.145)
+    m_interior.add_box([-0.194, 0.141, 0.145], [0.104, 0.050, 0.102])
+    m_interior.add_box([-0.188, 0.164, 0.145], [0.096, 0.010, 0.096], rotation_z=-0.05)
+    m_rubber.add_box([-0.147, 0.139, 0.145], [0.014, 0.044, 0.088])
+    # Silver/chrome inner rectangular bezel around tachometer cavity
+    m_chrome.add_box([-0.143, 0.160, 0.145], [0.006, 0.003, 0.088])
+    m_chrome.add_box([-0.143, 0.118, 0.145], [0.006, 0.003, 0.088])
+    m_chrome.add_box([-0.143, 0.139, 0.102], [0.006, 0.044, 0.003])
+    m_chrome.add_box([-0.143, 0.139, 0.188], [0.006, 0.044, 0.003])
+
+    # CENTER-LEFT POD: Wide Hooded Speedometer + 3 Aux Gauges Binnacle (z = -0.105 .. +0.075, centered at z = -0.015)
+    m_interior.add_box([-0.194, 0.142, -0.015], [0.106, 0.052, 0.182])
+    m_interior.add_box([-0.188, 0.166, -0.015], [0.098, 0.010, 0.176], rotation_z=-0.05)
+    m_rubber.add_box([-0.147, 0.140, -0.015], [0.014, 0.046, 0.174])
+    # Outer silver/gunmetal frame bars for center pod
+    m_chrome.add_box([-0.143, 0.162, -0.015], [0.006, 0.0025, 0.174])
+    m_chrome.add_box([-0.143, 0.118, -0.015], [0.006, 0.0025, 0.174])
+
+    # MAHOGANY WOOD VENEER DASHBOARD TRIM STRIPS (Inserti in Vero Legno Mogano sulla Plancia)
+    # 1. Left wood strip between left circular vent and tachometer pod (z = +0.198 .. +0.248)
+    m_wood.add_box([-0.149, 0.102, 0.223], [0.008, 0.019, 0.050])
+    m_chrome.add_box([-0.148, 0.092, 0.223], [0.009, 0.0028, 0.050])
+    # Red indicator jewel lamp on the right side of the left wood strip (visible in photo!)
+    m_chrome.add_cylinder_x(-0.149, -0.143, 0.102, 0.206, 0.0045, r_inner=0.0032, segs=16)
+    m_taillight.add_cylinder_x(-0.149, -0.142, 0.102, 0.206, 0.0032, segs=16)
+
+    # 2. Right passenger wood veneer strip (z = -0.292 .. -0.106) with lower chrome strip & glovebox pocket
+    m_wood.add_box([-0.149, 0.103, -0.199], [0.008, 0.020, 0.186])
+    m_chrome.add_box([-0.148, 0.092, -0.199], [0.009, 0.0032, 0.186])
+    # Recessed passenger glovebox / parcel tray cavity below the wood strip
+    m_rubber.add_box([-0.154, 0.073, -0.199], [0.018, 0.024, 0.172])
+    m_interior.add_box([-0.149, 0.060, -0.199], [0.012, 0.006, 0.176])
+
+    # FAR-LEFT CIRCULAR LOUVERED AIR VENT (Bocchetta Circolare Sinistra at z = +0.273, y = 0.102)
+    for vz_vent in (0.273, -0.278):
+        m_chrome.add_cylinder_x(-0.153, -0.144, 0.102, vz_vent, 0.0165, r_inner=0.0140, segs=28)
+        m_rubber.add_cylinder_x(-0.155, -0.146, 0.102, vz_vent, 0.0140, segs=24)
+        for vy_off in (-0.006, 0.0, 0.006):
+            m_interior.add_box([-0.145, 0.102 + vy_off, vz_vent], [0.004, 0.0022, 0.024])
+
+    # 6D. Sloped Center Console Stack (HVAC Slider, Twin Circular Vents, Orange/Blue Knobs & Car Radio)
+    # Console main angled housing from dashboard down to transmission tunnel
+    # Center of fascia plane is at (-0.126, 0.062, 0.0) with rotation_z = -0.28:
+    # Along the sloped fascia, x(y) = -0.126 - (y - 0.062) * tan(0.28) = -0.126 - (y - 0.062) * 0.2875
+    m_interior.add_box([-0.148, 0.062, 0.0], [0.044, 0.104, 0.156], rotation_z=-0.28)
+    # Raised side cheeks framing the center console
+    for side in (-1.0, 1.0):
+        m_interior.add_box([-0.144, 0.062, side * 0.079], [0.048, 0.106, 0.008], rotation_z=-0.28)
+
+    # Top HVAC slider slot bezel + chrome lever knob (y = 0.103 -> x_surf = -0.138)
+    m_chrome.add_box([-0.136, 0.103, 0.0], [0.006, 0.009, 0.116], rotation_z=-0.28)
+    m_rubber.add_box([-0.135, 0.103, 0.0], [0.006, 0.005, 0.110], rotation_z=-0.28)
+    m_chrome.add_box([-0.131, 0.103, 0.006], [0.011, 0.008, 0.006], rotation_z=-0.28)
+
+    # Twin Circular Swivel Air Vents on Center Console (z = +0.045 and z = -0.045, y = 0.076 -> x_surf = -0.130)
+    for side in (-1.0, 1.0):
+        vz_c = side * 0.045
+        add_cyl_axis(m_chrome, [-0.132, 0.076, vz_c], [0.96, 0.28, 0.0], 0.0160, 0.012, r_in=0.0135, segs=28)
+        add_cyl_axis(m_rubber, [-0.133, 0.076, vz_c], [0.96, 0.28, 0.0], 0.0135, 0.011, r_in=0.0, segs=24)
+        for vy_off in (-0.0055, 0.0, 0.0055):
+            vx_off = -vy_off * 0.2875
+            m_interior.add_box([-0.121 + vx_off, 0.076 + vy_off, vz_c], [0.005, 0.0018, 0.023], rotation_z=-0.28)
+        # Central vertical finger tab on each vent louver
+        m_chrome.add_box([-0.119, 0.076, vz_c], [0.006, 0.007, 0.0028], rotation_z=-0.28)
+
+    # Two Central Vertical HVAC Rotary Knobs between the vents (z = 0.0, y = 0.083 top orange, y = 0.065 bottom blue)
+    for ky in (0.083, 0.065):
+        kx = -0.128 - (ky - 0.062) * 0.2875
+        add_cyl_axis(m_rubber, [kx, ky, 0.0], [0.96, 0.28, 0.0], 0.0062, 0.011, r_in=0.0, segs=18)
+        add_cyl_axis(m_chrome, [kx + 0.009, ky + 0.0025, 0.0], [0.96, 0.28, 0.0], 0.0042, 0.0025, r_in=0.0, segs=16)
+
+    # Lower Vintage 1970s Car Radio Receiver (y = 0.032 -> x_surf = -0.117, z = 0.0)
+    # Recessed slightly so the consoleTexture radio dial & colored dots sit visibly on the front!
+    m_chrome.add_box([-0.119, 0.032, 0.0], [0.006, 0.027, 0.124], rotation_z=-0.28)
+    # Left & Right Radio Rotary Tuning / Volume Knobs
+    for side in (-1.0, 1.0):
+        add_cyl_axis(m_chrome, [-0.117, 0.033, side * 0.048], [0.96, 0.28, 0.0], 0.0062, 0.007, r_in=0.0, segs=18)
+        add_cyl_axis(m_rubber, [-0.111, 0.0348, side * 0.048], [0.96, 0.28, 0.0], 0.0046, 0.007, r_in=0.0, segs=16)
+    # 5 Radio Preset Pushbuttons along lower edge of radio faceplate (y = 0.023 -> x_surf = -0.1145)
+    for bz in np.linspace(-0.028, 0.028, 5):
+        m_interior.add_box([-0.111, 0.023, float(bz)], [0.008, 0.0042, 0.0082], rotation_z=-0.28)
+
+    # 6E. Transmission Tunnel Console, Chrome Shift Bezel, Pleated Leather Boot & Wooden Gear Knob
+    m_interior.add_box([-0.010, 0.002, 0.0], [0.33, 0.042, 0.112])
+    # Rectangular Chrome Shift Boot Frame Bezel on tunnel top (x = -0.032, y = 0.024, z = 0.0)
+    m_chrome.add_box([-0.032, 0.024, 0.0], [0.076, 0.004, 0.064])
+    m_rubber.add_box([-0.032, 0.025, 0.0], [0.068, 0.004, 0.056])
+    # Pleated Black Leather Shift Boot (Cuffia Cambio in Pelle Nera a Soffietto - 4 stepped pyramid bellows)
+    boot_steps = [
+        (-0.032, 0.028, 0.062, 0.050),
+        (-0.030, 0.034, 0.050, 0.040),
+        (-0.028, 0.040, 0.038, 0.030),
+        (-0.026, 0.046, 0.026, 0.020),
+    ]
+    for bx, by, sx_b, sz_b in boot_steps:
+        m_rubber.add_box([bx, by, 0.0], [sx_b, 0.0065, sz_b])
+        m_interior.add_box([bx, by + 0.003, 0.0], [sx_b * 0.92, 0.002, sz_b * 0.92])
+
+    # Angled Chrome Gear Lever Shaft (Asta Cambio Cromata)
+    gear_base = np.array([-0.025, 0.046, 0.0], dtype=np.float64)
+    gear_axis = np.array([0.24, 0.96, 0.04], dtype=np.float64)
+    gear_axis /= np.linalg.norm(gear_axis)
+    add_cyl_axis(m_chrome, gear_base, gear_axis, 0.0034, 0.042, r_in=0.0, segs=18)
+
+    # Polished Wooden Pear-Shaped Shift Knob (Pomello Cambio Anatomico in Legno Lucido)
+    knob_rings = [
+        (0.038, 0.0050),
+        (0.042, 0.0078),
+        (0.047, 0.0108),
+        (0.052, 0.0126),
+        (0.057, 0.0128),
+        (0.061, 0.0112),
+        (0.064, 0.0078),
+    ]
+    for idx_k in range(len(knob_rings) - 1):
+        d0, r0 = knob_rings[idx_k]
+        d1, r1 = knob_rings[idx_k + 1]
+        c_mid = gear_base + gear_axis * d0
+        add_cyl_axis(m_wood, c_mid, gear_axis, 0.5 * (r0 + r1), d1 - d0 + 0.001, r_in=0.0, segs=24)
+
+    # Cigarette Lighter / Accessory Knob at rear-right corner of shift bezel (visible in photo)
+    m_chrome.add_box([0.002, 0.026, -0.022], [0.010, 0.006, 0.010])
+    m_rubber.add_box([0.002, 0.031, -0.022], [0.008, 0.007, 0.008])
+
+    # Handbrake Lever (Leva Freno a Mano) on tunnel behind shift boot
+    m_interior.add_box([0.078, 0.036, -0.018], [0.095, 0.014, 0.016], rotation_z=0.18)
+    m_rubber.add_box([0.042, 0.043, -0.018], [0.048, 0.016, 0.018], rotation_z=0.18)
+    m_chrome.add_box([0.018, 0.047, -0.018], [0.008, 0.007, 0.007], rotation_z=0.18)
+
+    # 6F. Driver Footwell Pedals (Pedaliera Sportiva: Frizione, Freno, Acceleratore a Pavimento)
+    # Clutch (z = +0.192) & Brake (z = +0.145) suspended pedals
+    for pz_ped in (0.192, 0.145):
+        m_chrome.add_box([-0.245, -0.018, pz_ped], [0.006, 0.055, 0.006], rotation_z=0.35)
+        m_rubber.add_box([-0.232, -0.046, pz_ped], [0.010, 0.026, 0.022], rotation_z=0.32)
+    # Tall floor-hinged organ-style Accelerator pedal (z = +0.098)
+    m_rubber.add_box([-0.236, -0.056, 0.098], [0.010, 0.052, 0.018], rotation_z=0.42)
+
+    # 6G. Iconic 3-Spoke Dished Mahogany Steering Wheel with Brushed Silver Spoke Inserts & Column Stalks
+    sw_cx, sw_cy, sw_cz = -0.088, 0.125, 0.145
+    sw_tilt = 0.24  # upward tilt of steering column toward driver
+
+    # Steering column black cylindrical/rectangular shroud + silver ignition key cylinder on right side
+    m_interior.add_cylinder_x(-0.172, -0.102, sw_cy - 0.006, sw_cz, 0.022, segs=24)
+    m_chrome.add_cylinder_z(sw_cx - 0.048, sw_cy - 0.010, sw_cz - 0.028, sw_cz - 0.018, 0.0055, segs=16)
+    # Left & Right Steering Column Stalks (Devio-luci e Tergicristalli)
+    m_interior.add_cylinder_z(sw_cx - 0.036, sw_cy - 0.002, sw_cz + 0.018, sw_cz + 0.068, 0.0032, segs=12)
+    m_rubber.add_cylinder_z(sw_cx - 0.036, sw_cy - 0.002, sw_cz + 0.056, sw_cz + 0.074, 0.0048, segs=12)
+    m_interior.add_cylinder_z(sw_cx - 0.036, sw_cy - 0.002, sw_cz - 0.066, sw_cz - 0.018, 0.0032, segs=12)
+    m_rubber.add_cylinder_z(sw_cx - 0.036, sw_cy - 0.002, sw_cz - 0.072, sw_cz - 0.054, 0.0048, segs=12)
+
+    # Wheel plane basis vectors (tilted around Z by sw_tilt so normal points toward +X and slightly +Y)
+    sw_norm = np.array([math.cos(sw_tilt), math.sin(sw_tilt), 0.0], dtype=np.float64)
+    sw_up = np.array([-math.sin(sw_tilt), math.cos(sw_tilt), 0.0], dtype=np.float64)
+    sw_left = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    sw_center = np.array([sw_cx, sw_cy, sw_cz], dtype=np.float64)
+
+    # 3D Torus Mesh for the Polished Mahogany Wood Rim (R_major = 0.056, r_tube = 0.0054)
+    R_wheel = 0.056
+    r_rim_tube = 0.0054
+    n_u_sw, n_v_sw = 48, 14
+    sw_torus_grid = np.zeros((n_u_sw, n_v_sw, 3), dtype=np.float32)
+    sw_torus_norm = np.zeros((n_u_sw, n_v_sw, 3), dtype=np.float32)
+    u_angs = np.linspace(0.0, 2.0 * math.pi, n_u_sw, endpoint=False)
+    v_angs = np.linspace(0.0, 2.0 * math.pi, n_v_sw, endpoint=False)
+    for iu, ua in enumerate(u_angs):
+        radial_dir = math.cos(ua) * sw_left + math.sin(ua) * sw_up
+        ring_center = sw_center + R_wheel * radial_dir
+        for iv, va in enumerate(v_angs):
+            n_pt = math.cos(va) * radial_dir + math.sin(va) * sw_norm
+            sw_torus_grid[iu, iv] = ring_center + r_rim_tube * n_pt
+            sw_torus_norm[iu, iv] = n_pt
+    m_wood.add_grid(sw_torus_grid, sw_torus_norm, flip=False, close_u=True, close_v=True)
+
+    # Central Black Horn Boss & Brushed Silver Bezel Ring (recessed slightly inside the dished wheel)
+    hub_center = sw_center - 0.011 * sw_norm
+    add_cyl_axis(m_interior, hub_center - 0.008 * sw_norm, sw_norm, 0.0175, 0.014, r_in=0.0, segs=32)
+    add_cyl_axis(m_chrome, hub_center + 0.0055 * sw_norm, sw_norm, 0.0108, 0.002, r_in=0.0082, segs=32)
+
+    # 3 Matte-Black Anodized Dished Spokes (-90° vertical bottom, +14° left, +166° right)
+    # with Brushed Silver/Chrome Rectangular Spoke Inserts (exactly as in photo!)
+    for spk_deg in (-90.0, 14.0, 166.0):
+        spk_rad = math.radians(spk_deg)
+        s_dir = math.cos(spk_rad) * sw_left + math.sin(spk_rad) * sw_up
+        s_perp = -math.sin(spk_rad) * sw_left + math.cos(spk_rad) * sw_up
+
+        # Build tapered dished spoke from r = 0.015 (at hub_center) to r = 0.053 (at wood rim)
+        spk_grid = np.zeros((2, 4, 3), dtype=np.float32)
+        p_in = hub_center + 0.004 * sw_norm + 0.015 * s_dir
+        p_out = sw_center + 0.053 * s_dir
+        w_in, w_out, thk = 0.0085, 0.0065, 0.0022
+        for ir, (p_base, hw) in enumerate([(p_in, w_in), (p_out, w_out)]):
+            spk_grid[ir, 0] = p_base - hw * s_perp + thk * sw_norm
+            spk_grid[ir, 1] = p_base + hw * s_perp + thk * sw_norm
+            spk_grid[ir, 2] = p_base + hw * s_perp - thk * sw_norm
+            spk_grid[ir, 3] = p_base - hw * s_perp - thk * sw_norm
+        m_interior.add_grid(spk_grid, flip=False, close_v=True)
+
+        # Brushed Silver / Chrome Rectangular Slot Insert on the outer half of each spoke
+        ins_grid = np.zeros((2, 2, 3), dtype=np.float32)
+        p_ins_0 = p_in * 0.42 + p_out * 0.58 + (thk + 0.0006) * sw_norm
+        p_ins_1 = p_in * 0.14 + p_out * 0.86 + (thk + 0.0006) * sw_norm
+        w_ins = 0.0028
+        ins_grid[0, 0] = p_ins_0 - w_ins * s_perp
+        ins_grid[0, 1] = p_ins_0 + w_ins * s_perp
+        ins_grid[1, 0] = p_ins_1 - w_ins * s_perp
+        ins_grid[1, 1] = p_ins_1 + w_ins * s_perp
+        m_chrome.add_grid(ins_grid, flip=False)
+
+    # 6H. Front Bucket Seats with Cream/White Covers (Coprisedili Panna/Bianchi) & Rear Bench
+    for side in (-1.0, 1.0):
+        sz_seat = side * 0.148
+        # Cream/white seat cushion & side bolsters (positioned at x = 0.11..0.31 so interior camera at x = 0.21 has an unobstructed view)
+        m_seat_cream.add_box([0.095, -0.015, sz_seat], [0.22, 0.052, 0.185])
+        m_seat_cream.add_box([0.090, 0.005, sz_seat - 0.078], [0.21, 0.030, 0.036])
+        m_seat_cream.add_box([0.090, 0.005, sz_seat + 0.078], [0.21, 0.030, 0.036])
+        # Cream/white reclined backrest + side bolsters
+        m_seat_cream.add_box([0.235, 0.098, sz_seat], [0.058, 0.195, 0.178], rotation_z=-0.22)
+        m_seat_cream.add_box([0.225, 0.095, sz_seat - 0.076], [0.068, 0.180, 0.034], rotation_z=-0.22)
+        m_seat_cream.add_box([0.225, 0.095, sz_seat + 0.076], [0.068, 0.180, 0.034], rotation_z=-0.22)
+        # Headrests & Rear Bucket Seats
+        m_interior.add_box([0.275, 0.216, sz_seat], [0.044, 0.052, 0.108])
+        m_interior.add_box([0.46, 0.03, side * 0.135], [0.18, 0.05, 0.18])
+        m_interior.add_box([0.54, 0.12, side * 0.135], [0.05, 0.16, 0.18], rotation_z=-0.20)
+
+    # 6I. Interior Rearview Mirror & Sun Visors at Windshield Header
+    m_chrome.add_box([-0.088, 0.252, 0.0], [0.006, 0.024, 0.006], rotation_z=0.25)
+    m_interior.add_box([-0.082, 0.238, 0.0], [0.010, 0.022, 0.082])
+    m_chrome.add_box([-0.076, 0.238, 0.0], [0.002, 0.019, 0.078])
+    for side in (-1.0, 1.0):
+        m_interior.add_box([-0.085, 0.256, side * 0.155], [0.042, 0.006, 0.155], rotation_z=0.18)
 
     # =========================================================================
     # 7. EXPORT COMPLETE MULTI-MESH, MULTI-MATERIAL GLB
@@ -1484,6 +1746,9 @@ def build_alfetta_gtv():
         m_interior,
         m_wood,
         m_paint_rear,
+        m_carpet,
+        m_seat_cream,
+        m_door_tan,
     ]
 
     materials = [
@@ -1577,6 +1842,30 @@ def build_alfetta_gtv():
                 "baseColorFactor": [0.737, 0.780, 0.824, 1.0],
                 "metallicFactor": 0.12,
                 "roughnessFactor": 0.48,
+            },
+        },
+        {
+            "name": "InteriorCarpet",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.38, 0.14, 0.11, 1.0],
+                "metallicFactor": 0.02,
+                "roughnessFactor": 0.88,
+            },
+        },
+        {
+            "name": "InteriorSeatCream",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.88, 0.85, 0.79, 1.0],
+                "metallicFactor": 0.02,
+                "roughnessFactor": 0.68,
+            },
+        },
+        {
+            "name": "InteriorDoorTan",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.46, 0.42, 0.32, 1.0],
+                "metallicFactor": 0.04,
+                "roughnessFactor": 0.62,
             },
         },
     ]

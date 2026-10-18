@@ -1,6 +1,6 @@
 // Real-time driving state store for the 1973 Alfa Romeo Alfetta GTV
 // Provides high-performance per-frame physics access for useFrame loops
-// and 3-lane Temple Run / Subway Surfers style endless runner mechanics.
+// and pure 3-lane Subway Surfers endless runner mechanics (fair, visual, no blind turn deaths).
 
 import { driveAudio } from './DriveAudio';
 
@@ -57,16 +57,6 @@ class DriveStore {
     this.coins = [];       // Array<{ id, lane, z, active }>
     this.powerups = [];    // Array<{ id, type: 'tex'|'elvis', lane, z, active }>
     this.nextSpawnZ = 20;  // Z distance ahead to spawn next pack
-    this.nextTurnDist = 320; // Meters to next 90° turn
-
-    // 90° Turn Junction Event (Temple Run style)
-    this.turnEvent = {
-      active: false,
-      direction: 'R', // 'L' or 'R'
-      triggerZ: 0,
-      windowPassed: false,
-      driftProgress: 0,
-    };
 
     // Gear ratios
     this.gearMaxSpeeds = [0, 48, 85, 125, 165, 200];
@@ -113,11 +103,7 @@ class DriveStore {
     this.obstacles = [];
     this.coins = [];
     this.powerups = [];
-    this.nextSpawnZ = 25;
-    this.nextTurnDist = 320;
-    this.turnEvent.active = false;
-    this.turnEvent.driftProgress = 0;
-    this.turnEvent.windowPassed = false;
+    this.nextSpawnZ = 22;
     this.notify();
   }
 
@@ -133,29 +119,7 @@ class DriveStore {
     }
   }
 
-  // Sudden 90° Turn Input (Left or Right)
-  handleTurn(direction) {
-    if (this.gameState !== 'playing') return;
-
-    if (this.turnEvent.active && !this.turnEvent.windowPassed) {
-      if (this.turnEvent.direction === direction) {
-        // Successful turn!
-        this.turnEvent.windowPassed = true;
-        this.turnEvent.driftProgress = 1.0;
-        this.score += 150;
-        driveAudio.playDriftSuccess();
-        this.notify();
-      } else {
-        // Wrong direction! Crash into wall
-        this.triggerCrash();
-      }
-    } else {
-      // Normal lane change fallback if not at a turn junction
-      this.changeLane(direction === 'L' ? -1 : 1);
-    }
-  }
-
-  // Crash into vehicle or barrier
+  // Crash into vehicle or barrier (Game Over occurs ONLY here!)
   triggerCrash() {
     if (this.gameState === 'gameover') return;
     this.gameState = 'gameover';
@@ -175,7 +139,7 @@ class DriveStore {
     this.notify();
   }
 
-  // Collect item
+  // Collect gold coin / quadrifoglio
   collectCoin(id) {
     const coin = this.coins.find((c) => c.id === id);
     if (coin && coin.active) {
@@ -270,7 +234,7 @@ class DriveStore {
     }
 
     if (this.gameState === 'gameover') {
-      // Rapid spin/slowdown to full stop
+      // Rapid slowdown to full stop
       this.speedKmh = Math.max(0, this.speedKmh - 120 * dt);
       return;
     }
@@ -280,8 +244,8 @@ class DriveStore {
     if (this.activePowerups.elvis > 0) {
       targetSpeed = ELVIS_SPEED; // Nitro boost
     } else {
-      // Gradual speed ramping as distance increases (up to 125 km/h)
-      const ramp = Math.min(60, this.distanceMeters * 0.035);
+      // Gradual speed ramping as distance increases (up to 120 km/h)
+      const ramp = Math.min(55, this.distanceMeters * 0.035);
       targetSpeed = BASE_SPEED + ramp;
     }
 
@@ -337,10 +301,7 @@ class DriveStore {
     // 5. Spawn Generation along Z
     this.updateSpawns(distUnits);
 
-    // 6. 90° Turn Junction Trigger Management
-    this.updateTurnJunction(dt);
-
-    // 7. Engine RPM calculation for sound
+    // 6. Engine RPM calculation for sound
     const speedRatio = Math.max(0, Math.min(1, this.speedKmh / 195.0));
     this.rpm = Math.max(950, Math.min(6200, 1800 + speedRatio * 4200));
 
@@ -468,38 +429,6 @@ class DriveStore {
           });
         }
       });
-    }
-  }
-
-  // Manage 90° Turn Junctions every ~350m
-  updateTurnJunction(dt) {
-    if (this.distanceMeters >= this.nextTurnDist && !this.turnEvent.active) {
-      // Trigger new 90° turn event
-      this.turnEvent.active = true;
-      this.turnEvent.direction = Math.random() > 0.5 ? 'R' : 'L';
-      this.turnEvent.triggerZ = 28; // Approaching in 28 units
-      this.turnEvent.windowPassed = false;
-      this.turnEvent.driftProgress = 0;
-      this.notify();
-    }
-
-    if (this.turnEvent.active) {
-      const speedMps = (this.speedKmh * 1000) / 3600;
-      const distUnits = (speedMps / 2.22) * dt;
-      this.turnEvent.triggerZ -= distUnits;
-
-      // Reaction window: between triggerZ = 6 and triggerZ = -4
-      if (this.turnEvent.triggerZ <= -4) {
-        if (!this.turnEvent.windowPassed) {
-          // Player failed to turn! Crash into guardrail
-          this.triggerCrash();
-        } else {
-          // Turn completed, reset for next turn milestone
-          this.turnEvent.active = false;
-          this.nextTurnDist = this.distanceMeters + 350 + Math.random() * 100;
-          this.notify();
-        }
-      }
     }
   }
 }

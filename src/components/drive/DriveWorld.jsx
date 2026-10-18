@@ -420,9 +420,6 @@ export function DriveWorld({ lightingMode }) {
 
       {/* 9. Dynamic Track Entities (Obstacles, Coins, Power-ups) */}
       <TrackEntities />
-
-      {/* 10. Temple Run 90° Turn Junction Signs */}
-      <TurnJunctionIndicator />
     </group>
   );
 }
@@ -689,48 +686,6 @@ function ElvisGoldenVinyl({ x, z }) {
       <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[0.03, 16]} />
         <meshBasicMaterial color="#111111" />
-      </mesh>
-    </group>
-  );
-}
-
-// Temple Run 90° Turn Junction Overhead Banner
-function TurnJunctionIndicator() {
-  const turn = driveStore.turnEvent;
-  if (!turn.active || turn.windowPassed) return null;
-
-  const z = turn.triggerZ;
-  const isRight = turn.direction === 'R';
-
-  return (
-    <group position={[0, 2.8, z]}>
-      {/* Overhead Road Gantry Sign */}
-      <mesh castShadow>
-        <boxGeometry args={[4.2, 0.9, 0.12]} />
-        <meshStandardMaterial color="#0c3468" roughness={0.5} />
-      </mesh>
-      {/* White Sign Border */}
-      <mesh position={[0, 0, 0.07]}>
-        <boxGeometry args={[4.05, 0.78, 0.01]} />
-        <meshBasicMaterial color="#ffffff" />
-      </mesh>
-      <mesh position={[0, 0, 0.08]}>
-        <boxGeometry args={[3.95, 0.68, 0.01]} />
-        <meshStandardMaterial color="#0c3468" roughness={0.5} />
-      </mesh>
-      {/* Gantry Poles */}
-      <mesh position={[-ROAD_WIDTH * 0.5 - 0.2, -1.4, 0]}>
-        <cylinderGeometry args={[0.08, 0.08, 2.8, 8]} />
-        <meshStandardMaterial color="#333333" />
-      </mesh>
-      <mesh position={[ROAD_WIDTH * 0.5 + 0.2, -1.4, 0]}>
-        <cylinderGeometry args={[0.08, 0.08, 2.8, 8]} />
-        <meshStandardMaterial color="#333333" />
-      </mesh>
-      {/* Flashing Amber Warning Beacons */}
-      <mesh position={[isRight ? 1.6 : -1.6, 0.65, 0]}>
-        <sphereGeometry args={[0.15, 12, 12]} />
-        <meshBasicMaterial color="#ffaa00" />
       </mesh>
     </group>
   );

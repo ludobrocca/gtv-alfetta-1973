@@ -1,9 +1,9 @@
 // Authentic 1970s Veglia Borletti Speedometer & 3-Lane Arcade Minigame HUD
 // Features score, personal best in localStorage, active Tex/Elvis power-up meters,
-// 90° Temple Run turn alert banners, touch buttons + swipe controls, and Game Over dialog.
+// touch buttons + swipe controls, and Game Over dialog (Subway Surfers pure style).
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Volume2, VolumeX, ArrowLeft, Trophy, Zap, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { Volume2, VolumeX, ArrowLeft, Trophy, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 import { driveStore } from './driveStore';
 
 export function Speedometer({ onExitDrive }) {
@@ -17,7 +17,6 @@ export function Speedometer({ onExitDrive }) {
   const [gameState, setGameState] = useState('playing');
   const [activeTex, setActiveTex] = useState(0);
   const [activeElvis, setActiveElvis] = useState(0);
-  const [turnEvent, setTurnEvent] = useState({ active: false, direction: 'R' });
   const [activeLane, setActiveLane] = useState(0);
 
   const touchStartXRef = useRef(0);
@@ -41,16 +40,12 @@ export function Speedometer({ onExitDrive }) {
         setGameState(driveStore.gameState);
         setActiveTex(driveStore.activePowerups.tex);
         setActiveElvis(driveStore.activePowerups.elvis);
-        setTurnEvent({
-          active: driveStore.turnEvent.active && !driveStore.turnEvent.windowPassed,
-          direction: driveStore.turnEvent.direction,
-        });
         setActiveLane(driveStore.targetLane);
       }
     };
     animId = requestAnimationFrame(tick);
 
-    // Keyboard controls for 3 lanes and 90° turns
+    // Keyboard controls for 3 lanes
     const handleKeyDown = (e) => {
       if (driveStore.gameState === 'gameover') {
         if (e.key === ' ' || e.key === 'Enter') {
@@ -62,18 +57,10 @@ export function Speedometer({ onExitDrive }) {
 
       if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
         e.preventDefault();
-        if (driveStore.turnEvent.active && !driveStore.turnEvent.windowPassed) {
-          driveStore.handleTurn('L');
-        } else {
-          driveStore.changeLane(-1);
-        }
+        driveStore.changeLane(-1);
       } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
         e.preventDefault();
-        if (driveStore.turnEvent.active && !driveStore.turnEvent.windowPassed) {
-          driveStore.handleTurn('R');
-        } else {
-          driveStore.changeLane(1);
-        }
+        driveStore.changeLane(1);
       }
     };
 
@@ -92,19 +79,9 @@ export function Speedometer({ onExitDrive }) {
       // Ensure horizontal swipe
       if (Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy)) {
         if (dx < 0) {
-          // Swipe Left
-          if (driveStore.turnEvent.active && !driveStore.turnEvent.windowPassed) {
-            driveStore.handleTurn('L');
-          } else {
-            driveStore.changeLane(-1);
-          }
+          driveStore.changeLane(-1);
         } else {
-          // Swipe Right
-          if (driveStore.turnEvent.active && !driveStore.turnEvent.windowPassed) {
-            driveStore.handleTurn('R');
-          } else {
-            driveStore.changeLane(1);
-          }
+          driveStore.changeLane(1);
         }
       }
     };
@@ -228,39 +205,14 @@ export function Speedometer({ onExitDrive }) {
         )}
       </div>
 
-      {/* 90° Turn Junction Alert (Temple Run style) */}
-      {turnEvent.active && (
-        <div className="flex flex-col items-center justify-center pointer-events-none animate-bounce my-auto">
-          <div className="px-6 py-3 rounded-2xl border-4 border-yellow-400 bg-black/90 backdrop-blur-lg shadow-2xl flex items-center gap-3">
-            {turnEvent.direction === 'L' ? (
-              <ChevronLeft className="w-8 h-8 text-yellow-400 animate-ping" />
-            ) : null}
-            <div className="flex flex-col items-center">
-              <span className="text-sm font-mono font-black text-yellow-400 uppercase tracking-widest">
-                CURVA SECCA A {turnEvent.direction === 'L' ? 'SINISTRA' : 'DESTRA'}!
-              </span>
-              <span className="text-xs font-mono text-white/90">
-                PREMI {turnEvent.direction === 'L' ? '◀ (A)' : '▶ (D)'} O FAI SWIPE!
-              </span>
-            </div>
-            {turnEvent.direction === 'R' ? (
-              <ChevronRight className="w-8 h-8 text-yellow-400 animate-ping" />
-            ) : null}
-          </div>
-        </div>
-      )}
+      {/* Spacer to push controls to bottom */}
+      <div className="flex-1" />
 
       {/* Bottom Center: Veglia Borletti Speedometer & Mobile Touch Steering Controls */}
       <div className="flex items-center justify-between w-full max-w-4xl mx-auto pointer-events-auto">
         {/* Left Thumb Button (Mobile Steering) */}
         <button
-          onClick={() => {
-            if (driveStore.turnEvent.active && !driveStore.turnEvent.windowPassed) {
-              driveStore.handleTurn('L');
-            } else {
-              driveStore.changeLane(-1);
-            }
-          }}
+          onClick={() => driveStore.changeLane(-1)}
           className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-white/30 bg-black/70 backdrop-blur-md text-white shadow-2xl active:scale-90 active:bg-alfa-gold/30 active:border-alfa-gold transition-all"
           title="Corsia Sinistra"
         >
@@ -356,13 +308,7 @@ export function Speedometer({ onExitDrive }) {
 
         {/* Right Thumb Button (Mobile Steering) */}
         <button
-          onClick={() => {
-            if (driveStore.turnEvent.active && !driveStore.turnEvent.windowPassed) {
-              driveStore.handleTurn('R');
-            } else {
-              driveStore.changeLane(1);
-            }
-          }}
+          onClick={() => driveStore.changeLane(1)}
           className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-white/30 bg-black/70 backdrop-blur-md text-white shadow-2xl active:scale-90 active:bg-alfa-gold/30 active:border-alfa-gold transition-all"
           title="Corsia Destra"
         >
@@ -376,7 +322,7 @@ export function Speedometer({ onExitDrive }) {
           <div className="relative w-full max-w-md p-6 sm:p-8 rounded-3xl border-2 border-red-500/40 bg-gradient-to-b from-zinc-900 via-black to-zinc-950 shadow-2xl shadow-red-950/50 text-center flex flex-col items-center">
             {/* Header Badge */}
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-red-500/50 bg-red-950/50 text-red-400 text-xs font-mono uppercase tracking-widest mb-3">
-              <span>⚠️ FUORI PISTA</span>
+              <span>⚠️ IMPATTO IN PISTA</span>
             </div>
 
             <h2 className="text-2xl sm:text-3xl font-serif text-white mb-1">

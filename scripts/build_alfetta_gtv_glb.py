@@ -160,6 +160,112 @@ class MeshBuilder:
             self.add_grid(ring_grid, ring_norm, flip=(nx < 0), close_v=True)
 
 
+def _emit_tri(mb, a, b, c, want):
+    """Append a flat-shaded triangle whose normal is forced to point along `want`."""
+    a, b, c = (np.asarray(v, dtype=np.float64) for v in (a, b, c))
+    nrm = np.cross(b - a, c - a)
+    if np.dot(nrm, want) < 0:
+        b, c = c, b
+        nrm = -nrm
+    nrm = nrm / (np.linalg.norm(nrm) + 1e-12)
+    off = len(mb.positions)
+    for v in (a, b, c):
+        mb.positions.append(v.tolist())
+        mb.normals.append(nrm.tolist())
+    mb.indices.extend([off, off + 1, off + 2])
+
+
+def add_prism_x(mb, poly_zy, x0, x1):
+    """Extrude a convex polygon given in (z, y) along X from x0 to x1 (flat-shaded, closed)."""
+    pts = [(float(z), float(y)) for z, y in poly_zy]
+    n = len(pts)
+    cz = sum(p[0] for p in pts) / n
+    cy = sum(p[1] for p in pts) / n
+    for i in range(1, n - 1):
+        _emit_tri(mb, [x1, pts[0][1], pts[0][0]], [x1, pts[i][1], pts[i][0]], [x1, pts[i + 1][1], pts[i + 1][0]], (1, 0, 0))
+        _emit_tri(mb, [x0, pts[0][1], pts[0][0]], [x0, pts[i][1], pts[i][0]], [x0, pts[i + 1][1], pts[i + 1][0]], (-1, 0, 0))
+    for i in range(n):
+        j = (i + 1) % n
+        (zi, yi), (zj, yj) = pts[i], pts[j]
+        out = (0.0, 0.5 * (yi + yj) - cy, 0.5 * (zi + zj) - cz)
+        p0, p1, p2, p3 = [x0, yi, zi], [x1, yi, zi], [x1, yj, zj], [x0, yj, zj]
+        _emit_tri(mb, p0, p1, p2, out)
+        _emit_tri(mb, p0, p2, p3, out)
+
+
+def expand_poly(poly_zy, margin):
+    """Grow a convex (z, y) polygon outward from its centroid by `margin` on each axis."""
+    cz = sum(p[0] for p in poly_zy) / len(poly_zy)
+    cy = sum(p[1] for p in poly_zy) / len(poly_zy)
+    return [(z + math.copysign(margin, z - cz), y + math.copysign(margin, y - cy)) for z, y in poly_zy]
+
+
+def _basis(axis):
+    axis = np.asarray(axis, dtype=np.float64)
+    axis = axis / np.linalg.norm(axis)
+    ref = np.array([0.0, 0.0, 1.0]) if abs(axis[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
+    u = np.cross(axis, ref)
+    u /= np.linalg.norm(u)
+    v = np.cross(axis, u)
+    return axis, u, v
+
+
+def add_cyl_axis(mb, center, axis, r_out, length, r_in=0.0, segs=40):
+    """Cylinder / ring of arbitrary axis starting at `center` and extending `length` along `axis`."""
+    axis, u, v = _basis(axis)
+    c0 = np.asarray(center, dtype=np.float64)
+    c1 = c0 + axis * length
+    ang = np.linspace(0, 2 * math.pi, segs, endpoint=False)
+    wall = np.zeros((2, segs, 3), dtype=np.float32)
+    wnorm = np.zeros((2, segs, 3), dtype=np.float32)
+    for j, a in enumerate(ang):
+        radial = math.cos(a) * u + math.sin(a) * v
+        wall[0, j] = c0 + radial * r_out
+        wall[1, j] = c1 + radial * r_out
+        wnorm[0, j] = radial
+        wnorm[1, j] = radial
+    mb.add_grid(wall, wnorm, flip=False, close_v=True)
+    for j in range(segs):
+        k = (j + 1) % segs
+        ra = math.cos(ang[j]) * u + math.sin(ang[j]) * v
+        rb = math.cos(ang[k]) * u + math.sin(ang[k]) * v
+        _emit_tri(mb, c1 + ra * r_in, c1 + ra * r_out, c1 + rb * r_out, axis)
+        _emit_tri(mb, c1 + ra * r_in, c1 + rb * r_out, c1 + rb * r_in, axis)
+
+
+def add_tube(mb, spine, radius, segs=24, r_inner_cap=0.0):
+    """Swept circular tube along a polyline `spine` (parallel-transport frame) with an open, rimmed end."""
+    spine = [np.asarray(p, dtype=np.float64) for p in spine]
+    n = len(spine)
+    tangents = []
+    for i in range(n):
+        t = spine[min(i + 1, n - 1)] - spine[max(i - 1, 0)]
+        tangents.append(t / np.linalg.norm(t))
+    _, u, v = _basis(tangents[0])
+    grid = np.zeros((n, segs, 3), dtype=np.float32)
+    norm = np.zeros((n, segs, 3), dtype=np.float32)
+    ang = np.linspace(0, 2 * math.pi, segs, endpoint=False)
+    for i in range(n):
+        if i > 0:
+            u = u - np.dot(u, tangents[i]) * tangents[i]
+            u /= np.linalg.norm(u)
+            v = np.cross(tangents[i], u)
+        for j, a in enumerate(ang):
+            radial = math.cos(a) * u + math.sin(a) * v
+            grid[i, j] = spine[i] + radial * radius
+            norm[i, j] = radial
+    mb.add_grid(grid, norm, flip=False, close_v=True)
+    # Rim washer at the open tip
+    t_end = tangents[-1]
+    for j in range(segs):
+        k = (j + 1) % segs
+        ra = (grid[-1, j] - spine[-1]) / radius
+        rb = (grid[-1, k] - spine[-1]) / radius
+        _emit_tri(mb, spine[-1] + ra * r_inner_cap, spine[-1] + ra * radius, spine[-1] + rb * radius, t_end)
+        _emit_tri(mb, spine[-1] + ra * r_inner_cap, spine[-1] + rb * radius, spine[-1] + rb * r_inner_cap, t_end)
+    return tangents[-1]
+
+
 def build_alfetta_gtv():
     m_paint = MeshBuilder("Carrozzeria_AR727", 0)
     m_chrome = MeshBuilder("Cromature_Inox", 1)
@@ -924,7 +1030,8 @@ def build_alfetta_gtv():
     m_paint.add_box([-0.946, -0.038, 0.0], [0.024, 0.022, 0.610])
     m_paint.add_box([-0.930, -0.082, 0.0], [0.028, 0.032, 0.560], rotation_z=0.28)
     m_rubber.add_box([-0.912, -0.106, 0.0], [0.024, 0.022, 0.520], rotation_z=0.22)
-    m_paint.add_box([0.924, 0.018, 0.0], [0.024, 0.210, 0.610], rotation_z=-0.06)
+    TAIL_YC = 0.0365  # slab centre height; face leans 0.06 rad (top further back)
+    m_paint.add_box([0.924, TAIL_YC, 0.0], [0.024, 0.167, 0.610], rotation_z=-0.06)
 
     # Slim matte-black underbody floor pan, tucked inside the sills and kept clear of the tyres:
     # - central section between the wheel arches spans the full width up to the rocker sills
@@ -1054,19 +1161,98 @@ def build_alfetta_gtv():
         m_chrome.add_box([-0.918, -0.068, side * 0.342], [0.098, 0.024, 0.028], rotation_y=side * 0.22)
         m_rubber.add_box([-0.974, -0.066, side * 0.162], [0.042, 0.044, 0.036])
 
-    m_chrome.add_box([0.948, -0.055, 0.0], [0.032, 0.028, 0.650])
+    # =========================================================================
+    # 4b. REAR END — rebuilt from "WhatsApp Image 2026-10-18 at 19.36.00.jpeg"
+    # Photo-derived scale at the tail plane: 1 px = 0.000426 u horizontally, 0.000405 u vertically
+    # (calibrated on the bumper blade y = -0.055 and the decklid trailing edge y = +0.112).
+    # Anything marked [PLACEHOLDER] could not be measured reliably from the single photo.
+    # =========================================================================
+    def tail_face_x(y_q):
+        """World x of the (3.4 deg leaning) Kamm panel face at height y_q."""
+        return 0.936 + (y_q - TAIL_YC) * 0.06
+
+    # --- Chrome blade bumper: thin top lip + black rubber band + deep lower blade (3 layers in photo) ---
+    m_chrome.add_box([0.948, -0.0375, 0.0], [0.030, 0.007, 0.650])      # thin upper chrome lip
+    m_rubber.add_box([0.950, -0.0465, 0.0], [0.028, 0.012, 0.650])      # black rubber band between lips
+    m_chrome.add_box([0.950, -0.0630, 0.0], [0.034, 0.0235, 0.650])     # lower chrome blade
     for side in (-1.0, 1.0):
+        # Wrap-around bumper ends
         m_chrome.add_box([0.900, -0.055, side * 0.336], [0.095, 0.026, 0.028], rotation_y=-side * 0.20)
-        m_rubber.add_box([0.955, -0.053, side * 0.175], [0.036, 0.046, 0.034])
+        # Two big black rubber overriders sitting INBOARD, like the photo (|z| 0.222 .. 0.298)
+        m_rubber.add_box([0.957, -0.052, side * 0.260], [0.038, 0.059, 0.077])
+        # [PLACEHOLDER] rounded/chamfered edges of the overriders (currently sharp boxes)
 
-    m_chrome.add_cylinder_x(0.84, 0.965, -0.140, -0.195, 0.014, r_inner=0.010, segs=24)
+    # --- Black lower apron under the bumper (visible in the photo between bumper and ground) ---
+    m_rubber.add_box([0.926, -0.085, 0.0], [0.026, 0.078, 0.600], rotation_z=-0.06)
 
+    # --- Rear lamp clusters: raised painted bezel, red lamp (top) + amber indicator (bottom) ---
+    CLUSTER_Y = (0.0125, 0.105)
     for side in (-1.0, 1.0):
-        m_chrome.add_box([0.934, 0.042, side * 0.242], [0.014, 0.052, 0.148])
-        m_taillight.add_box([0.938, 0.033, side * 0.242], [0.014, 0.030, 0.140])
-        m_amber.add_box([0.938, 0.055, side * 0.242], [0.014, 0.016, 0.140])
+        def S(poly):
+            return [(side * z, y) for z, y in poly]
 
-    m_chrome.add_cylinder_x(0.930, 0.940, 0.068, 0.0, 0.015, segs=24)
+        bezel = [(0.142, 0.105), (0.300, 0.105), (0.305, 0.090), (0.305, 0.028), (0.300, 0.0125), (0.142, 0.0125)]
+        add_prism_x(m_paint, S(bezel), 0.930, 0.944)
+
+        # Red tail lamp: vertical inner end, slanted outer end
+        red = [(0.153, 0.0975), (0.2785, 0.0975), (0.298, 0.0675), (0.153, 0.0675)]
+        add_prism_x(m_chrome, S(expand_poly(red, 0.003)), 0.943, 0.9455)
+        add_prism_x(m_taillight, S(red), 0.944, 0.9475)
+        # Orange-red reflex panel at the inner end of the red lamp ([PLACEHOLDER] exact tint -> uses amber material)
+        reflex = [(0.165, 0.0936), (0.2055, 0.0936), (0.2055, 0.0746), (0.165, 0.0746)]
+        add_prism_x(m_amber, S(reflex), 0.9465, 0.9485)
+
+        # Amber rear indicator with clear/white reflector at the inner end
+        amber = [(0.153, 0.0535), (0.3025, 0.0535), (0.2955, 0.0240), (0.153, 0.0240)]
+        add_prism_x(m_chrome, S(expand_poly(amber, 0.003)), 0.943, 0.9455)
+        add_prism_x(m_amber, S(amber), 0.944, 0.9475)
+        clear = [(0.155, 0.0505), (0.202, 0.0505), (0.202, 0.0270), (0.155, 0.0270)]
+        add_prism_x(m_headlight, S(clear), 0.9465, 0.9485)
+
+    # --- Licence plate pocket: thin dark crease outline (pocket z +-0.136, y 0.008 .. 0.097) ---
+    P_TOP, P_BOT, P_HALF = 0.097, 0.008, 0.136
+    m_rubber.add_box([tail_face_x(P_TOP) + 0.0003, P_TOP, 0.0], [0.003, 0.0016, 2 * P_HALF + 0.0016])
+    m_rubber.add_box([tail_face_x(P_BOT) + 0.0003, P_BOT, 0.0], [0.003, 0.0016, 2 * P_HALF + 0.0016])
+    for side in (-1.0, 1.0):
+        y_mid = 0.5 * (P_TOP + P_BOT)
+        m_rubber.add_box([tail_face_x(y_mid) + 0.0003, y_mid, side * P_HALF], [0.003, P_TOP - P_BOT, 0.0016])
+
+    # --- Two small black pods under the ALFA ROMEO lettering (asymmetric in the photo) ---
+    m_rubber.add_box([tail_face_x(0.1035) + 0.001, 0.1035, 0.065], [0.004, 0.0065, 0.035])
+    m_rubber.add_box([tail_face_x(0.1035) + 0.001, 0.1035, -0.060], [0.004, 0.0065, 0.047])
+
+    # --- Decklid lock + emblem base: the Alfa badge sits HIGH on the hatch sill, the lock below it ---
+    def deck_frame(x_q):
+        y_q = float(f_y_center(x_q))
+        slope = (float(f_y_center(x_q + 0.004)) - float(f_y_center(x_q - 0.004))) / 0.008
+        n_vec = np.array([-slope, 1.0, 0.0])
+        n_vec /= np.linalg.norm(n_vec)
+        return y_q, n_vec
+
+    EMBLEM_X, LOCK_X = 0.862, 0.905
+    ey, en = deck_frame(EMBLEM_X)
+    add_cyl_axis(m_chrome, [EMBLEM_X, ey - 0.0004, 0.0], en, 0.0152, 0.0016, segs=48)
+    add_cyl_axis(m_chrome, [EMBLEM_X, ey + 0.0010, 0.0], en, 0.0152, 0.0014, r_in=0.0128, segs=48)
+    ly, ln = deck_frame(LOCK_X)
+    add_cyl_axis(m_chrome, [LOCK_X, ly - 0.0004, 0.0], ln, 0.0068, 0.0016, segs=32)
+    add_cyl_axis(m_rubber, [LOCK_X, ly + 0.0008, 0.0], ln, 0.0036, 0.0010, segs=24)
+    print(f"[rear] emblem  x={EMBLEM_X} y={ey:.5f} normal=({en[0]:.4f},{en[1]:.4f})")
+    print(f"[rear] lock    x={LOCK_X} y={ly:.5f} normal=({ln[0]:.4f},{ln[1]:.4f})")
+
+    # --- Exhaust: single pipe offset to +Z, emerges from under the apron and ARCS DOWNWARD ---
+    ex_p0 = np.array([0.795, -0.098, 0.012])
+    ex_p1 = np.array([0.900, -0.098, 0.030])
+    ex_p2 = np.array([0.945, -0.098, 0.072])
+    ex_p3 = np.array([0.972, -0.136, 0.118])
+    spine = []
+    for tt in np.linspace(0.0, 1.0, 22):
+        spine.append(((1 - tt) ** 3) * ex_p0 + 3 * ((1 - tt) ** 2) * tt * ex_p1
+                     + 3 * (1 - tt) * tt * tt * ex_p2 + (tt ** 3) * ex_p3)
+    # Photo: dull gun-metal pipe (dark) with a bright rolled tip -> body in dark rubber material, rim in chrome
+    t_end = add_tube(m_rubber, spine, 0.0125, segs=28, r_inner_cap=0.0098)
+    add_cyl_axis(m_chrome, spine[-1] - t_end * 0.005, t_end, 0.0131, 0.0052, r_in=0.0096, segs=28)
+    # Dark interior of the tailpipe ([PLACEHOLDER] muffler box / hanger visible behind pipe not modelled)
+    add_cyl_axis(m_rubber, spine[-1] - t_end * 0.014, t_end, 0.0094, 0.0100, segs=28)
 
     # =========================================================================
     # 5. FOUR TRUE 3D CAMPAGNOLO / FPS ALFA ROMEO ALLOY WHEELS & PIRELLI TIRES

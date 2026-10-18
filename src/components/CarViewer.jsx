@@ -17,7 +17,7 @@ import { driveStore } from './drive/driveStore';
 import { DriveWorld } from './drive/DriveWorld';
 import { DriveCameraDirector } from './drive/DriveCameraDirector';
 
-const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=12';
+const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=14';
 
 export const PAINT_FINISHES = [
   {
@@ -119,6 +119,12 @@ export const CAMERA_PRESETS = [
     label: 'Cerchi',
     position: [2.15, 0.38, 1.15],
     target: [0, 0.22, 0.65],
+  },
+  {
+    id: 'back',
+    label: 'Retro',
+    position: [0, 0.5, -2.1],
+    target: [0, 0.34, -0.9],
   },
   {
     id: 'rear',
@@ -292,6 +298,90 @@ function VintageLicensePlates() {
     return tex;
   }, []);
 
+  // Rear plate as photographed: orange "PD" block on the left, lighter black field with a tiny
+  // "PD" + emblem and large embossed white "463880" on the right (4:1, 1024x256).
+  const rearPlateTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#09090a';
+    ctx.fillRect(0, 0, 1024, 256);
+    ctx.fillStyle = '#151517';
+    ctx.fillRect(329, 14, 681, 228);
+
+    ctx.fillStyle = '#e07a2b';
+    ctx.font = '900 190px "Arial Black", Impact, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('PD', 170, 136, 260);
+
+    ctx.fillStyle = '#f2f2f0';
+    ctx.font = '700 40px Arial, sans-serif';
+    ctx.fillText('PD', 376, 150, 70);
+    ctx.strokeStyle = '#b9b9b9';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(376, 200, 20, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Embossed look: dark offset shadow then white face
+    ctx.font = '700 205px "Arial Narrow", "Helvetica Neue", Arial, sans-serif';
+    ctx.fillStyle = '#3a3a3c';
+    ctx.fillText('463880', 702, 130, 574);
+    ctx.fillStyle = '#f6f6f4';
+    ctx.fillText('463880', 698, 126, 574);
+
+    // [PLACEHOLDER] manufacturer micro-text under the digits is illegible in the photo
+    ctx.fillStyle = '#8a2a2a';
+    ctx.font = '600 15px Arial, sans-serif';
+    ctx.fillText('—  ———————  ✱  ———————  —', 760, 238);
+
+    ctx.strokeStyle = '#2a2a2c';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, 1020, 252);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    tex.needsUpdate = true;
+    return tex;
+  }, []);
+
+  // Chrome ALFA ROMEO lettering: wide capitals stretched to the photo's widths
+  // ("ALFA" = 41% | gap 5% | "ROMEO" = 54% of the 440 px wide word-mark)
+  const lettersTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 2048;
+    canvas.height = 137;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, 2048, 137);
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.font = '900 128px "Arial Black", Impact, sans-serif';
+    const draw = (txt, x0, w) => {
+      const natural = ctx.measureText(txt).width;
+      ctx.save();
+      ctx.translate(x0 + 6, 70);
+      ctx.scale((w - 12) / natural, 1);
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 9;
+      ctx.strokeStyle = '#1d1d1f';
+      ctx.strokeText(txt, 0, 0);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(txt, 0, -2);
+      ctx.restore();
+    };
+    draw('ALFA', 0, 840);
+    draw('ROMEO', 955, 1093);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    tex.needsUpdate = true;
+    return tex;
+  }, []);
+
   return (
     <>
       {/* Front bumper plate — DEAD CENTER (z = 0.0) under the front Scudetto & bumper */}
@@ -312,17 +402,34 @@ function VintageLicensePlates() {
         </mesh>
       </group>
 
-      {/* Rear Kamm tail centered plate between taillights */}
+      {/* Rear plate: real photo size (0.232 x 0.058 u, 4:1) seated in the tail-panel pocket */}
       <mesh
-        position={[0.938, 0.035, 0.0]}
+        position={[0.9395, 0.0511, 0.0]}
         rotation={[0, Math.PI / 2, 0]}
         castShadow
       >
-        <boxGeometry args={[0.155, 0.042, 0.006]} />
+        <boxGeometry args={[0.232, 0.058, 0.006]} />
         <meshStandardMaterial
-          map={plateTexture}
+          map={rearPlateTexture}
           roughness={0.34}
           metalness={0.14}
+        />
+      </mesh>
+
+      {/* Chrome "ALFA ROMEO" lettering just under the decklid lip (alpha-cut canvas) */}
+      <mesh position={[0.9425, 0.1115, 0.0]} rotation={[0, Math.PI / 2, 0]}>
+        <planeGeometry args={[0.187, 0.0125]} />
+        <meshPhysicalMaterial
+          map={lettersTexture}
+          emissive="#ffffff"
+          emissiveMap={lettersTexture}
+          emissiveIntensity={0.35}
+          alphaTest={0.4}
+          transparent
+          metalness={0.55}
+          roughness={0.25}
+          envMapIntensity={1.4}
+          side={THREE.DoubleSide}
         />
       </mesh>
     </>
@@ -1058,12 +1165,12 @@ function AlfaRomeoEmblems({ wheelCapRefs }) {
         />
       </mesh>
 
-      {/* Rear Kamm Tail Trunk Center Alfa Romeo - Milano Enameled Emblem */}
+      {/* Rear Alfa Romeo - Milano badge: high on the hatch sill (x=0.862), flat on the sloping deck */}
       <mesh
-        position={[0.941, 0.068, 0.0]}
-        rotation={[0, Math.PI / 2, 0]}
+        position={[0.86238, 0.14369, 0.0]}
+        rotation={[0, Math.PI / 2, Math.PI / 2 - 0.2115, 'ZYX']}
       >
-        <circleGeometry args={[0.014, 64]} />
+        <circleGeometry args={[0.0126, 64]} />
         <meshPhysicalMaterial
           map={emblemTexture}
           metalness={0.22}

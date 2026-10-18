@@ -118,7 +118,12 @@ export default function App() {
     } catch {}
     return 'showroom';
   });
-  const [autoRotate, setAutoRotate] = useState(true);
+  const [autoRotate, setAutoRotate] = useState(() => {
+    try {
+      return new URL(window.location.href).searchParams.get('rotate') !== '0';
+    } catch {}
+    return true;
+  });
   const [lightingMode, setLightingMode] = useState(() => {
     try {
       const url = new URL(window.location.href);

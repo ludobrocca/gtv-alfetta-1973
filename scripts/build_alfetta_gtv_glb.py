@@ -283,7 +283,8 @@ def build_alfetta_gtv():
     m_door_tan = MeshBuilder("Pannelli_Porta_Oliva", 13)
 
     # Dedicated builders for the front-hinged ("apertura controvento") movable Hood node
-    HOOD_PIVOT = np.array([-0.942, 0.044, 0.0], dtype=np.float32)
+    # Front hood cut-line & hinge at x = -0.840 (behind the fixed front nose header panel, as in real car)
+    HOOD_PIVOT = np.array([-0.840, 0.068, 0.0], dtype=np.float32)
     m_hood_paint = MeshBuilder("Hood_Carrozzeria_AR727", 0)
     m_hood_chrome = MeshBuilder("Hood_Cromature_Inox", 1)
     m_hood_rubber = MeshBuilder("Hood_Gomma_Nera", 3)
@@ -353,12 +354,16 @@ def build_alfetta_gtv():
                 flare = max(flare, 0.0055 * w_flare)
         return y_cut, flare
 
+    def get_z_hood_edge(x):
+        """Lateral cut-line of the inset hood panel inside the upper front fenders."""
+        return get_z_shoulder(x) - 0.036
+
     def hood_surface_height(x, z_abs):
         """
-        Evaluates the exact 3D height y(x, z) across the Hood & Cowl panel (-0.955 <= x <= -0.302)
-        for 0 <= z_abs <= get_z_shoulder(x):
-        - Taut, gently cambered 1st-series flat-hood profile
-        - Crisp central longitudinal dihedral spine (nervatura centrale) along z=0
+        Evaluates the exact 3D height y(x, z) across the Nose, Inset Hood & Cowl (-0.955 <= x <= -0.302):
+        - Smooth cambered transverse profile with NO central spine at z=0
+        - Two symmetrical longitudinal step-creases at |z| ~ 0.165 that make a rounded 90-degree
+          turn outward at x = -0.392 toward the outer hood edges (as in real Alfetta GTV hood)
         - Meets the upper fender shoulder at z = z_shoulder(x) with exact height y_shoulder(x)
         """
         yc = float(f_y_center(x))
@@ -367,103 +372,103 @@ def build_alfetta_gtv():
         t = min(1.0, z_abs / max(1e-6, z_sh))
 
         hood_mask = 0.5 * (1.0 + math.tanh((-0.345 - x) / 0.015))
-        profile_blend = 0.34 * t * hood_mask + (1.0 - 0.34 * hood_mask) * (t ** 1.65)
+        profile_blend = 0.28 * (t ** 1.25) * hood_mask + (1.0 - 0.28 * hood_mask) * (t ** 1.65)
         base_y = yc - (yc - ys) * profile_blend
 
-        central_spine = 0.0018 * math.exp(-z_abs / 0.014) * hood_mask * (1.0 - t)
-        return base_y + central_spine
+        # Authentic twin longitudinal creases (|z| = 0.165) flaring outward at x = -0.392
+        z_he = get_z_hood_edge(x)
+        if -0.835 <= x <= -0.355 and z_abs <= z_he:
+            # Smooth L-turn outward near x = -0.392
+            turn_w = 0.5 * (1.0 + math.tanh((x - (-0.395)) / 0.012))
+            z_crease = 0.165 + (z_he - 0.165) * turn_w
+            in_z = 0.5 * (1.0 - math.tanh((z_abs - z_crease) / 0.0045))
+            in_x_front = 0.5 * (1.0 + math.tanh((x - (-0.825)) / 0.010))
+            in_x_rear = 0.5 * (1.0 - math.tanh((x - (-0.392)) / 0.006))
+            recess = -0.0026 * in_z * in_x_front * in_x_rear
+            return base_y + recess
+        return base_y
 
     # =========================================================================
     # A) MULTI-PANEL C2 LOWER BODY COACHWORK SHELL
-    # Decoupled into 4 mathematically pure grids with shared boundary curves so that:
-    # 1. Hood_And_Cowl_Grid (-0.955.. -0.302) has zero cabin-step distortion
-    # 2. Upper_Shoulder_Grid (fender top & door sill -> Giugiaro beltline crease) is 100% immune
-    #    to wheel-arch cutouts and has zero intermediate ridges
-    # 3. Lower_Flank_Grid (Giugiaro beltline crease -> circular wheel arch & rocker sill)
-    #    evaluates z(x, y) by true height y so the wheel arch is never pinched inward,
-    #    and never stretches silver paint inside the wheel well!
     # =========================================================================
+    X_HOOD_FRONT = -0.840
+    X_HOOD_REAR = -0.352
 
-    # A1a. Movable Front-Hinged Hood Panel ("Cofano Controvento", -0.955 <= x <= -0.352)
-    # Stored relative to HOOD_PIVOT = [-0.942, 0.044, 0.0] so rotating the 'Hood' node around Z opens it controvento!
-    hood_nx = 80
-    hood_xs_grid = np.linspace(-0.955, -0.352, hood_nx)
+    # A1a-Nose. Fixed Front Nose Header Panel (-0.955 <= x <= -0.840, full width -z_sh..+z_sh)
+    # Stays fixed on Body above the 4 Carello headlights & Scudetto when the hood opens!
+    nose_nx = 24
+    nose_xs_grid = np.linspace(-0.955, X_HOOD_FRONT, nose_nx)
+    t_full_half = np.linspace(0.0, 1.0, 25)
+    n_fh = len(t_full_half)
+    n_ff = n_fh * 2 - 1
+    nose_grid = np.zeros((nose_nx, n_ff, 3), dtype=np.float32)
+    for i, nx_val in enumerate(nose_xs_grid):
+        z_sh = get_z_shoulder(nx_val)
+        half_pts = [(nx_val, hood_surface_height(nx_val, float(t * z_sh)), float(t * z_sh)) for t in t_full_half]
+        row = [[px, py, -pz] for px, py, pz in reversed(half_pts[1:])] + [[px, py, pz] for px, py, pz in half_pts]
+        nose_grid[i] = np.array(row, dtype=np.float32)
+    m_paint.add_grid(nose_grid, flip=True)
+
+    # A1a-FenderTops. Fixed Upper Fender Crown Strips flanking the inset hood (-0.840 <= x <= -0.352)
+    hood_nx = 72
+    hood_xs_grid = np.linspace(X_HOOD_FRONT, X_HOOD_REAR, hood_nx)
+    fender_strip_nv = 8
+    for side in (-1.0, 1.0):
+        fstrip_grid = np.zeros((hood_nx, fender_strip_nv, 3), dtype=np.float32)
+        for i, hx in enumerate(hood_xs_grid):
+            z_he = get_z_hood_edge(hx)
+            z_sh = get_z_shoulder(hx)
+            for j, s_f in enumerate(np.linspace(0.0, 1.0, fender_strip_nv)):
+                z_abs = z_he + (z_sh - z_he) * s_f
+                y_val = hood_surface_height(hx, z_abs)
+                fstrip_grid[i, j] = [hx, y_val, side * z_abs]
+        m_paint.add_grid(fstrip_grid, flip=(side > 0))
+
+    # A1a-Hood. Movable Inset Front-Hinged Hood Panel ("Cofano Controvento", -0.840 <= x <= -0.352, |z| <= z_hood_edge)
+    # Stored relative to HOOD_PIVOT = [-0.840, 0.068, 0.0] so rotating 'Hood' around Z opens it controvento!
     t_hood_half = np.unique(np.concatenate([
-        np.linspace(0.0, 0.08, 6),
-        np.linspace(0.08, 0.88, 14),
-        np.linspace(0.88, 1.00, 5),
+        np.linspace(0.0, 0.48, 10),
+        np.linspace(0.48, 0.62, 10),  # High density around longitudinal step-crease |z| ~ 0.165
+        np.linspace(0.62, 1.00, 10),
     ]))
     nh_half = len(t_hood_half)
     nh_full = nh_half * 2 - 1
     hood_grid = np.zeros((hood_nx, nh_full, 3), dtype=np.float32)
-    hood_under_grid = np.zeros((hood_nx, nh_full, 3), dtype=np.float32)
 
     for i, hx in enumerate(hood_xs_grid):
-        z_sh = get_z_shoulder(hx)
+        z_he = get_z_hood_edge(hx)
         half_pts = []
         for t in t_hood_half:
-            z = float(t * z_sh)
+            z = float(t * z_he)
             y = hood_surface_height(hx, z)
             half_pts.append((hx, y, z))
         row = []
-        row_under = []
         for k in range(nh_half - 1, 0, -1):
             px, py, pz = half_pts[k]
             row.append([px - HOOD_PIVOT[0], py - HOOD_PIVOT[1], -pz - HOOD_PIVOT[2]])
-            row_under.append([px - HOOD_PIVOT[0], py - 0.0035 - HOOD_PIVOT[1], -pz - HOOD_PIVOT[2]])
         for k in range(nh_half):
             px, py, pz = half_pts[k]
             row.append([px - HOOD_PIVOT[0], py - HOOD_PIVOT[1], pz - HOOD_PIVOT[2]])
-            row_under.append([px - HOOD_PIVOT[0], py - 0.0035 - HOOD_PIVOT[1], pz - HOOD_PIVOT[2]])
         hood_grid[i] = np.array(row, dtype=np.float32)
-        hood_under_grid[i] = np.array(row_under, dtype=np.float32)
 
     m_hood_paint.add_grid(hood_grid, flip=True)
-    # Painted underside of the hood (pagina interna del cofano in tinta carrozzeria)
-    m_hood_paint.add_grid(hood_under_grid, flip=False)
 
-    # Stamped inner reinforcement frame & ribs under the hood (nervature scatolate interne)
-    for hx_rib in (-0.905, -0.660, -0.400):
-        z_rib = get_z_shoulder(hx_rib) * 0.88
-        y_rib = hood_surface_height(hx_rib, 0.0) - 0.009
-        m_hood_paint.add_box(
-            [hx_rib - HOOD_PIVOT[0], y_rib - HOOD_PIVOT[1], 0.0],
-            [0.028, 0.009, z_rib * 1.92],
-            rotation_z=0.09,
-        )
-    for side_rib in (-1.0, 1.0):
-        m_hood_paint.add_box(
-            [-0.650 - HOOD_PIVOT[0], 0.082 - HOOD_PIVOT[1], side_rib * 0.255],
-            [0.520, 0.010, 0.024],
-            rotation_z=0.098,
-        )
-    # Rear central hood catch bracket & pin (gancio/perno di chiusura cofano posteriore)
-    y_catch = hood_surface_height(-0.372, 0.0) - 0.012
-    m_hood_chrome.add_box([-0.372 - HOOD_PIVOT[0], y_catch - HOOD_PIVOT[1], 0.0], [0.022, 0.018, 0.026])
+    # Rear central hood catch bracket & pin (gancio/perno di chiusura cofano posteriore, strictly below hood_under_grid)
+    y_catch = hood_surface_height(-0.372, 0.0) - 0.016
+    m_hood_chrome.add_box([-0.372 - HOOD_PIVOT[0], y_catch - HOOD_PIVOT[1], 0.0], [0.020, 0.012, 0.024])
     m_hood_chrome.add_cylinder_x(
         -0.378 - HOOD_PIVOT[0], -0.366 - HOOD_PIVOT[0],
-        y_catch - 0.014 - HOOD_PIVOT[1], 0.0, 0.0045, segs=16
+        y_catch - 0.010 - HOOD_PIVOT[1], 0.0, 0.0042, segs=16
     )
 
     # A1a-Fixed. Fixed Cowl Panel in front of Windshield (-0.352 <= x <= -0.302)
-    # Stays fixed on the Body mesh where the 20 air intake slots and wipers are mounted!
     cowl_nx = 18
-    cowl_xs_grid = np.linspace(-0.352, -0.302, cowl_nx)
-    cowl_grid = np.zeros((cowl_nx, nh_full, 3), dtype=np.float32)
+    cowl_xs_grid = np.linspace(X_HOOD_REAR, -0.302, cowl_nx)
+    cowl_grid = np.zeros((cowl_nx, n_ff, 3), dtype=np.float32)
     for i, cx in enumerate(cowl_xs_grid):
         z_sh = get_z_shoulder(cx)
-        half_pts = []
-        for t in t_hood_half:
-            z = float(t * z_sh)
-            y = hood_surface_height(cx, z)
-            half_pts.append((cx, y, z))
-        row = []
-        for k in range(nh_half - 1, 0, -1):
-            px, py, pz = half_pts[k]
-            row.append([px, py, -pz])
-        for k in range(nh_half):
-            px, py, pz = half_pts[k]
-            row.append([px, py, pz])
+        half_pts = [(cx, hood_surface_height(cx, float(t * z_sh)), float(t * z_sh)) for t in t_full_half]
+        row = [[px, py, -pz] for px, py, pz in reversed(half_pts[1:])] + [[px, py, pz] for px, py, pz in half_pts]
         cowl_grid[i] = np.array(row, dtype=np.float32)
 
     m_paint.add_grid(cowl_grid, flip=True)
@@ -553,39 +558,38 @@ def build_alfetta_gtv():
     # =========================================================================
     # A3) CRISP HOOD PERIMETER SHUT-LINE SEAMS & FRONT EYEBROW LIP (Fuga del Cofano & Palpebra)
     # =========================================================================
-    hood_seam_xs = np.linspace(-0.954, -0.352, 64)
+    hood_seam_xs = np.linspace(X_HOOD_FRONT, X_HOOD_REAR, 56)
     for side in (-1.0, 1.0):
         seam_strip = np.zeros((len(hood_seam_xs), 2, 3), dtype=np.float32)
         for i, hx in enumerate(hood_seam_xs):
-            z_s = get_z_shoulder(hx)
-            y_s = float(f_y_shoulder(hx)) + 0.0005
-            seam_strip[i, 0] = [hx, y_s, side * (z_s - 0.0018)]
-            seam_strip[i, 1] = [hx, y_s, side * (z_s + 0.0018)]
+            z_he = get_z_hood_edge(hx)
+            y_he = hood_surface_height(hx, z_he) + 0.0004
+            seam_strip[i, 0] = [hx, y_he, side * (z_he - 0.0016)]
+            seam_strip[i, 1] = [hx, y_he, side * (z_he + 0.0016)]
         m_rubber.add_grid(seam_strip, flip=(side < 0))
 
-    # Rear Transverse Hood Shut-Line at x = -0.352 (in front of the stamped cowl ventilation grilles)
-    x_trans = -0.352
-    z_max = get_z_shoulder(x_trans)
-    zs_trans = np.linspace(-z_max, z_max, 48)
-    trans_strip = np.zeros((2, len(zs_trans), 3), dtype=np.float32)
-    for j, hz in enumerate(zs_trans):
-        y_h = hood_surface_height(x_trans, abs(hz)) + 0.0005
-        trans_strip[0, j] = [x_trans - 0.0016, y_h, hz]
-        trans_strip[1, j] = [x_trans + 0.0016, y_h, hz]
-    m_rubber.add_grid(trans_strip, flip=False)
+    # Front (x = -0.840) and Rear (x = -0.352) Transverse Hood Shut-Lines
+    for x_trans in (X_HOOD_FRONT, X_HOOD_REAR):
+        z_max = get_z_hood_edge(x_trans)
+        zs_trans = np.linspace(-z_max, z_max, 44)
+        trans_strip = np.zeros((2, len(zs_trans), 3), dtype=np.float32)
+        for j, hz in enumerate(zs_trans):
+            y_h = hood_surface_height(x_trans, abs(hz)) + 0.0004
+            trans_strip[0, j] = [x_trans - 0.0015, y_h, hz]
+            trans_strip[1, j] = [x_trans + 0.0015, y_h, hz]
+        m_rubber.add_grid(trans_strip, flip=False)
 
-    # Sculpted Front Hood Leading-Edge Eyebrow Lip (Palpebra Anteriore Sopra Fari e Scudetto)
-    # Attached to the movable Hood node so it lifts with the hood
+    # Sculpted Front Nose Leading-Edge Eyebrow Lip (Palpebra Anteriore Fissa Sopra Fari e Scudetto)
     zt_front = get_z_shoulder(-0.955)
     zs_lip = np.linspace(-zt_front, zt_front, 55)
     lip_grid = np.zeros((4, len(zs_lip), 3), dtype=np.float32)
     for j, zl in enumerate(zs_lip):
         y_top_lip = hood_surface_height(-0.955, abs(zl))
-        lip_grid[0, j] = [-0.955 - HOOD_PIVOT[0], y_top_lip - HOOD_PIVOT[1], zl - HOOD_PIVOT[2]]
-        lip_grid[1, j] = [-0.961 - HOOD_PIVOT[0], y_top_lip - 0.0025 - HOOD_PIVOT[1], zl - HOOD_PIVOT[2]]
-        lip_grid[2, j] = [-0.960 - HOOD_PIVOT[0], y_top_lip - 0.0075 - HOOD_PIVOT[1], zl - HOOD_PIVOT[2]]
-        lip_grid[3, j] = [-0.946 - HOOD_PIVOT[0], y_top_lip - 0.0105 - HOOD_PIVOT[1], zl - HOOD_PIVOT[2]]
-    m_hood_paint.add_grid(lip_grid, flip=True)
+        lip_grid[0, j] = [-0.955, y_top_lip, zl]
+        lip_grid[1, j] = [-0.961, y_top_lip - 0.0025, zl]
+        lip_grid[2, j] = [-0.960, y_top_lip - 0.0075, zl]
+        lip_grid[3, j] = [-0.946, y_top_lip - 0.0105, zl]
+    m_paint.add_grid(lip_grid, flip=True)
 
     # =========================================================================
     # B) UNIFIED GREENHOUSE TOP SURFACE (Windshield + Painted Roof + Rear Fastback Glass)
@@ -1085,14 +1089,14 @@ def build_alfetta_gtv():
             y_slot = hood_surface_height(-0.331, z_slot) + 0.0007
             m_rubber.add_box([-0.331, y_slot, side * z_slot], [0.024, 0.0016, 0.0036], rotation_z=0.05)
 
-        # Dual-jet black windshield washer nozzles mounted flush on the movable hood panel
-        x_noz, z_noz = -0.455, 0.148
-        y_noz = hood_surface_height(x_noz, z_noz) + 0.0025
-        m_hood_rubber.add_box(
-            [x_noz - HOOD_PIVOT[0], y_noz - HOOD_PIVOT[1], side * z_noz - HOOD_PIVOT[2]],
-            [0.010, 0.0055, 0.0065],
-            rotation_z=0.06,
-        )
+    # Single central black windshield washer nozzle mounted flush on the movable hood (as in real GTV hood photo)
+    x_noz = -0.475
+    y_noz = hood_surface_height(x_noz, 0.0) + 0.0022
+    m_hood_rubber.add_box(
+        [x_noz - HOOD_PIVOT[0], y_noz - HOOD_PIVOT[1], -HOOD_PIVOT[2]],
+        [0.011, 0.0055, 0.0075],
+        rotation_z=0.06,
+    )
 
     # Front grille recess, smooth lower front valence under bumper & rear Kamm tail panel
     m_rubber.add_box([-0.942, 0.002, 0.0], [0.025, 0.066, 0.610])

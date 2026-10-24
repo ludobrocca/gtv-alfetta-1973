@@ -17,8 +17,8 @@ import { driveStore } from './drive/driveStore';
 import { DriveWorld } from './drive/DriveWorld';
 import { DriveCameraDirector } from './drive/DriveCameraDirector';
 
-const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=18';
-const ENGINE_MODEL_PATH = '/models/alfetta-bialbero-engine.glb?v=2';
+const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=19';
+const ENGINE_MODEL_PATH = '/models/alfetta-bialbero-engine.glb?v=3';
 
 export const PAINT_FINISHES = [
   {
@@ -1986,7 +1986,7 @@ function BialberoEngineDetails({ hoodOpen }) {
   }, []);
 
   return (
-    <group>
+    <group visible={hoodOpen}>
       {/* Cursive "Alfa Romeo" cast relief plaque on the front bridge of the twin-cam cover */}
       <mesh
         position={[-0.688, 0.0652, 0.004]}
@@ -2177,8 +2177,12 @@ function AlfaRomeoModel({ activePaintId, sceneMode, hoodOpen = false }) {
     const hoodProg = hoodOpenProgressRef.current;
 
     if (hoodNodeRef.current) {
-      // +Z rotation lifts the rear of the hood (+X relative to front hinge) upward (+Y)
+      // +Z rotation lifts the rear of the hood (+X relative to front hinge x = -0.840) upward (+Y)
       hoodNodeRef.current.rotation.z = hoodProg * 1.12;
+    }
+
+    if (preparedEngineScene) {
+      preparedEngineScene.visible = hoodProg > 0.005;
     }
 
     if (hoodStayRef.current) {

@@ -236,32 +236,32 @@ def build_bialbero_engine():
     # =========================================================================
     # Left (+Z) & Right (-Z) painted inner fender aprons & upper fender rails
     for sgn in (-1.0, 1.0):
-        # Upper perimeter fender rail with spot-weld flange lip
-        mb_paint.add_box([-0.645, 0.036, sgn * 0.295], [0.580, 0.024, 0.042], rotation_z=0.085)
+        # Upper perimeter fender rail tucked strictly below the fixed upper fender crown strip
+        mb_paint.add_box([-0.600, 0.028, sgn * 0.285], [0.470, 0.018, 0.032], rotation_z=0.078)
         # Sloped inner wheelhouse apron (flat/low because Tipo 116 uses longitudinal torsion bars)
-        mb_paint.add_box([-0.640, -0.045, sgn * 0.268], [0.560, 0.145, 0.018], rotation_x=sgn * 0.22)
+        mb_paint.add_box([-0.600, -0.048, sgn * 0.262], [0.470, 0.135, 0.016], rotation_x=sgn * 0.20)
         # Lower frame longitudinal member (longherone)
-        mb_paint.add_box([-0.640, -0.125, sgn * 0.215], [0.580, 0.052, 0.048])
+        mb_paint.add_box([-0.600, -0.125, sgn * 0.215], [0.480, 0.048, 0.044])
         # Upper double-wishbone suspension bracket pocket (clean low stamping)
-        mb_paint.add_box([-0.575, -0.072, sgn * 0.238], [0.095, 0.048, 0.038])
+        mb_paint.add_box([-0.575, -0.072, sgn * 0.236], [0.092, 0.046, 0.036])
 
-    # Front radiator upper crossmember (traversa anteriore) & lower support
-    mb_paint.add_box([-0.905, 0.026, 0.0], [0.046, 0.026, 0.580])
-    mb_paint.add_box([-0.912, -0.135, 0.0], [0.042, 0.035, 0.520])
+    # Front radiator upper crossmember (traversa anteriore) & lower support (under fixed front nose header)
+    mb_paint.add_box([-0.845, 0.022, 0.0], [0.038, 0.022, 0.540])
+    mb_paint.add_box([-0.845, -0.135, 0.0], [0.038, 0.032, 0.490])
 
     # Rear firewall (parafiamma) & transmission tunnel arch
-    mb_paint.add_box([-0.348, -0.022, 0.0], [0.022, 0.245, 0.570])
-    mb_paint.add_box([-0.358, 0.072, 0.0], [0.038, 0.032, 0.560])  # Upper cowl gutter ledge
+    mb_paint.add_box([-0.352, -0.025, 0.0], [0.020, 0.230, 0.540])
+    mb_paint.add_box([-0.360, 0.064, 0.0], [0.032, 0.024, 0.530])  # Upper cowl gutter ledge
     # Rubber perimeter weatherstrip along the rear cowl firewall lip
-    mb_rubber.add_box([-0.365, 0.088, 0.0], [0.018, 0.014, 0.540])
+    mb_rubber.add_box([-0.365, 0.078, 0.0], [0.016, 0.010, 0.520])
 
     # Center-rear black heater/ventilation plenum box against firewall + gold hood latch catch
-    mb_black.add_box([-0.382, 0.032, 0.0], [0.068, 0.088, 0.230])
-    mb_gold.add_box([-0.364, 0.082, 0.0], [0.028, 0.022, 0.046])   # Scrocco cofano (brass/gold catch)
-    mb_satin.add_box([-0.364, 0.088, 0.0], [0.016, 0.014, 0.018])
+    mb_black.add_box([-0.382, 0.028, 0.0], [0.066, 0.082, 0.220])
+    mb_gold.add_box([-0.364, 0.076, 0.0], [0.026, 0.018, 0.044])   # Scrocco cofano (brass/gold catch)
+    mb_satin.add_box([-0.364, 0.082, 0.0], [0.014, 0.012, 0.016])
 
     # Under-engine dark chassis floor pan / crossmember shield (blocks ground view from above)
-    mb_black.add_box([-0.635, -0.165, 0.0], [0.570, 0.012, 0.460])
+    mb_black.add_box([-0.600, -0.165, 0.0], [0.490, 0.012, 0.450])
     mb_black.add_box([-0.575, -0.145, 0.0], [0.068, 0.028, 0.430])  # Front steering rack crossmember
 
     # =========================================================================
@@ -528,13 +528,13 @@ def build_bialbero_engine():
         mb_alt_node.add_box([0.004, 0.015 * math.cos(ang_f), 0.015 * math.sin(ang_f)], [0.006, 0.012, 0.003], rotation_x=ang_f)
 
     # 6c. V-Shaped Articulated Hood Support Rods (Aste supporto cofano a V sul lato guida +Z)
-    # Pivot at [-0.680, 0.038, 0.278]: lower arm goes to V-knee [0.105, 0.135, -0.008], upper arm goes to open hood [-0.105, 0.325, 0.0]
+    # Pivot at [-0.680, 0.038, 0.278]: lower arm goes to V-knee [0.095, 0.130, -0.008], upper arm goes to open hood [-0.038, 0.282, 0.0]
     mb_stay_node = MeshBuilder("Hood_Stay_Left", M_SATIN_ALU)
-    stay_arm1 = bezier_curve([0.0, 0.0, 0.0], [0.035, 0.045, -0.003], [0.070, 0.090, -0.006], [0.105, 0.135, -0.008], n=8)
-    stay_arm2 = bezier_curve([0.105, 0.135, -0.008], [0.035, 0.198, -0.005], [-0.035, 0.262, -0.002], [-0.105, 0.325, 0.0], n=8)
+    stay_arm1 = bezier_curve([0.0, 0.0, 0.0], [0.032, 0.043, -0.003], [0.064, 0.086, -0.006], [0.095, 0.130, -0.008], n=8)
+    stay_arm2 = bezier_curve([0.095, 0.130, -0.008], [0.050, 0.180, -0.005], [0.006, 0.232, -0.002], [-0.038, 0.282, 0.0], n=8)
     add_tube(mb_stay_node, stay_arm1, 0.0042, segs=10)
     add_tube(mb_stay_node, stay_arm2, 0.0042, segs=10)
-    add_cyl_axis(mb_stay_node, [0.105, 0.135, -0.012], [0, 0, 1], 0.008, 0.009, segs=12)
+    add_cyl_axis(mb_stay_node, [0.095, 0.130, -0.012], [0, 0, 1], 0.008, 0.009, segs=12)
 
     # =========================================================================
     # 7. PACK GLTF 2.0 BINARY (.GLB)

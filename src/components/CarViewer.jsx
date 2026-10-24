@@ -17,7 +17,8 @@ import { driveStore } from './drive/driveStore';
 import { DriveWorld } from './drive/DriveWorld';
 import { DriveCameraDirector } from './drive/DriveCameraDirector';
 
-const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=17';
+const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=18';
+const ENGINE_MODEL_PATH = '/models/alfetta-bialbero-engine.glb?v=2';
 
 export const PAINT_FINISHES = [
   {
@@ -125,6 +126,12 @@ export const CAMERA_PRESETS = [
     label: 'Abitacolo',
     position: [0.08, 0.42, -0.20],
     target: [0.075, 0.30, 0.16],
+  },
+  {
+    id: 'engine',
+    label: 'Motore',
+    position: [0.68, 0.66, 0.44],
+    target: [-0.02, 0.24, 0.58],
   },
   {
     id: 'back',
@@ -1927,14 +1934,125 @@ function ShowroomLoader({ lightingMode }) {
 }
 
 /**
+ * High-definition procedural plaques & inscriptions for the Bialbero AR01608 Engine Bay:
+ * - Cursive "Alfa Romeo" cast-aluminum relief plaque on the front bridge of the cam cover
+ * - Embossed "OLIO" cap inscription on the star-shaped oil filler cap
+ * - Yellow "AR / ATTENZIONE" warning decal on top of the black radiator tank
+ * - Dedicated warm-white engine bay inspection light when the hood is open
+ */
+function BialberoEngineDetails({ hoodOpen }) {
+  const camScriptTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#4a4e54';
+    ctx.fillRect(0, 0, 512, 128);
+    ctx.strokeStyle = '#cfd5dc';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(8, 8, 496, 112);
+    ctx.fillStyle = '#eef2f6';
+    ctx.font = 'italic bold 68px "Cormorant Garamond", Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Alfa Romeo', 256, 66);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    return tex;
+  }, []);
+
+  const olioCapTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#d4dae0';
+    ctx.beginPath();
+    ctx.arc(128, 128, 122, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#6c737a';
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    ctx.fillStyle = '#2b2f36';
+    ctx.font = 'bold 54px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('OLIO', 128, 128);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    return tex;
+  }, []);
+
+  return (
+    <group>
+      {/* Cursive "Alfa Romeo" cast relief plaque on the front bridge of the twin-cam cover */}
+      <mesh
+        position={[-0.688, 0.0652, 0.004]}
+        rotation={[-Math.PI / 2, 0, -Math.PI / 2]}
+      >
+        <planeGeometry args={[0.086, 0.021]} />
+        <meshStandardMaterial
+          map={camScriptTexture}
+          metalness={0.82}
+          roughness={0.26}
+        />
+      </mesh>
+
+      {/* Embossed "OLIO" medallion on top of the star-shaped oil filler cap */}
+      <mesh
+        position={[-0.692, 0.0846, -0.046]}
+        rotation={[-Math.PI / 2, 0, -Math.PI / 2]}
+      >
+        <circleGeometry args={[0.017, 24]} />
+        <meshStandardMaterial
+          map={olioCapTexture}
+          metalness={0.85}
+          roughness={0.24}
+        />
+      </mesh>
+
+      {/* Dedicated Engine Bay Inspection Fill Lights (active when hood is open) */}
+      {hoodOpen && (
+        <>
+          <pointLight
+            position={[-0.60, 0.42, 0.08]}
+            intensity={1.35}
+            distance={1.4}
+            decay={1.4}
+            color="#fffaf0"
+          />
+          <pointLight
+            position={[-0.62, 0.28, -0.22]}
+            intensity={0.85}
+            distance={1.1}
+            decay={1.5}
+            color="#eef5ff"
+          />
+        </>
+      )}
+    </group>
+  );
+}
+
+/**
  * Loads the multi-material CAD GLB model of the Alfa Romeo Alfetta GTV
  * and binds dedicated PBR materials to each sub-mesh (CarPaint, Chrome, Glass,
- * RubberBlack, AlloyRim, HeadlightLens, AmberLens, RedTaillight, Interior).
+ * RubberBlack, AlloyRim, HeadlightLens, AmberLens, RedTaillight, Interior),
+ * plus the 3D Bialbero AR01608 engine bay and articulated controvento hood.
  */
-function AlfaRomeoModel({ activePaintId, sceneMode }) {
+function AlfaRomeoModel({ activePaintId, sceneMode, hoodOpen = false }) {
   const { scene } = useGLTF(MODEL_PATH);
+  const { scene: engineScene } = useGLTF(ENGINE_MODEL_PATH);
   const wheelNodesRef = useRef([]);
   const wheelCapRefs = useRef([]);
+  const hoodNodeRef = useRef(null);
+  const hoodStayRef = useRef(null);
+  const fanNodeRef = useRef(null);
+  const pulleyNodesRef = useRef([]);
+  const engineRootRef = useRef(null);
+  const hoodOpenProgressRef = useRef(0);
   const bodyGroupRef = useRef();
   const carDriveGroupRef = useRef();
   const texShieldRef = useRef();
@@ -1970,6 +2088,25 @@ function AlfaRomeoModel({ activePaintId, sceneMode }) {
     return cloned;
   }, [scene]);
 
+  const preparedEngineScene = useMemo(() => {
+    const cloned = engineScene.clone(true);
+    cloned.traverse((child) => {
+      if (child.isMesh && child.geometry) {
+        child.geometry = child.geometry.clone();
+        if (!child.geometry.attributes.normal) {
+          child.geometry.computeVertexNormals();
+        }
+        child.castShadow = true;
+        child.receiveShadow = true;
+        if (!child.userData.originalMaterialName) {
+          child.userData.originalMaterialName =
+            (child.material && child.material.name) || '';
+        }
+      }
+    });
+    return cloned;
+  }, [engineScene]);
+
   const materialsMap = useMemo(
     () => createShowroomMaterials(selectedPaint),
     [selectedPaint]
@@ -1985,21 +2122,83 @@ function AlfaRomeoModel({ activePaintId, sceneMode }) {
       }
     });
 
-    // Query and cache spinnable wheel nodes
+    // Synchronize Engine Bay structural body panels (inner fenders & crossmember) with CarPaint
+    preparedEngineScene.traverse((child) => {
+      if (child.isMesh && child.userData.originalMaterialName === 'BayBodyPaint') {
+        child.material = materialsMap.CarPaint;
+        child.material.needsUpdate = true;
+      }
+    });
+
+    // Query and cache spinnable wheel nodes and articulated Hood node
     const wheels = [];
+    hoodNodeRef.current = null;
     preparedScene.traverse((child) => {
       if (child.name && child.name.startsWith('Wheel_')) {
         wheels.push(child);
+      } else if (child.name === 'Hood') {
+        hoodNodeRef.current = child;
       }
     });
     wheelNodesRef.current = wheels;
 
+    // Query and cache animated Bialbero engine nodes (yellow fan, 3 pulleys, hood stay, root)
+    const pulleys = [];
+    fanNodeRef.current = null;
+    hoodStayRef.current = null;
+    engineRootRef.current = null;
+    preparedEngineScene.traverse((child) => {
+      if (child.name === 'Engine_Fan_Yellow') {
+        fanNodeRef.current = child;
+      } else if (child.name && child.name.startsWith('Engine_Pulley_')) {
+        pulleys.push(child);
+      } else if (child.name === 'Hood_Stay_Left') {
+        hoodStayRef.current = child;
+      } else if (child.name === 'EngineBay_Root') {
+        engineRootRef.current = child;
+      }
+    });
+    pulleyNodesRef.current = pulleys;
+
     return () => {
       Object.values(materialsMap).forEach((mat) => mat.dispose());
     };
-  }, [preparedScene, materialsMap]);
+  }, [preparedScene, preparedEngineScene, materialsMap]);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
+    // 1. Smoothly animate Controvento Hood opening/closing (hinged at front x = -0.942)
+    const targetHood = hoodOpen && sceneMode !== 'drive' ? 1.0 : 0.0;
+    hoodOpenProgressRef.current = THREE.MathUtils.damp(
+      hoodOpenProgressRef.current,
+      targetHood,
+      4.5,
+      delta
+    );
+    const hoodProg = hoodOpenProgressRef.current;
+
+    if (hoodNodeRef.current) {
+      // +Z rotation lifts the rear of the hood (+X relative to front hinge) upward (+Y)
+      hoodNodeRef.current.rotation.z = hoodProg * 1.12;
+    }
+
+    if (hoodStayRef.current) {
+      hoodStayRef.current.visible = hoodProg > 0.02;
+      hoodStayRef.current.scale.set(1, Math.max(0.01, hoodProg), 1);
+    }
+
+    // 2. Live Bialbero AR01608 Engine Idle Animation ("Vivo al minimo" ~950 RPM)
+    if (fanNodeRef.current) {
+      fanNodeRef.current.rotation.x += delta * 18.0;
+    }
+    pulleyNodesRef.current.forEach((pulley) => {
+      pulley.rotation.x += delta * 22.0;
+    });
+    if (engineRootRef.current && hoodProg > 0.02) {
+      const t = state.clock.elapsedTime;
+      engineRootRef.current.position.y = Math.sin(t * 58.0) * 0.00028;
+      engineRootRef.current.position.z = Math.cos(t * 43.0) * 0.00022;
+    }
+
     if (sceneMode === 'drive') {
       driveStore.update(delta);
       const rot = driveStore.wheelRotation;
@@ -2076,6 +2275,8 @@ function AlfaRomeoModel({ activePaintId, sceneMode }) {
         <group rotation={[0, Math.PI / 2, 0]}>
           <group ref={bodyGroupRef}>
             <primitive object={preparedScene} />
+            <primitive object={preparedEngineScene} />
+            <BialberoEngineDetails hoodOpen={hoodOpen} />
             <VintageLicensePlates />
             <AlfaRomeoEmblems wheelCapRefs={wheelCapRefs} />
             <CockpitInstrumentsAndDetails />
@@ -2101,26 +2302,26 @@ function AlfaRomeoModel({ activePaintId, sceneMode }) {
 
 /**
  * Coordinates smooth camera transitions with <Bounds> and OrbitControls.
- * When transitioning to the interior 'cockpit' preset, positions the camera directly
- * inside the cabin without exterior bounding-sphere clipping.
+ * When transitioning to the interior 'cockpit' or close-up 'engine' preset,
+ * positions the camera directly on target without exterior bounding-sphere clipping.
  */
 function CameraRig({ cameraRequest, controlsRef }) {
   const bounds = useBounds();
   const { camera } = useThree();
   const appliedRef = useRef(null);
 
-  const isCockpit =
-    cameraRequest &&
-    (cameraRequest.presetId === 'cockpit' || cameraRequest.id === 'cockpit');
+  const presetKey =
+    cameraRequest && (cameraRequest.presetId || cameraRequest.id);
+  const isCloseUp = presetKey === 'cockpit' || presetKey === 'engine';
 
   useEffect(() => {
     if (!cameraRequest || !bounds) return;
 
     const { position, target, id, presetId } = cameraRequest;
-    const presetKey = presetId || id;
+    const key = presetId || id;
 
-    if (presetKey === 'cockpit') {
-      camera.fov = 58;
+    if (key === 'cockpit' || key === 'engine') {
+      camera.fov = key === 'cockpit' ? 58 : 42;
       camera.near = 0.012;
       camera.updateProjectionMatrix();
       camera.position.set(position[0], position[1], position[2]);
@@ -2129,7 +2330,7 @@ function CameraRig({ cameraRequest, controlsRef }) {
         controlsRef.current.update();
       }
       camera.lookAt(target[0], target[1], target[2]);
-      appliedRef.current = cameraRequest.timestamp || 'cockpit';
+      appliedRef.current = cameraRequest.timestamp || key;
       return;
     }
 
@@ -2144,15 +2345,19 @@ function CameraRig({ cameraRequest, controlsRef }) {
       controlsRef.current.target.set(target[0], target[1], target[2]);
       controlsRef.current.update();
     }
-    appliedRef.current = cameraRequest.timestamp || presetKey;
+    appliedRef.current = cameraRequest.timestamp || key;
   }, [cameraRequest, bounds, camera, controlsRef]);
 
   useFrame(() => {
-    if (isCockpit && cameraRequest) {
+    if (isCloseUp && cameraRequest) {
       const { position, target } = cameraRequest;
-      // Ensure <Bounds> initial fit never pushes the camera outside the cabin
-      if (camera.position.distanceTo(new THREE.Vector3(...position)) > 0.6) {
-        camera.fov = 58;
+      const maxDrift = presetKey === 'cockpit' ? 0.6 : 1.8;
+      // Ensure <Bounds> initial fit never pushes the camera away from close-up target
+      if (
+        camera.position.distanceTo(new THREE.Vector3(...position)) > maxDrift &&
+        appliedRef.current !== (cameraRequest.timestamp || presetKey)
+      ) {
+        camera.fov = presetKey === 'cockpit' ? 58 : 42;
         camera.near = 0.012;
         camera.updateProjectionMatrix();
         camera.position.set(position[0], position[1], position[2]);
@@ -2271,12 +2476,15 @@ export default function CarViewer({
   activePaintId,
   cameraRequest,
   sceneMode = 'showroom',
+  hoodOpen = false,
 }) {
   const controlsRef = useRef(null);
   const isLight = lightingMode === 'studio';
-  const isCockpit =
-    cameraRequest &&
-    (cameraRequest.presetId === 'cockpit' || cameraRequest.id === 'cockpit');
+  const presetKey =
+    cameraRequest && (cameraRequest.presetId || cameraRequest.id);
+  const isCockpit = presetKey === 'cockpit';
+  const isEngine = presetKey === 'engine';
+  const isCloseUp = isCockpit || isEngine;
 
   return (
     <div className="relative w-full h-full">
@@ -2284,8 +2492,12 @@ export default function CarViewer({
         shadows
         dpr={[1, 2]}
         camera={{
-          position: isCockpit ? [0.08, 0.42, -0.20] : [3.2, 1.15, 3.5],
-          fov: isCockpit ? 58 : 40,
+          position: isCockpit
+            ? [0.08, 0.42, -0.20]
+            : isEngine
+            ? [0.68, 0.66, 0.44]
+            : [3.2, 1.15, 3.5],
+          fov: isCockpit ? 58 : isEngine ? 42 : 40,
           near: 0.012,
           far: 100,
         }}
@@ -2306,6 +2518,7 @@ export default function CarViewer({
               <AlfaRomeoModel
                 activePaintId={activePaintId}
                 sceneMode={sceneMode}
+                hoodOpen={false}
               />
               <DriveWorld lightingMode={lightingMode} />
               <DriveCameraDirector controlsRef={controlsRef} />
@@ -2313,14 +2526,15 @@ export default function CarViewer({
           ) : (
             <>
               <Bounds
-                fit={!isCockpit}
-                clip={!isCockpit}
-                observe={!isCockpit}
+                fit={!isCloseUp}
+                clip={!isCloseUp}
+                observe={!isCloseUp}
                 margin={1.2}
               >
                 <AlfaRomeoModel
                   activePaintId={activePaintId}
                   sceneMode={sceneMode}
+                  hoodOpen={hoodOpen}
                 />
                 <CameraRig
                   cameraRequest={cameraRequest}
@@ -2353,10 +2567,18 @@ export default function CarViewer({
           minPolarAngle={0}
           maxPolarAngle={sceneMode === 'drive' ? Math.PI / 2.02 : Math.PI / 2.05}
           minDistance={
-            sceneMode === 'drive' ? 1.0 : isCockpit ? 0.02 : 0.65
+            sceneMode === 'drive'
+              ? 1.0
+              : isCockpit
+              ? 0.02
+              : isEngine
+              ? 0.22
+              : 0.65
           }
           maxDistance={sceneMode === 'drive' ? 18 : 10}
-          autoRotate={sceneMode === 'drive' || isCockpit ? false : autoRotate}
+          autoRotate={
+            sceneMode === 'drive' || isCloseUp ? false : autoRotate
+          }
           autoRotateSpeed={0.8}
           enableDamping
           dampingFactor={0.05}
@@ -2377,3 +2599,4 @@ export default function CarViewer({
 }
 
 useGLTF.preload(MODEL_PATH);
+useGLTF.preload(ENGINE_MODEL_PATH);

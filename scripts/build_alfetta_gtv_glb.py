@@ -282,6 +282,12 @@ def build_alfetta_gtv():
     m_seat_cream = MeshBuilder("Sedili_Panna", 12)
     m_door_tan = MeshBuilder("Pannelli_Porta_Oliva", 13)
 
+    # Dedicated builders for the front-hinged ("apertura controvento") movable Hood node
+    HOOD_PIVOT = np.array([-0.942, 0.044, 0.0], dtype=np.float32)
+    m_hood_paint = MeshBuilder("Hood_Carrozzeria_AR727", 0)
+    m_hood_chrome = MeshBuilder("Hood_Cromature_Inox", 1)
+    m_hood_rubber = MeshBuilder("Hood_Gomma_Nera", 3)
+
     # =========================================================================
     # 1. PARAMETRIC SILHOUETTE & CROSS-SECTIONS OF THE ALFETTA GTV (1973/1976)
     # =========================================================================
@@ -378,9 +384,10 @@ def build_alfetta_gtv():
     #    and never stretches silver paint inside the wheel well!
     # =========================================================================
 
-    # A1. Dedicated Hood & Cowl Panel (-0.955 <= x <= -0.302, -z_shoulder <= z <= +z_shoulder)
-    hood_nx = 96
-    hood_xs_grid = np.linspace(-0.955, -0.302, hood_nx)
+    # A1a. Movable Front-Hinged Hood Panel ("Cofano Controvento", -0.955 <= x <= -0.352)
+    # Stored relative to HOOD_PIVOT = [-0.942, 0.044, 0.0] so rotating the 'Hood' node around Z opens it controvento!
+    hood_nx = 80
+    hood_xs_grid = np.linspace(-0.955, -0.352, hood_nx)
     t_hood_half = np.unique(np.concatenate([
         np.linspace(0.0, 0.08, 6),
         np.linspace(0.08, 0.88, 14),
@@ -389,6 +396,7 @@ def build_alfetta_gtv():
     nh_half = len(t_hood_half)
     nh_full = nh_half * 2 - 1
     hood_grid = np.zeros((hood_nx, nh_full, 3), dtype=np.float32)
+    hood_under_grid = np.zeros((hood_nx, nh_full, 3), dtype=np.float32)
 
     for i, hx in enumerate(hood_xs_grid):
         z_sh = get_z_shoulder(hx)
@@ -398,15 +406,67 @@ def build_alfetta_gtv():
             y = hood_surface_height(hx, z)
             half_pts.append((hx, y, z))
         row = []
+        row_under = []
+        for k in range(nh_half - 1, 0, -1):
+            px, py, pz = half_pts[k]
+            row.append([px - HOOD_PIVOT[0], py - HOOD_PIVOT[1], -pz - HOOD_PIVOT[2]])
+            row_under.append([px - HOOD_PIVOT[0], py - 0.0035 - HOOD_PIVOT[1], -pz - HOOD_PIVOT[2]])
+        for k in range(nh_half):
+            px, py, pz = half_pts[k]
+            row.append([px - HOOD_PIVOT[0], py - HOOD_PIVOT[1], pz - HOOD_PIVOT[2]])
+            row_under.append([px - HOOD_PIVOT[0], py - 0.0035 - HOOD_PIVOT[1], pz - HOOD_PIVOT[2]])
+        hood_grid[i] = np.array(row, dtype=np.float32)
+        hood_under_grid[i] = np.array(row_under, dtype=np.float32)
+
+    m_hood_paint.add_grid(hood_grid, flip=True)
+    # Painted underside of the hood (pagina interna del cofano in tinta carrozzeria)
+    m_hood_paint.add_grid(hood_under_grid, flip=False)
+
+    # Stamped inner reinforcement frame & ribs under the hood (nervature scatolate interne)
+    for hx_rib in (-0.905, -0.660, -0.400):
+        z_rib = get_z_shoulder(hx_rib) * 0.88
+        y_rib = hood_surface_height(hx_rib, 0.0) - 0.009
+        m_hood_paint.add_box(
+            [hx_rib - HOOD_PIVOT[0], y_rib - HOOD_PIVOT[1], 0.0],
+            [0.028, 0.009, z_rib * 1.92],
+            rotation_z=0.09,
+        )
+    for side_rib in (-1.0, 1.0):
+        m_hood_paint.add_box(
+            [-0.650 - HOOD_PIVOT[0], 0.082 - HOOD_PIVOT[1], side_rib * 0.255],
+            [0.520, 0.010, 0.024],
+            rotation_z=0.098,
+        )
+    # Rear central hood catch bracket & pin (gancio/perno di chiusura cofano posteriore)
+    y_catch = hood_surface_height(-0.372, 0.0) - 0.012
+    m_hood_chrome.add_box([-0.372 - HOOD_PIVOT[0], y_catch - HOOD_PIVOT[1], 0.0], [0.022, 0.018, 0.026])
+    m_hood_chrome.add_cylinder_x(
+        -0.378 - HOOD_PIVOT[0], -0.366 - HOOD_PIVOT[0],
+        y_catch - 0.014 - HOOD_PIVOT[1], 0.0, 0.0045, segs=16
+    )
+
+    # A1a-Fixed. Fixed Cowl Panel in front of Windshield (-0.352 <= x <= -0.302)
+    # Stays fixed on the Body mesh where the 20 air intake slots and wipers are mounted!
+    cowl_nx = 18
+    cowl_xs_grid = np.linspace(-0.352, -0.302, cowl_nx)
+    cowl_grid = np.zeros((cowl_nx, nh_full, 3), dtype=np.float32)
+    for i, cx in enumerate(cowl_xs_grid):
+        z_sh = get_z_shoulder(cx)
+        half_pts = []
+        for t in t_hood_half:
+            z = float(t * z_sh)
+            y = hood_surface_height(cx, z)
+            half_pts.append((cx, y, z))
+        row = []
         for k in range(nh_half - 1, 0, -1):
             px, py, pz = half_pts[k]
             row.append([px, py, -pz])
         for k in range(nh_half):
             px, py, pz = half_pts[k]
             row.append([px, py, pz])
-        hood_grid[i] = np.array(row, dtype=np.float32)
+        cowl_grid[i] = np.array(row, dtype=np.float32)
 
-    m_paint.add_grid(hood_grid, flip=True)
+    m_paint.add_grid(cowl_grid, flip=True)
 
     # A1b. Rear Decklid Panel behind Fastback Glass (0.852 <= x <= 0.932, -z_shoulder <= z <= +z_shoulder)
     deck_nx = 20
@@ -515,16 +575,17 @@ def build_alfetta_gtv():
     m_rubber.add_grid(trans_strip, flip=False)
 
     # Sculpted Front Hood Leading-Edge Eyebrow Lip (Palpebra Anteriore Sopra Fari e Scudetto)
+    # Attached to the movable Hood node so it lifts with the hood
     zt_front = get_z_shoulder(-0.955)
     zs_lip = np.linspace(-zt_front, zt_front, 55)
     lip_grid = np.zeros((4, len(zs_lip), 3), dtype=np.float32)
     for j, zl in enumerate(zs_lip):
         y_top_lip = hood_surface_height(-0.955, abs(zl))
-        lip_grid[0, j] = [-0.955, y_top_lip, zl]
-        lip_grid[1, j] = [-0.961, y_top_lip - 0.0025, zl]
-        lip_grid[2, j] = [-0.960, y_top_lip - 0.0075, zl]
-        lip_grid[3, j] = [-0.946, y_top_lip - 0.0105, zl]
-    m_paint.add_grid(lip_grid, flip=True)
+        lip_grid[0, j] = [-0.955 - HOOD_PIVOT[0], y_top_lip - HOOD_PIVOT[1], zl - HOOD_PIVOT[2]]
+        lip_grid[1, j] = [-0.961 - HOOD_PIVOT[0], y_top_lip - 0.0025 - HOOD_PIVOT[1], zl - HOOD_PIVOT[2]]
+        lip_grid[2, j] = [-0.960 - HOOD_PIVOT[0], y_top_lip - 0.0075 - HOOD_PIVOT[1], zl - HOOD_PIVOT[2]]
+        lip_grid[3, j] = [-0.946 - HOOD_PIVOT[0], y_top_lip - 0.0105 - HOOD_PIVOT[1], zl - HOOD_PIVOT[2]]
+    m_hood_paint.add_grid(lip_grid, flip=True)
 
     # =========================================================================
     # B) UNIFIED GREENHOUSE TOP SURFACE (Windshield + Painted Roof + Rear Fastback Glass)
@@ -1024,10 +1085,14 @@ def build_alfetta_gtv():
             y_slot = hood_surface_height(-0.331, z_slot) + 0.0007
             m_rubber.add_box([-0.331, y_slot, side * z_slot], [0.024, 0.0016, 0.0036], rotation_z=0.05)
 
-        # Dual-jet black windshield washer nozzles mounted flush on the hood panel
+        # Dual-jet black windshield washer nozzles mounted flush on the movable hood panel
         x_noz, z_noz = -0.455, 0.148
         y_noz = hood_surface_height(x_noz, z_noz) + 0.0025
-        m_rubber.add_box([x_noz, y_noz, side * z_noz], [0.010, 0.0055, 0.0065], rotation_z=0.06)
+        m_hood_rubber.add_box(
+            [x_noz - HOOD_PIVOT[0], y_noz - HOOD_PIVOT[1], side * z_noz - HOOD_PIVOT[2]],
+            [0.010, 0.0055, 0.0065],
+            rotation_z=0.06,
+        )
 
     # Front grille recess, smooth lower front valence under bumper & rear Kamm tail panel
     m_rubber.add_box([-0.942, 0.002, 0.0], [0.025, 0.066, 0.610])
@@ -1948,11 +2013,18 @@ def build_alfetta_gtv():
             })
         return primitives
 
+    hood_builders = [m_hood_paint, m_hood_chrome, m_hood_rubber]
     body_primitives = pack_primitives(builders)
-    meshes = [{"name": "Alfetta_GTV_Body_Mesh", "primitives": body_primitives}]
+    hood_primitives = pack_primitives(hood_builders)
+
+    meshes = [
+        {"name": "Alfetta_GTV_Body_Mesh", "primitives": body_primitives},
+        {"name": "Alfetta_GTV_Hood_Mesh", "primitives": hood_primitives},
+    ]
     nodes = [
-        {"name": "Alfa_Romeo_Alfetta_GTV_1973", "children": list(range(1, 2 + len(wheel_sets)))},
+        {"name": "Alfa_Romeo_Alfetta_GTV_1973", "children": list(range(1, 3 + len(wheel_sets)))},
         {"name": "Body", "mesh": 0},
+        {"name": "Hood", "mesh": 1, "translation": HOOD_PIVOT.astype(float).tolist()},
     ]
     for ws in wheel_sets:
         meshes.append({"name": ws["name"] + "_Mesh", "primitives": pack_primitives(ws["builders"])})
@@ -1963,7 +2035,7 @@ def build_alfetta_gtv():
 
     gltf = {
         "asset": {
-            "generator": "Alfa-Romeo-Centro-Stile-Parametric-CAD-v5",
+            "generator": "Alfa-Romeo-Centro-Stile-Parametric-CAD-v6",
             "version": "2.0",
         },
         "scene": 0,
@@ -1989,10 +2061,10 @@ def build_alfetta_gtv():
             f.write(struct.pack("<I4s", len(bin_chunks), b"BIN\x00"))
             f.write(bin_chunks)
 
-    all_builders = builders + [b for ws in wheel_sets for b in ws["builders"]]
+    all_builders = builders + hood_builders + [b for ws in wheel_sets for b in ws["builders"]]
     total_verts = sum(len(b.positions) for b in all_builders)
     total_tris = sum(len(b.indices) // 3 for b in all_builders)
-    print(f"Built coachbuilt GLB v5: {len(nodes)} nodes (Body + {len(wheel_sets)} wheels), {total_verts} verts, {total_tris} tris, {total_len} bytes")
+    print(f"Built coachbuilt GLB v6: {len(nodes)} nodes (Body + Hood + {len(wheel_sets)} wheels), {total_verts} verts, {total_tris} tris, {total_len} bytes")
 
 
 if __name__ == "__main__":

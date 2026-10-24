@@ -18,6 +18,7 @@ import {
   RotateCcw,
   Sparkles,
   Sun,
+  Wrench,
   X,
 } from 'lucide-react';
 import CarViewer, {
@@ -67,6 +68,20 @@ const REAL_PHOTOS = [
     caption:
       'Proporzioni da coupé Gran Turismo firmate da Giorgetto Giugiaro (Italdesign) con ripartizione dei pesi 50:50 Transaxle.',
   },
+  {
+    src: '/images/alfa-motore-1.jpeg',
+    title: 'Vano Motore Bialbero AR01608 • Vista Superiore',
+    location: 'Targa 463880 PD • Esemplare Reale',
+    caption:
+      'Coperchio punterie a doppia gobba con scritta Alfa Romeo in corsivo, tappo OLIO a stella, barilotto filtro aria nero per i due carburatori doppio corpo, vaschette traslucide e ventola gialla.',
+  },
+  {
+    src: '/images/alfa-motore-2.jpeg',
+    title: 'Vano Motore • 3/4 Sinistro & Apertura Controvento',
+    location: 'Targa 463880 PD • Esemplare Reale',
+    caption:
+      'Dettaglio dei collettori di scarico 4-in-2 in ghisa, servofreno con vaschetta ambra, serbatoio espansione verde oliva, alternatore con fascia rossa e aste cofano a V.',
+  },
 ];
 
 const HISTORICAL_SPECS = [
@@ -77,16 +92,22 @@ const HISTORICAL_SPECS = [
       'Grigio Chiaro Metallizzato (AR 727) • Circolo Patavino Auto Storiche / ASI',
   },
   {
+    label: 'Motore Bialbero AR01608 (1.779 cm³)',
+    value: '4 cilindri in linea • 122 CV DIN a 5.500 giri/min',
+    detail:
+      'Alesaggio 80,0 x Corsa 88,5 mm • Rapporto 9,5:1 • Canna umida in ghisa • Coppa alettata Serie 116',
+  },
+  {
+    label: 'Alimentazione & Distribuzione',
+    value: '2x Carburatori Doppio Corpo Weber 40 DCOE / Dell’Orto',
+    detail:
+      'Testata cross-flow a 80° • Doppia catena duplex • Filtro aria cilindrico nero con recupero vapori olio',
+  },
+  {
     label: 'Frontale & Gruppi Ottici',
     value: 'Quattro Proiettori Circolari Carello',
     detail:
-      'Calandra nera con doppi baffi cromati GTV, Scudetto Alfa Romeo e paraurti con rostri in gomma',
-  },
-  {
-    label: 'Motore Bialbero Alfa Romeo',
-    value: '4 cilindri in linea • Doppio albero a camme in testa',
-    detail:
-      'Basamento e testata in lega leggera • 2 carburatori doppio corpo Dell’Orto / Weber',
+      'Calandra nera con doppi baffi cromati GTV, Scudetto Alfa Romeo e cofano ad apertura controvento',
   },
   {
     label: 'Architettura Transaxle',
@@ -95,15 +116,9 @@ const HISTORICAL_SPECS = [
   },
   {
     label: 'Sospensioni & Freni',
-    value: 'Ponte De Dion con parallelogramma di Watt',
+    value: 'Quadrilateri con barre di torsione + Ponte De Dion',
     detail:
-      '4 freni a disco (posteriori entrobordo all’uscita del differenziale)',
-  },
-  {
-    label: 'Stile & Dettagli Carrozzeria',
-    value: 'Giorgetto Giugiaro • Italdesign',
-    detail:
-      'Coupé Fastback coda tronca • Montante C con fregio GTV • Cerchi a 16 fori con coprimozzo cromato',
+      'Assenza di duomi McPherson nel vano motore • 4 freni a disco (posteriori entrobordo)',
   },
 ];
 
@@ -155,6 +170,12 @@ export default function App() {
   const [showRealPhoto, setShowRealPhoto] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [hudHidden, setHudHidden] = useState(false);
+  const [hoodOpen, setHoodOpen] = useState(() => {
+    try {
+      return new URL(window.location.href).searchParams.get('preset') === 'engine';
+    } catch {}
+    return false;
+  });
 
   // Synthesize twin-cam Bialbero engine sound when enabled
   useEngineSound();
@@ -184,6 +205,7 @@ export default function App() {
   const handleEnterDrive = () => {
     driveStore.setMode('drive');
     setSceneMode('drive');
+    setHoodOpen(false);
     setAutoRotate(false);
     setShowSpecs(false);
     setShowRealPhoto(false);
@@ -196,6 +218,10 @@ export default function App() {
 
   const handleSelectCameraPreset = (preset) => {
     setActivePresetId(preset.id);
+    if (preset.id === 'engine') {
+      setHoodOpen(true);
+      setAutoRotate(false);
+    }
     setCameraRequest({
       presetId: preset.id,
       position: preset.position,
@@ -204,7 +230,55 @@ export default function App() {
     });
   };
 
+  const handleToggleEngineBay = () => {
+    const enginePreset = CAMERA_PRESETS.find((p) => p.id === 'engine');
+    if (!hoodOpen || activePresetId !== 'engine') {
+      setHoodOpen(true);
+      setAutoRotate(false);
+      if (enginePreset) {
+        setActivePresetId('engine');
+        setCameraRequest({
+          presetId: 'engine',
+          position: enginePreset.position,
+          target: enginePreset.target,
+          timestamp: Date.now(),
+        });
+      }
+    } else {
+      setHoodOpen(false);
+      const heroPreset =
+        CAMERA_PRESETS.find((p) => p.id === 'hero') || CAMERA_PRESETS[0];
+      setActivePresetId(heroPreset.id);
+      setCameraRequest({
+        presetId: heroPreset.id,
+        position: heroPreset.position,
+        target: heroPreset.target,
+        timestamp: Date.now(),
+      });
+    }
+  };
+
+  // Dedicated keyboard shortcut ('M' for Motore or 'E' for Engine) to open the controvento hood and zoom in
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (sceneMode !== 'showroom' || isEditingDedication) return;
+      if (
+        e.target &&
+        (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')
+      ) {
+        return;
+      }
+      if (e.key === 'm' || e.key === 'M' || e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        handleToggleEngineBay();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
+
   const handleResetView = () => {
+    setHoodOpen(false);
     const frontPreset =
       CAMERA_PRESETS.find((p) => p.id === 'front') || CAMERA_PRESETS[0];
     setActivePresetId(frontPreset.id);
@@ -242,6 +316,7 @@ export default function App() {
           activePaintId={activePaintId}
           cameraRequest={cameraRequest}
           sceneMode={sceneMode}
+          hoodOpen={hoodOpen}
         />
       </div>
 
@@ -363,6 +438,21 @@ export default function App() {
               <span>In Corsa</span>
             </button>
 
+            {/* Dedicated Action: Open Controvento Hood & Zoom on 3D Bialbero AR01608 Engine (Tasto 'M') */}
+            <button
+              type="button"
+              onClick={handleToggleEngineBay}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 ${
+                hoodOpen && activePresetId === 'engine'
+                  ? 'bg-alfa-gold text-zinc-950 shadow-[0_0_18px_rgba(197,160,89,0.65)] scale-[1.02]'
+                  : `${glassClass} ring-1 ring-alfa-gold/50 text-alfa-gold hover:bg-alfa-gold/15`
+              }`}
+              title="Apri il cofano controvento e centra la visuale sul motore Bialbero AR01608 (Tasto M)"
+            >
+              <Wrench className="w-4 h-4" />
+              <span>{hoodOpen && activePresetId === 'engine' ? 'Chiudi Cofano' : 'Motore 3D (M)'}</span>
+            </button>
+
             <button
               type="button"
               onClick={() => {
@@ -378,7 +468,7 @@ export default function App() {
               }`}
             >
               <ImageIcon className="w-4 h-4 text-alfa-gold" />
-              <span>Foto Reali (5)</span>
+              <span>Foto Reali ({REAL_PHOTOS.length})</span>
             </button>
 
             <button
@@ -494,7 +584,7 @@ export default function App() {
           </div>
 
           {/* Thumbnail selector strip */}
-          <div className="grid grid-cols-5 gap-1.5 mb-3">
+          <div className="grid grid-cols-7 gap-1.5 mb-3">
             {REAL_PHOTOS.map((photo, idx) => (
               <button
                 key={photo.src}
@@ -703,6 +793,23 @@ export default function App() {
                 >
                   <RotateCcw className="w-3.5 h-3.5 text-alfa-gold" />
                   <span>Reset Vista</span>
+                </button>
+
+                {/* Open/Close Controvento Hood Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setHoodOpen((prev) => !prev)}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                    hoodOpen
+                      ? 'bg-alfa-gold text-zinc-950 font-semibold shadow-[0_0_16px_rgba(197,160,89,0.5)]'
+                      : isLight
+                      ? 'bg-zinc-900/10 text-zinc-800 hover:bg-zinc-900/15'
+                      : 'bg-white/10 text-zinc-200 hover:bg-white/15'
+                  }`}
+                  title="Apri o chiudi il cofano anteriore controvento in qualsiasi inquadratura"
+                >
+                  <Wrench className="w-3.5 h-3.5" />
+                  <span>{hoodOpen ? 'Cofano Aperto' : 'Apri Cofano'}</span>
                 </button>
 
                 {/* In Corsa (Running Scene Animation Mode) */}

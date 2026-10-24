@@ -25,7 +25,7 @@ export const DRIVERS = [
   {
     id: 'bond',
     name: 'James Bond',
-    subtitle: 'Agente 007 • MI6',
+    subtitle: 'Papà in versione Agente 007 • Smoking & Piazzetta',
     tagline: '«Bialbero 1.8 a doppi carburatori… agitato, non mescolato.»',
     accentColor: '#38bdf8',
     badge: '007',
@@ -35,7 +35,7 @@ export const DRIVERS = [
   {
     id: 'spiderman',
     name: 'L’Uomo Ragno',
-    subtitle: 'Amichevole Ragno di Quartiere',
+    subtitle: 'Papà in versione Amichevole Ragno di Quartiere',
     tagline: '«Il mio senso di ragno pizzica… attenzione alle 500 in corsia!»',
     accentColor: '#ef4444',
     badge: 'MARVEL',
@@ -45,7 +45,7 @@ export const DRIVERS = [
   {
     id: 'diabolik',
     name: 'Diabolik',
-    subtitle: 'Il Re del Terrore',
+    subtitle: 'Papà in versione Il Re del Terrore',
     tagline: '«Ginko non ci prenderà mai su questa GT disegnata da Giugiaro.»',
     accentColor: '#818cf8',
     badge: 'COLPO',
@@ -55,7 +55,7 @@ export const DRIVERS = [
   {
     id: 'callaghan',
     name: 'Isp. Callaghan',
-    subtitle: 'Clint Eastwood • Dirty Harry',
+    subtitle: 'Papà in versione Dirty Harry • Taglio Anni ’80 & .44 Magnum',
     tagline: '«Coraggio… fatti sotto e fammi contento con quei 122 cavalli.»',
     accentColor: '#f97316',
     badge: 'MAGNUM',
@@ -65,7 +65,7 @@ export const DRIVERS = [
   {
     id: 'mg',
     name: 'Maria Grazia (MG)',
-    subtitle: 'La Moglie • Special Guest',
+    subtitle: 'La Moglie • Il Contraltare Ufficiale',
     tagline: '«Ma chi ha versato tutto quest’olio sull’asfalto?! Tenetevi forte!»',
     accentColor: '#14b8a6',
     badge: '★ EASTER EGG OLIO',

@@ -48,8 +48,11 @@ class MeshBuilder:
             if flip:
                 N = -N
             lengths = np.linalg.norm(N, axis=-1, keepdims=True)
+            bad_mask = (lengths[..., 0] < 1e-8) | np.isnan(lengths[..., 0])
             lengths[lengths < 1e-8] = 1.0
             N = N / lengths
+            if np.any(bad_mask):
+                N[bad_mask] = np.array([0.0, 1.0, 0.0], dtype=np.float32)
         else:
             N = np.asarray(grid_norm, dtype=np.float32)
             if flip:
@@ -164,10 +167,13 @@ def _emit_tri(mb, a, b, c, want):
     """Append a flat-shaded triangle whose normal is forced to point along `want`."""
     a, b, c = (np.asarray(v, dtype=np.float64) for v in (a, b, c))
     nrm = np.cross(b - a, c - a)
+    nrm_len = np.linalg.norm(nrm)
+    if nrm_len < 1e-10:
+        return
     if np.dot(nrm, want) < 0:
         b, c = c, b
         nrm = -nrm
-    nrm = nrm / (np.linalg.norm(nrm) + 1e-12)
+    nrm = nrm / nrm_len
     off = len(mb.positions)
     for v in (a, b, c):
         mb.positions.append(v.tolist())
@@ -786,7 +792,9 @@ def build_alfetta_gtv():
         Builds a distinct side window pane (glass mesh + 3D perimeter chrome molding + black weatherstrip seal)
         bounded horizontally by [x_bot_0..x_bot_1] along win_sill_y(x) and [x_top_0..x_top_1] along win_arch_y(x).
         """
-        u_vals = np.linspace(0.0, 1.0, nu)
+        u_min = 0.012 if is_pointed_front else 0.0
+        u_max = 0.985 if is_pointed_rear else 1.0
+        u_vals = np.linspace(u_min, u_max, nu)
         v_vals = np.linspace(0.0, 1.0, nv)
         glass_grid = np.zeros((nu, nv, 3), dtype=np.float32)
 
@@ -814,16 +822,18 @@ def build_alfetta_gtv():
             xt = x_top_0 + u * (x_top_1 - x_top_0)
             yb = win_sill_y(xb)
             yt = win_arch_y(xt)
+            span_y = max(0.001, yt - yb)
+            rb_tap = min(1.0, max(0.0, (span_y - 0.006) / 0.012))
 
             bot_cr[i, 0] = greenhouse_xyz_from_xy(xb, yb - 0.0025, side_q, offset_z=0.0026)
-            bot_cr[i, 1] = greenhouse_xyz_from_xy(xb, yb + 0.0030, side_q, offset_z=0.0026)
-            bot_rb[i, 0] = greenhouse_xyz_from_xy(xb, yb + 0.0025, side_q, offset_z=0.0018)
-            bot_rb[i, 1] = greenhouse_xyz_from_xy(xb, yb + 0.0055, side_q, offset_z=0.0018)
+            bot_cr[i, 1] = greenhouse_xyz_from_xy(xb, yb + 0.0030 * rb_tap, side_q, offset_z=0.0026)
+            bot_rb[i, 0] = greenhouse_xyz_from_xy(xb, yb + 0.0020 * rb_tap, side_q, offset_z=0.0018)
+            bot_rb[i, 1] = greenhouse_xyz_from_xy(xb, yb + 0.0052 * rb_tap, side_q, offset_z=0.0018)
 
-            top_cr[i, 0] = greenhouse_xyz_from_xy(xt, yt - 0.0030, side_q, offset_z=0.0026)
+            top_cr[i, 0] = greenhouse_xyz_from_xy(xt, yt - 0.0030 * rb_tap, side_q, offset_z=0.0026)
             top_cr[i, 1] = greenhouse_xyz_from_xy(xt, yt + 0.0025, side_q, offset_z=0.0026)
-            top_rb[i, 0] = greenhouse_xyz_from_xy(xt, yt - 0.0055, side_q, offset_z=0.0018)
-            top_rb[i, 1] = greenhouse_xyz_from_xy(xt, yt - 0.0025, side_q, offset_z=0.0018)
+            top_rb[i, 0] = greenhouse_xyz_from_xy(xt, yt - 0.0052 * rb_tap, side_q, offset_z=0.0018)
+            top_rb[i, 1] = greenhouse_xyz_from_xy(xt, yt - 0.0020 * rb_tap, side_q, offset_z=0.0018)
 
         m_chrome.add_grid(bot_cr, flip=(side_q < 0))
         m_chrome.add_grid(top_cr, flip=(side_q < 0))
@@ -932,6 +942,15 @@ def build_alfetta_gtv():
             add_cpillar_stroke(p_gtv_top_r, (0.674, 0.178), w_s * 0.85, side, mat_s, offset_z=oz_s, n_seg=4)
 
         # Bold geometric "G T V" lettering inside the lower half of the triangle
+        # On the right side (side < 0, viewed from -Z), left-to-right on screen is decreasing X,
+        # so we mirror X around x_mid = 0.676 and follow the triangle baseline slope (0.040) so it reads "GTV" on both sides!
+        def map_gtv_pt(pt):
+            if side > 0:
+                return pt
+            x_new = 1.352 - pt[0]
+            y_new = pt[1] + (x_new - pt[0]) * 0.040
+            return (x_new, y_new)
+
         for s0, s1 in (
             # Letter 'G'
             ((0.650, 0.161), (0.618, 0.160)),
@@ -946,8 +965,10 @@ def build_alfetta_gtv():
             ((0.702, 0.164), (0.718, 0.150)),
             ((0.718, 0.150), (0.734, 0.165)),
         ):
-            add_cpillar_stroke(s0, s1, 0.0032, side, m_rubber, offset_z=0.0026, n_seg=5)
-            add_cpillar_stroke(s0, s1, 0.0016, side, m_chrome, offset_z=0.0031, n_seg=5)
+            p0_m = map_gtv_pt(s0)
+            p1_m = map_gtv_pt(s1)
+            add_cpillar_stroke(p0_m, p1_m, 0.0032, side, m_rubber, offset_z=0.0026, n_seg=5)
+            add_cpillar_stroke(p0_m, p1_m, 0.0016, side, m_chrome, offset_z=0.0031, n_seg=5)
 
         # Small Black Cylindrical Fastener Pin on C-pillar above the rear slope of the GTV triangle
         pin_pt = greenhouse_xyz_from_xy(0.758, 0.172, side, offset_z=0.001)

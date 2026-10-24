@@ -17,7 +17,7 @@ import { driveStore } from './drive/driveStore';
 import { DriveWorld } from './drive/DriveWorld';
 import { DriveCameraDirector } from './drive/DriveCameraDirector';
 
-const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=19';
+const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=20';
 const ENGINE_MODEL_PATH = '/models/alfetta-bialbero-engine.glb?v=3';
 
 export const PAINT_FINISHES = [
@@ -193,11 +193,11 @@ function createShowroomMaterials(selectedPaint) {
     Chrome: new THREE.MeshPhysicalMaterial({
       name: 'Chrome',
       color: new THREE.Color('#f4f7fb'),
-      metalness: 0.96,
-      roughness: 0.06,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.04,
-      envMapIntensity: 1.55,
+      metalness: 0.94,
+      roughness: 0.09,
+      clearcoat: 0.9,
+      clearcoatRoughness: 0.09,
+      envMapIntensity: 1.4,
       side: THREE.DoubleSide,
     }),
     Glass: new THREE.MeshPhysicalMaterial({
@@ -206,10 +206,10 @@ function createShowroomMaterials(selectedPaint) {
       transparent: true,
       opacity: 0.62,
       metalness: 0.15,
-      roughness: 0.04,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.03,
-      envMapIntensity: 1.45,
+      roughness: 0.08,
+      clearcoat: 0.9,
+      clearcoatRoughness: 0.08,
+      envMapIntensity: 1.35,
       side: THREE.DoubleSide,
     }),
     RubberBlack: new THREE.MeshStandardMaterial({
@@ -1164,23 +1164,53 @@ function AlfaRomeoEmblems({ wheelCapRefs }) {
     tex.anisotropy = 8;
     tex.needsUpdate = true;
 
-    // Conformal 3D quad matching the exact Pezzo 3 rear quarter glass vertices (BL, BR, TL, TR) on side +Z
+    // Conformal 20x8 3D curved surface grid matching the exact Pezzo 3 rear quarter glass curvature (+0.0028 outside glass)
     const geo = new THREE.BufferGeometry();
-    const positions = new Float32Array([
-      0.235, 0.1362, 0.3353, // 0: Bottom-Left (along straight sill of Pezzo 3)
-      0.440, 0.1426, 0.3335, // 1: Bottom-Right (just before lower-rear upward elbow)
-      0.235, 0.1742, 0.3197, // 2: Top-Left
-      0.440, 0.1806, 0.3131, // 3: Top-Right
-    ]);
-    const uvs = new Float32Array([
-      0, 0,
-      1, 0,
-      0, 1,
-      1, 1,
-    ]);
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-    geo.setIndex([0, 1, 3, 0, 3, 2]);
+    const nu = 20;
+    const nv = 8;
+    const posArr = [];
+    const uvArr = [];
+    const idxArr = [];
+
+    for (let j = 0; j < nv; j++) {
+      const v = j / (nv - 1);
+      for (let i = 0; i < nu; i++) {
+        const u = i / (nu - 1);
+        const x = 0.235 + u * (0.440 - 0.235);
+        const yBot = 0.1362 + u * (0.1426 - 0.1362);
+        const yTop = 0.1742 + u * (0.1806 - 0.1742);
+        const y = yBot + v * (yTop - yBot);
+
+        // Exact greenhouse_xyz_from_xy(x, y, +1.0, offset_z=0.0028) formula from CAD generator
+        const ys = 0.12973 + u * (0.13506 - 0.12973);
+        const wEdge = Math.max(0.0, (x - 0.245) / (0.855 - 0.245));
+        const yEdge =
+          x <= 0.245
+            ? 0.2695
+            : 0.2695 - (0.2695 - 0.140) * (0.22 * wEdge + 0.78 * Math.pow(wEdge, 1.85));
+        const ty = Math.max(0.0, Math.min(1.0, (y - ys) / Math.max(0.012, yEdge - ys)));
+        const zSill = 0.3391;
+        const zRoof = 0.286 - 0.042 * Math.pow(x - 0.06, 2);
+        const z = zSill + (zRoof - zSill) * Math.pow(ty, 0.90) + 0.0028;
+
+        posArr.push(x, y, z);
+        uvArr.push(u, v);
+      }
+    }
+
+    for (let j = 0; j < nv - 1; j++) {
+      for (let i = 0; i < nu - 1; i++) {
+        const a = j * nu + i;
+        const b = a + 1;
+        const c = a + nu;
+        const d = c + 1;
+        idxArr.push(a, b, d, a, d, c);
+      }
+    }
+
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(posArr, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvArr, 2));
+    geo.setIndex(idxArr);
     geo.computeVertexNormals();
 
     return { windowStickersTexture: tex, windowStickersGeo: geo };
@@ -1228,14 +1258,17 @@ function AlfaRomeoEmblems({ wheelCapRefs }) {
       </mesh>
 
       {/* Historical Vintage Club & ASI Decals on Left Rear Pointed Quarter Window (+Z) */}
-      <mesh geometry={windowStickersGeo}>
+      <mesh geometry={windowStickersGeo} renderOrder={2}>
         <meshPhysicalMaterial
           map={windowStickersTexture}
           transparent
           alphaTest={0.08}
           roughness={0.18}
           metalness={0.05}
-          clearcoat={1.0}
+          clearcoat={0.9}
+          polygonOffset
+          polygonOffsetFactor={-4}
+          polygonOffsetUnits={-4}
           side={THREE.DoubleSide}
         />
       </mesh>

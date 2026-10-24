@@ -190,6 +190,15 @@ export default function App() {
     } catch {}
     return false;
   });
+  const [selectedDriver, setSelectedDriver] = useState(
+    driveStore.selectedDriver || 'elvis'
+  );
+
+  useEffect(() => {
+    return driveStore.subscribe((store) => {
+      setSelectedDriver(store.selectedDriver);
+    });
+  }, []);
 
   // Synthesize twin-cam Bialbero engine sound when enabled
   useEngineSound();
@@ -331,6 +340,7 @@ export default function App() {
           cameraRequest={cameraRequest}
           sceneMode={sceneMode}
           hoodOpen={hoodOpen}
+          selectedDriver={selectedDriver}
         />
       </div>
 

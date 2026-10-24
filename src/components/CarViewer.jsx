@@ -16,6 +16,7 @@ import {
 import { driveStore } from './drive/driveStore';
 import { DriveWorld } from './drive/DriveWorld';
 import { DriveCameraDirector } from './drive/DriveCameraDirector';
+import { DriverCharacter3D } from './drive/DriverCharacter3D';
 
 const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=21';
 const ENGINE_MODEL_PATH = '/models/alfetta-bialbero-engine.glb?v=3';
@@ -2088,7 +2089,12 @@ function BialberoEngineDetails({ hoodOpen }) {
  * RubberBlack, AlloyRim, HeadlightLens, AmberLens, RedTaillight, Interior),
  * plus the 3D Bialbero AR01608 engine bay and articulated controvento hood.
  */
-function AlfaRomeoModel({ activePaintId, sceneMode, hoodOpen = false }) {
+function AlfaRomeoModel({
+  activePaintId,
+  sceneMode,
+  hoodOpen = false,
+  selectedDriver = 'elvis',
+}) {
   const { scene } = useGLTF(MODEL_PATH);
   const { scene: engineScene } = useGLTF(ENGINE_MODEL_PATH);
   const wheelNodesRef = useRef([]);
@@ -2330,6 +2336,9 @@ function AlfaRomeoModel({ activePaintId, sceneMode, hoodOpen = false }) {
             <VintageLicensePlates />
             <AlfaRomeoEmblems wheelCapRefs={wheelCapRefs} />
             <CockpitInstrumentsAndDetails />
+            {sceneMode === 'drive' && (
+              <DriverCharacter3D driverId={selectedDriver} pose="driving" />
+            )}
           </group>
         </group>
       </Center>
@@ -2527,6 +2536,7 @@ export default function CarViewer({
   cameraRequest,
   sceneMode = 'showroom',
   hoodOpen = false,
+  selectedDriver = 'elvis',
 }) {
   const controlsRef = useRef(null);
   const isLight = lightingMode === 'studio';
@@ -2569,6 +2579,7 @@ export default function CarViewer({
                 activePaintId={activePaintId}
                 sceneMode={sceneMode}
                 hoodOpen={false}
+                selectedDriver={selectedDriver}
               />
               <DriveWorld lightingMode={lightingMode} />
               <DriveCameraDirector controlsRef={controlsRef} />

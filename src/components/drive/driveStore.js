@@ -27,7 +27,8 @@ class DriveStore {
     this.lastUserInteraction = 0;
 
     // --- Minigame 3-Lane Endless Runner State ---
-    this.gameState = 'playing'; // 'playing' | 'gameover'
+    this.selectedDriver = 'elvis'; // 'elvis' | 'tex' | 'bond' | 'spiderman' | 'diabolik' | 'callaghan' | 'mg'
+    this.gameState = 'selecting';  // 'selecting' | 'playing' | 'gameover'
     this.targetLane = 0;        // -1: Left, 0: Center, 1: Right
     this.carX = 0;              // Continuous lateral position
     this.carRoll = 0;           // Body roll / suspension banking (radians)
@@ -78,7 +79,7 @@ class DriveStore {
     if (this.mode === mode) return;
     this.mode = mode;
     if (mode === 'drive') {
-      this.resetGame();
+      this.resetGame('selecting');
       this.headlightsOn = true;
     } else {
       this.cruiseSpeed = null;
@@ -86,14 +87,32 @@ class DriveStore {
     this.notify();
   }
 
-  resetGame() {
-    this.gameState = 'playing';
+  selectDriver(driverId) {
+    this.selectedDriver = driverId;
+    this.notify();
+  }
+
+  openDriverSelect() {
+    this.gameState = 'selecting';
+    this.speedKmh = 0;
+    this.notify();
+  }
+
+  startRaceWithDriver(driverId) {
+    if (driverId) {
+      this.selectedDriver = driverId;
+    }
+    this.resetGame('playing');
+  }
+
+  resetGame(initialState = 'playing') {
+    this.gameState = initialState;
     this.targetLane = 0;
     this.carX = 0;
     this.carRoll = 0;
     this.carYaw = 0;
     this.skidTimer = 0;
-    this.speedKmh = BASE_SPEED;
+    this.speedKmh = initialState === 'playing' ? BASE_SPEED : 0;
     this.score = 0;
     this.coinsCollected = 0;
     this.distanceMeters = 0;
@@ -103,7 +122,23 @@ class DriveStore {
     this.obstacles = [];
     this.coins = [];
     this.powerups = [];
-    this.nextSpawnZ = 22;
+    this.nextSpawnZ = 18;
+
+    // Easter Egg MG: Pre-populate continuous oil slicks across all 3 lanes right from the start!
+    if (initialState === 'playing' && this.selectedDriver === 'mg') {
+      for (let z = 14; z <= 50; z += 7.5) {
+        [-1, 0, 1].forEach((lane, idx) => {
+          this.obstacles.push({
+            id: `mg_init_oil_${z}_${lane}`,
+            type: 'oil',
+            lane,
+            z: z + (idx % 2) * 1.8,
+            active: true,
+          });
+        });
+      }
+    }
+
     this.notify();
   }
 
@@ -230,6 +265,12 @@ class DriveStore {
         this.speedKmh = Math.max(0, this.speedKmh - 45.0 * dt);
       }
       this.rpm = 0;
+      return;
+    }
+
+    if (this.gameState === 'selecting') {
+      this.speedKmh = 0;
+      this.rpm = 950;
       return;
     }
 
@@ -429,6 +470,28 @@ class DriveStore {
           });
         }
       });
+    }
+
+    // Easter Egg MG ("Maria Grazia"): Every lane continuously has oil slicks!
+    if (this.selectedDriver === 'mg') {
+      const zOffsets = [-5, 1, 7, 13];
+      for (const dz of zOffsets) {
+        const zOil = spawnZ + dz;
+        for (const lane of lanes) {
+          const hasCloseObstacle = this.obstacles.some(
+            (o) => o.lane === lane && Math.abs(o.z - zOil) < 3.8
+          );
+          if (!hasCloseObstacle) {
+            this.obstacles.push({
+              id: `mg_oil_${Date.now()}_${lane}_${dz}_${Math.random()}`,
+              type: 'oil',
+              lane,
+              z: zOil,
+              active: true,
+            });
+          }
+        }
+      }
     }
   }
 }

@@ -3,8 +3,10 @@
 // touch buttons + swipe controls, and Game Over dialog (Subway Surfers pure style).
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Volume2, VolumeX, ArrowLeft, Trophy, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { Volume2, VolumeX, ArrowLeft, Trophy, ChevronLeft, ChevronRight, RotateCcw, Users } from 'lucide-react';
 import { driveStore } from './driveStore';
+import { getDriverById } from './driversData';
+import { DriverSelectModal } from './DriverSelectModal';
 
 export function Speedometer({ onExitDrive }) {
   const [speed, setSpeed] = useState(0);
@@ -14,7 +16,8 @@ export function Speedometer({ onExitDrive }) {
   const [bestScore, setBestScore] = useState(driveStore.bestScore);
   const [coins, setCoins] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(driveStore.soundEnabled);
-  const [gameState, setGameState] = useState('playing');
+  const [gameState, setGameState] = useState(driveStore.gameState || 'selecting');
+  const [selectedDriver, setSelectedDriver] = useState(driveStore.selectedDriver || 'elvis');
   const [activeTex, setActiveTex] = useState(0);
   const [activeElvis, setActiveElvis] = useState(0);
   const [activeLane, setActiveLane] = useState(0);
@@ -38,6 +41,7 @@ export function Speedometer({ onExitDrive }) {
         setCoins(driveStore.coinsCollected);
         setSoundEnabled(driveStore.soundEnabled);
         setGameState(driveStore.gameState);
+        setSelectedDriver(driveStore.selectedDriver);
         setActiveTex(driveStore.activePowerups.tex);
         setActiveElvis(driveStore.activePowerups.elvis);
         setActiveLane(driveStore.targetLane);
@@ -47,10 +51,11 @@ export function Speedometer({ onExitDrive }) {
 
     // Keyboard controls for 3 lanes
     const handleKeyDown = (e) => {
+      if (driveStore.gameState === 'selecting') return;
       if (driveStore.gameState === 'gameover') {
         if (e.key === ' ' || e.key === 'Enter') {
           e.preventDefault();
-          driveStore.resetGame();
+          driveStore.resetGame('playing');
         }
         return;
       }
@@ -147,8 +152,19 @@ export function Speedometer({ onExitDrive }) {
           </div>
         </div>
 
-        {/* Sound Toggle */}
+        {/* Driver Switch & Sound Toggle */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => driveStore.openDriverSelect()}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/20 bg-black/60 backdrop-blur-md text-xs font-mono text-white hover:border-amber-400 hover:text-amber-300 transition-all shadow-xl active:scale-95"
+            title="Cambia guidatore"
+          >
+            <Users className="w-4 h-4 text-amber-400" />
+            <span className="hidden sm:inline font-bold">
+              {getDriverById(selectedDriver).name}
+            </span>
+          </button>
+
           <button
             onClick={() => driveStore.toggleSound()}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border backdrop-blur-md text-xs font-mono tracking-wider transition-all shadow-xl active:scale-95 ${
@@ -168,8 +184,16 @@ export function Speedometer({ onExitDrive }) {
         </div>
       </div>
 
-      {/* Active Power-Up Timers Banners (Tex Willer & Elvis Presley) */}
+      {/* Active Power-Up Timers Banners (Tex Willer & Elvis Presley) + MG Oil Chaos Banner */}
       <div className="flex flex-col items-center gap-2 w-full max-w-sm mx-auto pointer-events-none mt-2">
+        {selectedDriver === 'mg' && gameState === 'playing' && (
+          <div className="w-full flex items-center justify-center gap-2 px-4 py-1.5 rounded-xl border border-teal-400/60 bg-teal-950/80 backdrop-blur-md shadow-lg text-center">
+            <span className="text-sm">🛢️</span>
+            <span className="text-[11px] font-bold font-mono text-teal-200 uppercase tracking-wider">
+              MODALITÀ MG • CHIAZZE D’OLIO SU OGNI CORSIA!
+            </span>
+          </div>
+        )}
         {activeTex > 0 && (
           <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-950/80 via-black/80 to-amber-950/80 backdrop-blur-md shadow-amber-500/30 shadow-lg animate-pulse">
             <div className="flex items-center gap-2">
@@ -365,23 +389,37 @@ export function Speedometer({ onExitDrive }) {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 w-full">
+            <div className="flex flex-col sm:flex-row gap-2.5 w-full">
               <button
-                onClick={() => driveStore.resetGame()}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl border border-amber-400 bg-amber-500 hover:bg-amber-400 text-black font-mono text-sm font-bold uppercase tracking-wider shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+                onClick={() => driveStore.resetGame('playing')}
+                className="flex-1 flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl border border-amber-400 bg-amber-500 hover:bg-amber-400 text-black font-mono text-sm font-bold uppercase tracking-wider shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
               >
                 <RotateCcw className="w-4 h-4" />
-                <span>Riprova (Spazio)</span>
+                <span>Riprova</span>
+              </button>
+
+              <button
+                onClick={() => driveStore.openDriverSelect()}
+                className="px-4 py-3.5 rounded-2xl border border-amber-400/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-mono text-xs font-bold uppercase tracking-wider transition-all active:scale-95"
+              >
+                Cambia Pilota
               </button>
 
               <button
                 onClick={onExitDrive}
-                className="px-5 py-3.5 rounded-2xl border border-white/20 bg-white/10 hover:bg-white/20 text-white font-mono text-xs uppercase tracking-wider transition-all active:scale-95"
+                className="px-4 py-3.5 rounded-2xl border border-white/20 bg-white/10 hover:bg-white/20 text-white font-mono text-xs uppercase tracking-wider transition-all active:scale-95"
               >
                 Showroom
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Arcade Character Selection Screen */}
+      {gameState === 'selecting' && (
+        <div className="pointer-events-auto">
+          <DriverSelectModal onCloseToShowroom={onExitDrive} />
         </div>
       )}
     </div>

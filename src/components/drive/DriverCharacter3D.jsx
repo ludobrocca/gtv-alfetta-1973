@@ -78,6 +78,11 @@ function TorsoAndArms({
   jacketColor = '#1e293b',
   shirtColor = '#f8fafc',
   handColor = '#f1c29b',
+  pantsColor = '#1e293b',
+  beltColor = '#111827',
+  buckleColor = '#fbbf24',
+  shoeColor = '#0f172a',
+  flareLegs = false,
   pose = 'preview',
   children,
 }) {
@@ -85,7 +90,7 @@ function TorsoAndArms({
   return (
     <group>
       {/* Upper Torso */}
-      <mesh position={[0, 0.38, 0]}>
+      <mesh position={[0, 0.38, 0]} castShadow>
         <cylinderGeometry args={[0.28, 0.22, 0.62, 8]} />
         <meshStandardMaterial color={jacketColor} flatShading roughness={0.68} />
       </mesh>
@@ -104,21 +109,63 @@ function TorsoAndArms({
           rotation={
             isDriving
               ? [-1.05, s * -0.22, s * 0.12]
-              : [0.18, 0, s * -0.18]
+              : [0.12, 0, s * -0.16]
           }
         >
           {/* Upper & Forearm */}
-          <mesh position={[0, -0.24, isDriving ? 0.12 : 0.04]} rotation={[isDriving ? -0.35 : 0, 0, 0]}>
-            <cylinderGeometry args={[0.075, 0.062, 0.52, 6]} />
+          <mesh position={[0, -0.24, isDriving ? 0.12 : 0.03]} rotation={[isDriving ? -0.35 : -0.12, 0, 0]} castShadow>
+            <cylinderGeometry args={[0.078, 0.064, 0.52, 6]} />
             <meshStandardMaterial color={jacketColor} flatShading roughness={0.7} />
           </mesh>
           {/* Hand */}
-          <mesh position={[0, -0.50, isDriving ? 0.22 : 0.06]}>
+          <mesh position={[0, -0.50, isDriving ? 0.22 : 0.07]}>
             <dodecahedronGeometry args={[0.068, 0]} />
             <meshStandardMaterial color={handColor} flatShading roughness={0.6} />
           </mesh>
         </group>
       ))}
+
+      {/* Full-Body Lower Half (Belt, Hips, Legs & Boots) in Showcase Preview */}
+      {!isDriving && (
+        <group>
+          {/* Belt & Buckle */}
+          <mesh position={[0, 0.06, 0]}>
+            <cylinderGeometry args={[0.225, 0.23, 0.07, 8]} />
+            <meshStandardMaterial color={beltColor} flatShading roughness={0.5} />
+          </mesh>
+          <mesh position={[0, 0.06, 0.225]}>
+            <boxGeometry args={[0.09, 0.065, 0.03]} />
+            <meshStandardMaterial color={buckleColor} metalness={0.8} roughness={0.25} flatShading />
+          </mesh>
+
+          {/* Pelvis / Hips */}
+          <mesh position={[0, -0.05, 0]}>
+            <cylinderGeometry args={[0.225, 0.21, 0.16, 8]} />
+            <meshStandardMaterial color={pantsColor} flatShading roughness={0.72} />
+          </mesh>
+
+          {/* Left & Right Legs + Boots */}
+          {[-1, 1].map((s) => (
+            <group key={s} position={[s * 0.115, -0.12, 0]} rotation={[0, s * -0.05, s * -0.025]}>
+              {/* Thigh */}
+              <mesh position={[0, -0.19, 0]} castShadow>
+                <cylinderGeometry args={[0.098, 0.082, 0.38, 7]} />
+                <meshStandardMaterial color={pantsColor} flatShading roughness={0.72} />
+              </mesh>
+              {/* Calf / Lower Trouser */}
+              <mesh position={[0, -0.54, 0]} castShadow>
+                <cylinderGeometry args={[0.080, flareLegs ? 0.115 : 0.068, 0.36, 7]} />
+                <meshStandardMaterial color={pantsColor} flatShading roughness={0.72} />
+              </mesh>
+              {/* Boot / Shoe */}
+              <mesh position={[0, -0.75, 0.04]} castShadow>
+                <boxGeometry args={[0.11, 0.09, 0.21]} />
+                <meshStandardMaterial color={shoeColor} flatShading roughness={0.45} />
+              </mesh>
+            </group>
+          ))}
+        </group>
+      )}
 
       {children}
     </group>
@@ -135,6 +182,11 @@ function ElvisModel({ pose }) {
         jacketColor="#f8fafc"
         shirtColor="#e11d48"
         handColor="#f1c29b"
+        pantsColor="#f8fafc"
+        beltColor="#fbbf24"
+        buckleColor="#f59e0b"
+        shoeColor="#f8fafc"
+        flareLegs
         pose={pose}
       >
         {/* High Vegas Popped Collar */}
@@ -194,6 +246,10 @@ function TexModel({ pose }) {
         jacketColor="#eab308"
         shirtColor="#ca8a04"
         handColor="#e6b08a"
+        pantsColor="#1e3a8a"
+        beltColor="#451a03"
+        buckleColor="#cbd5e1"
+        shoeColor="#5c2d0c"
         pose={pose}
       >
         {/* Black Neck Bandana & Knot */}
@@ -303,6 +359,10 @@ function SpidermanModel({ pose }) {
         jacketColor="#dc2626"
         shirtColor="#1d4ed8"
         handColor="#dc2626"
+        pantsColor="#1d4ed8"
+        beltColor="#dc2626"
+        buckleColor="#dc2626"
+        shoeColor="#dc2626"
         pose={pose}
       >
         {/* Blue Spider-Suit Side Panels */}
@@ -365,6 +425,10 @@ function DiabolikModel({ pose }) {
         jacketColor="#0a0d14"
         shirtColor="#111827"
         handColor="#0a0d14"
+        pantsColor="#0a0d14"
+        beltColor="#18181b"
+        buckleColor="#fbbf24"
+        shoeColor="#090d16"
         pose={pose}
       >
         {/* High Black Turtleneck Collar */}
@@ -422,6 +486,10 @@ function CallaghanModel({ pose }) {
         jacketColor="#5c4033"
         shirtColor="#e5e7eb"
         handColor="#e6b08a"
+        pantsColor="#374151"
+        beltColor="#291811"
+        buckleColor="#d97706"
+        shoeColor="#291811"
         pose={pose}
       >
         {/* Sweater Vest Trim & Burgundy Tie */}
@@ -469,6 +537,10 @@ function MGModel({ pose }) {
         jacketColor="#8c6d58"
         shirtColor="#a3826c"
         handColor="#f5cba7"
+        pantsColor="#27272a"
+        beltColor="#451a03"
+        buckleColor="#fbbf24"
+        shoeColor="#991b1b"
         pose={pose}
       >
         {/* Delicate Gold Necklace with Little Charms */}
@@ -583,10 +655,10 @@ export function DriverCharacter3D({ driverId = 'elvis', pose = 'preview' }) {
   useFrame((state, delta) => {
     if (!rootRef.current) return;
     if (pose === 'preview') {
-      // Smooth turntable oscillation in Character Select preview
+      // Smooth heroic idle sway & breathing on the full-screen 3D Showcase Podium
       const t = state.clock.elapsedTime;
-      rootRef.current.rotation.y = Math.sin(t * 1.1) * 0.55;
-      rootRef.current.position.y = -0.68 + Math.sin(t * 2.2) * 0.025;
+      rootRef.current.rotation.y = Math.sin(t * 0.75) * 0.38;
+      rootRef.current.position.y = 0.90 + Math.sin(t * 2.1) * 0.014;
     } else if (pose === 'driving') {
       // Reactive head/body lean during lane changes and oil slick skids
       const roll = driveStore.carRoll || 0;
@@ -631,7 +703,7 @@ export function DriverCharacter3D({ driverId = 'elvis', pose = 'preview' }) {
   }
 
   return (
-    <group ref={rootRef} position={[0, -0.68, 0]} scale={1.15}>
+    <group ref={rootRef} position={[0, 0.90, 0]} scale={1.0}>
       {renderCharacter()}
     </group>
   );

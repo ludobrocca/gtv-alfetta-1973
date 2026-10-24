@@ -17,7 +17,7 @@ import { driveStore } from './drive/driveStore';
 import { DriveWorld } from './drive/DriveWorld';
 import { DriveCameraDirector } from './drive/DriveCameraDirector';
 
-const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=20';
+const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=21';
 const ENGINE_MODEL_PATH = '/models/alfetta-bialbero-engine.glb?v=3';
 
 export const PAINT_FINISHES = [
@@ -277,23 +277,36 @@ function createShowroomMaterials(selectedPaint) {
     }),
     InteriorCarpet: new THREE.MeshStandardMaterial({
       name: 'InteriorCarpet',
-      color: new THREE.Color('#5e221b'),
+      color: new THREE.Color('#562230'),
       metalness: 0.02,
       roughness: 0.88,
       side: THREE.DoubleSide,
     }),
-    InteriorSeatCream: new THREE.MeshStandardMaterial({
+    InteriorSeatCream: new THREE.MeshPhysicalMaterial({
       name: 'InteriorSeatCream',
-      color: new THREE.Color('#e5e0d5'),
+      color: new THREE.Color('#827668'),
       metalness: 0.02,
-      roughness: 0.68,
+      roughness: 0.78,
+      sheen: 0.65,
+      sheenRoughness: 0.6,
+      sheenColor: new THREE.Color('#a6998a'),
       side: THREE.DoubleSide,
     }),
-    InteriorDoorTan: new THREE.MeshStandardMaterial({
+    InteriorDoorTan: new THREE.MeshPhysicalMaterial({
       name: 'InteriorDoorTan',
-      color: new THREE.Color('#756c54'),
+      color: new THREE.Color('#626742'),
+      metalness: 0.03,
+      roughness: 0.72,
+      sheen: 0.55,
+      sheenRoughness: 0.65,
+      sheenColor: new THREE.Color('#7d8358'),
+      side: THREE.DoubleSide,
+    }),
+    InteriorSeatPiping: new THREE.MeshStandardMaterial({
+      name: 'InteriorSeatPiping',
+      color: new THREE.Color('#b8ab6b'),
       metalness: 0.04,
-      roughness: 0.62,
+      roughness: 0.52,
       side: THREE.DoubleSide,
     }),
   };

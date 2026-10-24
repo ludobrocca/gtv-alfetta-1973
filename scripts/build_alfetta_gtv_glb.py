@@ -285,8 +285,9 @@ def build_alfetta_gtv():
     m_wood = MeshBuilder("Volante_Legno", 9)
     m_paint_rear = MeshBuilder("Carrozzeria_Posteriore_Pastello", 10)  # tail panel: solid-looking paint, far less metallic
     m_carpet = MeshBuilder("Moquette_Borgogna", 11)
-    m_seat_cream = MeshBuilder("Sedili_Panna", 12)
+    m_seat_cream = MeshBuilder("Sedili_Velluto_Tortora", 12)
     m_door_tan = MeshBuilder("Pannelli_Porta_Oliva", 13)
+    m_seat_piping = MeshBuilder("Profili_Sedili_GialloOliva", 14)
 
     # Dedicated builders for the front-hinged ("apertura controvento") movable Hood node
     # Front hood cut-line & hinge at x = -0.840 (behind the fixed front nose header panel, as in real car)
@@ -1798,28 +1799,160 @@ def build_alfetta_gtv():
         ins_grid[1, 1] = p_ins_1 + w_ins * s_perp
         m_chrome.add_grid(ins_grid, flip=False)
 
-    # 6H. Front Bucket Seats with Cream/White Covers (Coprisedili Panna/Bianchi) & Rear Bench
+    # 6H. Sculpted Taupe-Velour Front Bucket Seats & 2+2 Contoured Rear Bucket Bench (from 19.39.06.jpeg & 19.39.06 (1).jpeg)
     for side in (-1.0, 1.0):
         sz_seat = side * 0.148
-        # Cream/white seat cushion & side bolsters (positioned at x = 0.11..0.31 so interior camera at x = 0.21 has an unobstructed view)
-        m_seat_cream.add_box([0.095, -0.015, sz_seat], [0.22, 0.052, 0.185])
-        m_seat_cream.add_box([0.090, 0.005, sz_seat - 0.078], [0.21, 0.030, 0.036])
-        m_seat_cream.add_box([0.090, 0.005, sz_seat + 0.078], [0.21, 0.030, 0.036])
-        # Cream/white reclined backrest + side bolsters
-        m_seat_cream.add_box([0.235, 0.098, sz_seat], [0.058, 0.195, 0.178], rotation_z=-0.22)
-        m_seat_cream.add_box([0.225, 0.095, sz_seat - 0.076], [0.068, 0.180, 0.034], rotation_z=-0.22)
-        m_seat_cream.add_box([0.225, 0.095, sz_seat + 0.076], [0.068, 0.180, 0.034], rotation_z=-0.22)
-        # Headrests & Rear Bucket Seats
-        m_interior.add_box([0.275, 0.216, sz_seat], [0.044, 0.052, 0.108])
-        m_interior.add_box([0.46, 0.03, side * 0.135], [0.18, 0.05, 0.18])
-        m_interior.add_box([0.54, 0.12, side * 0.135], [0.05, 0.16, 0.18], rotation_z=-0.20)
+        # 1) Front Bucket Seat Cushion: sculpted C2 grid with side bolsters, front thigh roll & 6 horizontal pleats
+        fc_nx, fc_nz = 18, 21
+        fc_grid = np.zeros((fc_nx, fc_nz, 3), dtype=np.float32)
+        for ix, u_x in enumerate(np.linspace(0.0, 1.0, fc_nx)):
+            x_c = -0.015 + u_x * 0.235
+            front_drop = -0.024 * max(0.0, (0.18 - u_x) / 0.18) ** 2
+            thigh_roll = 0.008 * math.exp(-((u_x - 0.16) / 0.10) ** 2)
+            pleat = 0.0022 * math.sin(u_x * 6.0 * 2.0 * math.pi) if 0.16 <= u_x <= 0.88 else 0.0
+            for iz, s_z in enumerate(np.linspace(-1.0, 1.0, fc_nz)):
+                z_loc = s_z * 0.096
+                abs_s = abs(s_z)
+                bolster = 0.024 * max(0.0, (abs_s - 0.50) / 0.50) ** 1.45 - 0.022 * max(0.0, (abs_s - 0.86) / 0.14) ** 2
+                in_center = 1.0 - min(1.0, max(0.0, (abs_s - 0.46) / 0.08))
+                y_c = -0.014 + front_drop + bolster + in_center * (thigh_roll + pleat)
+                fc_grid[ix, iz] = [x_c, y_c, sz_seat + z_loc]
+        m_seat_cream.add_grid(fc_grid, flip=True)
+        m_seat_cream.add_box([0.095, -0.028, sz_seat], [0.215, 0.028, 0.182])  # Lower cushion skirt
 
-    # 6I. Interior Rearview Mirror & Sun Visors at Windshield Header
-    m_chrome.add_box([-0.088, 0.252, 0.0], [0.006, 0.024, 0.006], rotation_z=0.25)
-    m_interior.add_box([-0.082, 0.238, 0.0], [0.010, 0.022, 0.082])
-    m_chrome.add_box([-0.076, 0.238, 0.0], [0.002, 0.019, 0.078])
+        # Olive-yellow contrast piping on front seat cushion (left, right, and front U-seam)
+        for s_p in (-1.0, 1.0):
+            m_seat_piping.add_box([0.098, -0.004, sz_seat + s_p * 0.049], [0.195, 0.0045, 0.0045])
+        m_seat_piping.add_box([0.018, -0.004, sz_seat], [0.0045, 0.0045, 0.098])
+
+        # 2) Front Wrap-Around Sport Backrest: 7 horizontal lumbar pleats + 2 vertical upper panels + side bolsters
+        fb_nv, fb_nz = 22, 21
+        fb_grid = np.zeros((fb_nv, fb_nz, 3), dtype=np.float32)
+        for iv, v_y in enumerate(np.linspace(0.0, 1.0, fb_nv)):
+            y_b = -0.002 + v_y * 0.196
+            x_base = 0.205 + v_y * 0.048
+            half_w = 0.095 - 0.018 * (v_y ** 1.4)
+            is_lumbar = v_y <= 0.54
+            pleat_x = -0.0025 * math.sin((v_y / 0.54) * 7.0 * 2.0 * math.pi) if is_lumbar else 0.0
+            top_roll = 0.018 * max(0.0, (v_y - 0.88) / 0.12) ** 2
+            for iz, s_z in enumerate(np.linspace(-1.0, 1.0, fb_nz)):
+                z_loc = s_z * half_w
+                abs_s = abs(s_z)
+                bolster_fwd = -0.032 * max(0.0, (abs_s - 0.48) / 0.52) ** 1.4 + 0.022 * max(0.0, (abs_s - 0.86) / 0.14) ** 2
+                in_center = 1.0 - min(1.0, max(0.0, (abs_s - 0.46) / 0.08))
+                v_seam = 0.0025 * math.exp(-((s_z / 0.05) ** 2)) if not is_lumbar else 0.0
+                x_b = x_base + bolster_fwd + top_roll + in_center * (pleat_x + v_seam)
+                fb_grid[iv, iz] = [x_b, y_b, sz_seat + z_loc]
+        m_seat_cream.add_grid(fb_grid, flip=True)
+        # Backrest rear shell in matching velour
+        m_seat_cream.add_box([0.238, 0.095, sz_seat], [0.032, 0.188, 0.162], rotation_z=-0.24)
+
+        # Olive-yellow contrast piping along the two vertical backrest seams
+        for s_p in (-1.0, 1.0):
+            m_seat_piping.add_box([0.214, 0.096, sz_seat + s_p * 0.043], [0.005, 0.186, 0.0045], rotation_z=-0.24)
+
+        # 3) Iconic Wrap-Around Saddle Headrest (Poggiatesta a sella con fianchetti sporgenti e 2 cuciture verticali)
+        hr_nv, hr_nz = 14, 19
+        hr_grid = np.zeros((hr_nv, hr_nz, 3), dtype=np.float32)
+        for iv, v_h in enumerate(np.linspace(0.0, 1.0, hr_nv)):
+            y_h = 0.198 + v_h * 0.054
+            arch_x = 0.012 * ((2.0 * v_h - 1.0) ** 2)
+            for iz, s_z in enumerate(np.linspace(-1.0, 1.0, hr_nz)):
+                z_loc = s_z * 0.064
+                abs_s = abs(s_z)
+                wing_fwd = -0.016 * max(0.0, (abs_s - 0.42) / 0.58) ** 1.3 + 0.014 * max(0.0, (abs_s - 0.85) / 0.15) ** 2
+                seam_groove = 0.0035 * math.exp(-(((abs_s - 0.45) / 0.05) ** 2))
+                x_h = 0.244 + arch_x + wing_fwd + seam_groove
+                hr_grid[iv, iz] = [x_h, y_h, sz_seat + z_loc]
+        m_seat_cream.add_grid(hr_grid, flip=True)
+        m_seat_cream.add_box([0.264, 0.225, sz_seat], [0.026, 0.050, 0.118], rotation_z=-0.15)
+        for s_post in (-0.028, 0.028):
+            m_chrome.add_box([0.252, 0.196, sz_seat + s_post], [0.005, 0.016, 0.005])
+            m_seat_piping.add_box([0.240, 0.225, sz_seat + math.copysign(0.029, s_post)], [0.004, 0.050, 0.0035], rotation_z=-0.12)
+
+        # Black metal recline hinge bracket on outer lower corner + inboard seatbelt stalk with red button
+        m_interior.add_box([0.195, 0.012, sz_seat + side * 0.092], [0.032, 0.062, 0.006], rotation_z=-0.22)
+        m_rubber.add_cylinder_z(0.202, -0.008, sz_seat + side * 0.090, sz_seat + side * 0.097, 0.009, segs=16)
+        m_interior.add_box([0.115, 0.016, side * 0.044], [0.052, 0.012, 0.010], rotation_z=0.32)
+        m_taillight.add_box([0.092, 0.024, side * 0.044], [0.010, 0.008, 0.008], rotation_z=0.32)
+
+    # 6H-2. Rear 2+2 Contoured Twin-Bucket Bench (Sedili Posteriori Sagomati 2+2 con Cannelloni)
+    rc_nx, rc_nz = 16, 32
+    rc_grid = np.zeros((rc_nx, rc_nz, 3), dtype=np.float64)
+    for i in range(rc_nx):
+        u = i / (rc_nx - 1)
+        rx = 0.258 + u * 0.225
+        thigh_roll = 0.017 * math.sin(math.pi * max(0.0, 1.0 - u / 0.36)) if u < 0.36 else 0.0
+        pleat = 0.0042 * abs(math.sin(u * 6.0 * math.pi)) if 0.14 < u < 0.88 else 0.0
+        for j in range(rc_nz):
+            v = -1.0 + 2.0 * (j / (rc_nz - 1))
+            rz = v * 0.285
+            az = abs(rz)
+            if az < 0.046:
+                bolster = 0.020 * math.cos((az / 0.046) * (math.pi * 0.5))
+                in_insert = 0.0
+            elif az < 0.232:
+                vn = (az - 0.139) / 0.093
+                bolster = 0.014 * (vn ** 2)
+                in_insert = max(0.0, 1.0 - (vn ** 4))
+            else:
+                bolster = 0.014 + 0.018 * min(1.0, (az - 0.232) / 0.053)
+                in_insert = 0.0
+            ry = 0.020 - u * 0.015 + bolster + thigh_roll * (0.45 + 0.55 * in_insert) + pleat * in_insert
+            rc_grid[i, j] = [rx, ry, rz]
+    m_seat_cream.add_grid(rc_grid, flip=False)
+    m_seat_cream.add_grid(rc_grid, flip=True)
+    m_seat_cream.add_box([0.365, -0.004, 0.0], [0.215, 0.038, 0.560])
+
+    # Rear Twin-Arch Backrest (Schienale Posteriore a Doppia Gobba con Fianchetti Avvolgenti)
+    rb_ny, rb_nz = 18, 32
+    rb_grid = np.zeros((rb_ny, rb_nz, 3), dtype=np.float64)
+    for i in range(rb_ny):
+        u = i / (rb_ny - 1)
+        for j in range(rb_nz):
+            v = -1.0 + 2.0 * (j / (rb_nz - 1))
+            rz = v * 0.285
+            az = abs(rz)
+            arch_h = 0.018 * math.exp(-((az - 0.145) / 0.095) ** 2) - 0.014 * math.exp(-(az / 0.052) ** 2)
+            ry = 0.015 + u * (0.175 + arch_h)
+            if az < 0.046:
+                bolster_x = -0.016 * math.cos((az / 0.046) * (math.pi * 0.5))
+                in_insert = 0.0
+            elif az < 0.232:
+                vn = (az - 0.139) / 0.093
+                bolster_x = -0.014 * (vn ** 2)
+                in_insert = max(0.0, 1.0 - (vn ** 4))
+            else:
+                bolster_x = -0.014 - 0.024 * min(1.0, (az - 0.232) / 0.053)
+                in_insert = 0.0
+            pleat_x = -0.0042 * abs(math.sin((u / 0.58) * 7.0 * math.pi)) * in_insert if u < 0.58 else 0.0
+            v_seam = 0.003 * math.exp(-((az - 0.139) / 0.009) ** 2) if u >= 0.58 else 0.0
+            rx = 0.462 + u * 0.088 + bolster_x + pleat_x + v_seam
+            rb_grid[i, j] = [rx, ry, rz]
+    m_seat_cream.add_grid(rb_grid, flip=True)
+    m_seat_cream.add_grid(rb_grid, flip=False)
+    m_seat_cream.add_box([0.515, 0.100, 0.0], [0.045, 0.165, 0.560], rotation_z=-0.38)
+
+    # Olive-yellow contrast piping along rear cushion & backrest seams + parcel shelf & rear ashtrays
+    for s_side in (-1.0, 1.0):
+        for zp in (0.046, 0.232):
+            m_seat_piping.add_box([0.365, 0.028, s_side * zp], [0.210, 0.0045, 0.0045], rotation_z=-0.06)
+            m_seat_piping.add_box([0.495, 0.105, s_side * zp], [0.0045, 0.172, 0.0045], rotation_z=-0.42)
+        m_seat_piping.add_box([0.260, 0.032, s_side * 0.139], [0.005, 0.005, 0.186])
+        m_seat_piping.add_box([0.542, 0.198, s_side * 0.145], [0.005, 0.005, 0.175])
+        # Rear quarter panel round black ashtray knob with amber center dot (visibile in foto 2)
+        m_interior.add_cylinder_z(0.285, 0.092, s_side * 0.286, s_side * 0.296, 0.016, segs=18)
+        m_amber.add_cylinder_z(0.285, 0.092, s_side * 0.284, s_side * 0.297, 0.0045, segs=12)
+    m_interior.add_box([0.695, 0.142, 0.0], [0.260, 0.012, 0.540], rotation_z=-0.06)
+    m_interior.add_box([0.195, -0.008, 0.0], [0.110, 0.036, 0.072])
+
+    # 6I. Interior Rearview Mirror & Sun Visors at Windshield Header (recessed below roofline, zero glass clipping)
+    m_chrome.add_box([-0.065, 0.234, 0.0], [0.006, 0.020, 0.006], rotation_z=0.25)
+    m_interior.add_box([-0.060, 0.220, 0.0], [0.010, 0.020, 0.080])
+    m_chrome.add_box([-0.054, 0.220, 0.0], [0.002, 0.017, 0.076])
     for side in (-1.0, 1.0):
-        m_interior.add_box([-0.085, 0.256, side * 0.155], [0.042, 0.006, 0.155], rotation_z=0.18)
+        m_interior.add_box([-0.045, 0.230, side * 0.130], [0.032, 0.005, 0.122], rotation_z=0.22)
+        m_chrome.add_box([-0.056, 0.233, side * 0.182], [0.005, 0.010, 0.005])
 
     # =========================================================================
     # 7. EXPORT COMPLETE MULTI-MESH, MULTI-MATERIAL GLB
@@ -1839,6 +1972,7 @@ def build_alfetta_gtv():
         m_carpet,
         m_seat_cream,
         m_door_tan,
+        m_seat_piping,
     ]
 
     materials = [
@@ -1937,7 +2071,7 @@ def build_alfetta_gtv():
         {
             "name": "InteriorCarpet",
             "pbrMetallicRoughness": {
-                "baseColorFactor": [0.38, 0.14, 0.11, 1.0],
+                "baseColorFactor": [0.34, 0.13, 0.19, 1.0],
                 "metallicFactor": 0.02,
                 "roughnessFactor": 0.88,
             },
@@ -1945,17 +2079,25 @@ def build_alfetta_gtv():
         {
             "name": "InteriorSeatCream",
             "pbrMetallicRoughness": {
-                "baseColorFactor": [0.88, 0.85, 0.79, 1.0],
+                "baseColorFactor": [0.51, 0.46, 0.41, 1.0],
                 "metallicFactor": 0.02,
-                "roughnessFactor": 0.68,
+                "roughnessFactor": 0.78,
             },
         },
         {
             "name": "InteriorDoorTan",
             "pbrMetallicRoughness": {
-                "baseColorFactor": [0.46, 0.42, 0.32, 1.0],
+                "baseColorFactor": [0.38, 0.40, 0.26, 1.0],
+                "metallicFactor": 0.03,
+                "roughnessFactor": 0.72,
+            },
+        },
+        {
+            "name": "InteriorSeatPiping",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.72, 0.67, 0.42, 1.0],
                 "metallicFactor": 0.04,
-                "roughnessFactor": 0.62,
+                "roughnessFactor": 0.52,
             },
         },
     ]

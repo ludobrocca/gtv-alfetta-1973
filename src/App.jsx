@@ -82,6 +82,20 @@ const REAL_PHOTOS = [
     caption:
       'Dettaglio dei collettori di scarico 4-in-2 in ghisa, servofreno con vaschetta ambra, serbatoio espansione verde oliva, alternatore con fascia rossa e aste cofano a V.',
   },
+  {
+    src: '/images/alfa-sedili-anteriori.jpeg',
+    title: 'Abitacolo • Sedili Anteriori Sportivi & Poggiatesta a Sella',
+    location: 'Targa 463880 PD • Interni Originali',
+    caption:
+      'Sedili avvolgenti in velluto grigio-tortora caldo con cannelloni orizzontali, cadenini a contrasto giallo-oliva, poggiatesta sagomati a sella e moquette bordeaux.',
+  },
+  {
+    src: '/images/alfa-sedili-posteriori.jpeg',
+    title: 'Abitacolo • Sedili Posteriori 2+2 & Fianchetti Verde Oliva',
+    location: 'Targa 463880 PD • Interni Originali',
+    caption:
+      'Divanetto posteriore 2+2 con due sedute anatomiche separate, schienale a doppia gobba con cannelloni, cadenini giallo-oliva e pannelli laterali in velluto verde oliva con posacenere tondo.',
+  },
 ];
 
 const HISTORICAL_SPECS = [

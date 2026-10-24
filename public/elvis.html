@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Elvis Presley (Aloha from Hawaii 1973) — Procedural 3D Designer Toy POC</title>
+  <style>
+    :root {
+      --bg-dark: #090b10;
+      --gold: #FFD700;
+      --red: #D90429;
+      --blue: #003566;
+      --white: #F8F9FA;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: radial-gradient(circle at 55% 32%, #1d2233 0%, #0b0d14 55%, #050609 100%);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--white);
+      user-select: none;
+    }
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      inset: 0;
+    }
+    .hud-header {
+      position: absolute;
+      top: 20px;
+      left: 24px;
+      z-index: 10;
+      pointer-events: none;
+      background: rgba(10, 14, 24, 0.72);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 215, 0, 0.35);
+      border-left: 4px solid var(--gold);
+      border-radius: 12px;
+      padding: 14px 20px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    }
+    .hud-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--gold);
+      background: rgba(217, 4, 41, 0.22);
+      border: 1px solid rgba(217, 4, 41, 0.55);
+      padding: 3px 8px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+    }
+    .hud-title {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #ffffff;
+      text-shadow: 0 2px 10px rgba(255, 215, 0, 0.3);
+    }
+    .hud-sub {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 3px;
+    }
+    .controls-bar {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      background: rgba(10, 14, 24, 0.8);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 215, 0, 0.3);
+      padding: 10px 14px;
+      border-radius: 999px;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.65);
+    }
+    .btn {
+      background: rgba(255, 255, 255, 0.06);
+      color: #e2e8f0;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+    .btn:hover {
+      background: rgba(255, 215, 0, 0.18);
+      border-color: var(--gold);
+      color: #fff;
+    }
+    .btn.active {
+      background: linear-gradient(135deg, #ffd700 0%, #f59e0b 100%);
+      color: #090b10;
+      border-color: #ffd700;
+      font-weight: 700;
+      box-shadow: 0 0 16px rgba(255, 215, 0, 0.45);
+    }
+    .palette-legend {
+      position: absolute;
+      top: 20px;
+      right: 24px;
+      z-index: 10;
+      background: rgba(10, 14, 24, 0.72);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 11px;
+      color: #cbd5e1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .swatch-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      border: 1px solid rgba(255,255,255,0.35);
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <div class="hud-header">
+    <div class="hud-badge">img2threejs POC • Designer Toy Rig</div>
+    <div class="hud-title">Elvis Presley '73</div>
+    <div class="hud-sub">Aloha from Hawaii • American Eagle Jumpsuit</div>
+  </div>
+
+  <div class="palette-legend">
+    <div class="swatch-row"><span class="swatch" style="background:#F8F9FA"></span>#F8F9FA Bianco Tuta</div>
+    <div class="swatch-row"><span class="swatch" style="background:#FFD700"></span>#FFD700 Oro TCB / Cintura</div>
+    <div class="swatch-row"><span class="swatch" style="background:#D90429"></span>#D90429 Rosso Aquila / Pleats</div>
+    <div class="swatch-row"><span class="swatch" style="background:#003566"></span>#003566 Blu Fodera Mantello</div>
+    <div class="swatch-row"><span class="swatch" style="background:#111111"></span>#111111 Pompadour Corvino</div>
+    <div class="swatch-row"><span class="swatch" style="background:#F1C27D"></span>#F1C27D Carnagione</div>
+  </div>
+
+  <div class="controls-bar">
+    <button class="btn active" id="btn-pose-stage">Posa Concerto '73</button>
+    <button class="btn" id="btn-pose-drive">Posa Pilota GTV</button>
+    <button class="btn active" id="btn-glasses">Occhiali TCB</button>
+    <button class="btn active" id="btn-cape">Mantello</button>
+    <button class="btn" id="btn-cam-front">Inquadratura Intera</button>
+    <button class="btn" id="btn-cam-head">Close-Up Volto</button>
+    <button class="btn" id="btn-cam-belt">Dettaglio Aquila &amp; Cintura</button>
+    <button class="btn" id="btn-rotate">Auto-Rotazione</button>
+  </div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ============================================================================
+    // 1. PALETTE COLORI ESATTA & MATERIALI PBR
+    // ============================================================================
+    const COLORS = {
+      SUIT_WHITE: 0xF8F9FA,
+      GOLD:       0xFFD700,
+      EAGLE_RED:  0xD90429,
+      CAPE_BLUE:  0x003566,
+      HAIR_BLACK: 0x111111,
+      SKIN:       0xF1C27D,
+      LENS_DARK:  0x1a1a2e,
+    };
+
+    const matSuitWhite = new THREE.MeshStandardMaterial({
+      color: COLORS.SUIT_WHITE,
+      roughness: 0.3,
+      metalness: 0.05,
+    });
+
+    const matGold = new THREE.MeshStandardMaterial({
+      color: COLORS.GOLD,
+      metalness: 0.85,
+      roughness: 0.2,
+    });
+
+    const matEagleRed = new THREE.MeshStandardMaterial({
+      color: COLORS.EAGLE_RED,
+      roughness: 0.35,
+      metalness: 0.08,
+    });
+
+    const matCapeBlue = new THREE.MeshStandardMaterial({
+      color: COLORS.CAPE_BLUE,
+      roughness: 0.4,
+      metalness: 0.1,
+      side: THREE.DoubleSide,
+    });
+
+    const matHairBlack = new THREE.MeshStandardMaterial({
+      color: COLORS.HAIR_BLACK,
+      roughness: 0.4,
+      metalness: 0.12,
+    });
+
+    const matSkin = new THREE.MeshStandardMaterial({
+      color: COLORS.SKIN,
+      roughness: 0.5,
+      metalness: 0.02,
+    });
+
+    const matLens = new THREE.MeshStandardMaterial({
+      color: COLORS.LENS_DARK,
+      transparent: true,
+      opacity: 0.8,
+      roughness: 0.1,
+      metalness: 0.35,
+    });
+
+    const matChrome = new THREE.MeshStandardMaterial({
+      color: 0xe2e8f0,
+      metalness: 0.92,
+      roughness: 0.14,
+    });
+
+    // ============================================================================
+    // 2. CANVAS TEXTURES PROCEDURALI (VOLTO "SMIRK" & AQUILA AMERICANA)
+    // ============================================================================
+    function createElvisFaceTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+
+      // Base Carnagione #F1C27D
+      ctx.fillStyle = '#F1C27D';
+      ctx.fillRect(0, 0, 1024, 1024);
+
+      // Soft Designer-Toy Cheek Warmth
+      const drawCheekGlow = (cx, cy) => {
+        const g = ctx.createRadialGradient(cx, cy, 10, cx, cy, 90);
+        g.addColorStop(0, 'rgba(217, 70, 60, 0.22)');
+        g.addColorStop(1, 'rgba(241, 194, 125, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 90, 0, Math.PI * 2);
+        ctx.fill();
+      };
+      drawCheekGlow(380, 560);
+      drawCheekGlow(644, 560);
+
+      // Sopracciglia espressive (sinistra inarcata in posa rockabilly)
+      ctx.strokeStyle = '#111111';
+      ctx.lineWidth = 18;
+      ctx.lineCap = 'round';
+      // Sopracciglio destro (viewer left)
+      ctx.beginPath();
+      ctx.moveTo(355, 420);
+      ctx.quadraticCurveTo(415, 395, 465, 415);
+      ctx.stroke();
+      // Sopracciglio sinistro inarcato (viewer right)
+      ctx.beginPath();
+      ctx.moveTo(555, 412);
+      ctx.quadraticCurveTo(615, 372, 675, 402);
+      ctx.stroke();
+
+      // Occhi stilizzati Designer Toy con riflesso
+      const drawEye = (ex, ey) => {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.ellipse(ex, ey, 42, 26, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Iride blu-ghiaccio / scura intensa
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath();
+        ctx.arc(ex, ey, 21, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#090b10';
+        ctx.beginPath();
+        ctx.arc(ex, ey, 11, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Catchlight speculare
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(ex - 7, ey - 7, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eyeliner superiore deciso
+        ctx.strokeStyle = '#111111';
+        ctx.lineWidth = 9;
+        ctx.beginPath();
+        ctx.arc(ex, ey + 4, 43, Math.PI * 1.12, Math.PI * 1.88);
+        ctx.stroke();
+      };
+      drawEye(415, 468);
+      drawEye(609, 468);
+
+      // Classico mezzo sorriso storto di Elvis ("Smirk" asimmetrico a destra)
+      ctx.save();
+      // Ombra labbro inferiore
+      ctx.strokeStyle = 'rgba(130, 75, 40, 0.45)';
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(465, 690);
+      ctx.quadraticCurveTo(515, 708, 565, 686);
+      ctx.stroke();
+
+      // Apertura del sorriso storto con lampo di denti bianchi a sinistra (viewer right)
+      ctx.fillStyle = '#7f1d1d';
+      ctx.beginPath();
+      ctx.moveTo(435, 646);
+      ctx.quadraticCurveTo(518, 658, 608, 616);
+      ctx.quadraticCurveTo(568, 678, 435, 646);
+      ctx.closePath();
+      ctx.fill();
+
+      // Denti visibili nel mezzo sorriso
+      ctx.fillStyle = '#F8F9FA';
+      ctx.beginPath();
+      ctx.moveTo(468, 648);
+      ctx.quadraticCurveTo(532, 652, 594, 623);
+      ctx.quadraticCurveTo(558, 658, 468, 648);
+      ctx.closePath();
+      ctx.fill();
+
+      // Contorno labbro superiore (Arco di Cupido + piega Smirk)
+      ctx.strokeStyle = '#9e2a2b';
+      ctx.lineWidth = 12;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(430, 646);
+      ctx.quadraticCurveTo(515, 656, 612, 614);
+      ctx.stroke();
+
+      // Fossetta laterale dello smirk ("dimple")
+      ctx.strokeStyle = 'rgba(120, 65, 35, 0.65)';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.arc(622, 614, 18, -Math.PI * 0.35, Math.PI * 0.45);
+      ctx.stroke();
+
+      // Fossetta sul mento (Cleft Chin iconico di Elvis)
+      ctx.strokeStyle = 'rgba(130, 75, 40, 0.5)';
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(512, 742);
+      ctx.lineTo(512, 768);
+      ctx.stroke();
+      ctx.restore();
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.needsUpdate = true;
+      return tex;
+    }
+
+    function createEagleChestTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+
+      // Sfondo Tuta Bianca #F8F9FA
+      ctx.fillStyle = '#F8F9FA';
+      ctx.fillRect(0, 0, 1024, 1024);
+
+      const cx = 512;
+
+      // Funzione helper per file di borchie dorate (#FFD700)
+      const drawStudLine = (x1, y1, x2, y2, count, radius = 6) => {
+        for (let i = 0; i <= count; i++) {
+          const t = i / count;
+          const x = x1 + (x2 - x1) * t;
+          const y = y1 + (y2 - y1) * t;
+          ctx.fillStyle = '#B45309';
+          ctx.beginPath();
+          ctx.arc(x + 1.5, y + 1.5, radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#FFD700';
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      };
+
+      // --- MOTIVO A V DELL'AQUILA AMERICANA SUL PETTO ---
+      // 3 fasce d'ali svasate simmetriche (Rosso #D90429 e Blu #003566)
+      for (const side of [-1, 1]) {
+        // Ala Superiore Rossa
+        ctx.fillStyle = '#D90429';
+        ctx.beginPath();
+        ctx.moveTo(cx + side * 55, 420);
+        ctx.lineTo(cx + side * 340, 210);
+        ctx.lineTo(cx + side * 365, 265);
+        ctx.lineTo(cx + side * 75, 475);
+        ctx.closePath();
+        ctx.fill();
+
+        // Ala Centrale Blu (#003566)
+        ctx.fillStyle = '#003566';
+        ctx.beginPath();
+        ctx.moveTo(cx + side * 65, 495);
+        ctx.lineTo(cx + side * 350, 305);
+        ctx.lineTo(cx + side * 370, 360);
+        ctx.lineTo(cx + side * 85, 550);
+        ctx.closePath();
+        ctx.fill();
+
+        // Ala Inferiore Rossa (#D90429)
+        ctx.fillStyle = '#D90429';
+        ctx.beginPath();
+        ctx.moveTo(cx + side * 75, 570);
+        ctx.lineTo(cx + side * 335, 400);
+        ctx.lineTo(cx + side * 350, 455);
+        ctx.lineTo(cx + side * 95, 625);
+        ctx.closePath();
+        ctx.fill();
+
+        // Costolature di strass dorati lungo le piume dell'aquila
+        drawStudLine(cx + side * 55, 415, cx + side * 345, 205, 16, 6.5);
+        drawStudLine(cx + side * 65, 490, cx + side * 355, 300, 15, 6);
+        drawStudLine(cx + side * 75, 565, cx + side * 340, 395, 14, 6);
+        drawStudLine(cx + side * 90, 635, cx + side * 330, 480, 12, 5.5);
+
+        // Stelle Blu e Rosse sul Busto
+        ctx.fillStyle = '#FFD700';
+        ctx.beginPath();
+        ctx.arc(cx + side * 210, 680, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#003566';
+        ctx.beginPath();
+        ctx.arc(cx + side * 210, 680, 10, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Corpo e Coda Centrale dell'Aquila (sotto lo scollo a V)
+      ctx.fillStyle = '#FFD700';
+      ctx.beginPath();
+      ctx.moveTo(cx, 430);
+      ctx.lineTo(cx - 58, 560);
+      ctx.lineTo(cx, 530);
+      ctx.lineTo(cx + 58, 560);
+      ctx.closePath();
+      ctx.fill();
+
+      // Piume della coda dell'aquila (Rosso & Blu)
+      ctx.fillStyle = '#003566';
+      ctx.beginPath();
+      ctx.moveTo(cx - 45, 580);
+      ctx.lineTo(cx + 45, 580);
+      ctx.lineTo(cx + 75, 720);
+      ctx.lineTo(cx - 75, 720);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#D90429';
+      ctx.beginPath();
+      ctx.moveTo(cx - 25, 580);
+      ctx.lineTo(cx + 25, 580);
+      ctx.lineTo(cx + 42, 725);
+      ctx.lineTo(cx - 42, 725);
+      ctx.closePath();
+      ctx.fill();
+
+      drawStudLine(cx - 65, 725, cx + 65, 725, 9, 7);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.needsUpdate = true;
+      return tex;
+    }
+    // ============================================================================
+    // 3. SCENA THREE.JS, CAMERA, RENDERER & ILLUMINAZIONE PALCO
+    // ============================================================================
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+
+    const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0.3, 1.35, 3.65);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.12;
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 1.05, 0);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.minDistance = 0.9;
+    controls.maxDistance = 7.5;
+    controls.maxPolarAngle = Math.PI * 0.52;
+
+    // Luci da Palcoscenico "Aloha from Hawaii 1973" (ispirate a elvis-reference.jpg)
+    const ambientLight = new THREE.HemisphereLight(0xffffff, 0x1e293b, 0.85);
+    scene.add(ambientLight);
+
+    // Faro principale (Key Light calda da concerto)
+    const keyLight = new THREE.SpotLight(0xfff4d6, 4.5);
+    keyLight.position.set(1.8, 3.8, 2.6);
+    keyLight.angle = Math.PI / 4;
+    keyLight.penumbra = 0.65;
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048);
+    keyLight.shadow.bias = -0.0005;
+    scene.add(keyLight);
+
+    // Rim Light posteriore dorata (come il faro dietro la testa nella foto reference)
+    const stageHaloSpot = new THREE.PointLight(0xffbe55, 3.2, 6);
+    stageHaloSpot.position.set(0.42, 2.05, -0.85);
+    scene.add(stageHaloSpot);
+
+    // Halo glow visibile dietro la spalla sinistra (fedelissimo a elvis-reference.jpg)
+    const haloCanvas = document.createElement('canvas');
+    haloCanvas.width = 256;
+    haloCanvas.height = 256;
+    const hctx = haloCanvas.getContext('2d');
+    const hGrad = hctx.createRadialGradient(128, 128, 8, 128, 128, 124);
+    hGrad.addColorStop(0, 'rgba(255, 245, 200, 0.95)');
+    hGrad.addColorStop(0.35, 'rgba(255, 190, 90, 0.45)');
+    hGrad.addColorStop(1, 'rgba(255, 140, 40, 0)');
+    hctx.fillStyle = hGrad;
+    hctx.fillRect(0, 0, 256, 256);
+    const haloSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(haloCanvas),
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }));
+    haloSprite.position.set(0.46, 2.02, -0.75);
+    haloSprite.scale.set(0.95, 0.95, 1);
+    scene.add(haloSprite);
+
+    // Fill Light azzurra laterale
+    const rimBlueLight = new THREE.DirectionalLight(0x38bdf8, 1.35);
+    rimBlueLight.position.set(-2.5, 1.6, -1.5);
+    scene.add(rimBlueLight);
+
+    // Pedana da Collezione Designer Toy
+    const stageGroup = new THREE.Group();
+    const baseCylinder = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.05, 1.14, 0.12, 48),
+      new THREE.MeshStandardMaterial({ color: 0x0f141f, roughness: 0.35, metalness: 0.4 })
+    );
+    baseCylinder.position.y = -0.06;
+    baseCylinder.receiveShadow = true;
+    stageGroup.add(baseCylinder);
+
+    const goldRing = new THREE.Mesh(
+      new THREE.TorusGeometry(1.07, 0.018, 16, 64),
+      matGold
+    );
+    goldRing.rotation.x = Math.PI / 2;
+    goldRing.position.y = 0.0;
+    stageGroup.add(goldRing);
+    scene.add(stageGroup);
+
+    // ============================================================================
+    // 4. ARCHITETTURA SCHELETRICA DI ELVIS (`elvisGroup`)
+    // ============================================================================
+    const elvisGroup = new THREE.Group();
+    elvisGroup.name = 'elvisGroup';
+    scene.add(elvisGroup);
+
+    const faceTex = createElvisFaceTexture();
+    const eagleChestTex = createEagleChestTexture();
+
+    const matFace = new THREE.MeshStandardMaterial({
+      map: faceTex,
+      roughness: 0.48,
+      metalness: 0.02,
+    });
+
+    const matTorsoEagle = new THREE.MeshStandardMaterial({
+      map: eagleChestTex,
+      roughness: 0.3,
+      metalness: 0.08,
+    });
+
+    // ----------------------------------------------------------------------------
+    // 4.1 TESTA (`headGroup` a y = 1.65)
+    // ----------------------------------------------------------------------------
+    const headGroup = new THREE.Group();
+    headGroup.name = 'headGroup';
+    headGroup.position.set(0, 1.65, 0);
+    elvisGroup.add(headGroup);
+
+    // Collo muscoloso
+    const neckMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.085, 0.10, 0.16, 20),
+      matSkin
+    );
+    neckMesh.position.set(0, -0.17, -0.01);
+    headGroup.add(neckMesh);
+
+    // Viso: SphereGeometry leggermente allungata con texture procedurale Smirk
+    const headGeo = new THREE.SphereGeometry(0.195, 32, 28);
+    headGeo.scale(0.92, 1.12, 0.96);
+    const faceMesh = new THREE.Mesh(headGeo, matFace);
+    faceMesh.rotation.y = -Math.PI / 2; // Allinea il centro UV della texture (+Z)
+    faceMesh.castShadow = true;
+    headGroup.add(faceMesh);
+
+    // Mascella scolpita da Designer Toy (jawline)
+    const jawMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.13, 0.095, 0.12, 16),
+      matSkin
+    );
+    jawMesh.position.set(0, -0.11, 0.02);
+    jawMesh.scale.set(1.05, 1, 0.95);
+    headGroup.add(jawMesh);
+
+    // Naso 3D stilizzato
+    const noseMesh = new THREE.Mesh(
+      new THREE.ConeGeometry(0.026, 0.075, 12),
+      matSkin
+    );
+    noseMesh.position.set(0, 0.005, 0.195);
+    noseMesh.rotation.x = 0.28;
+    headGroup.add(noseMesh);
+
+    // Orecchie simmetriche
+    for (const side of [-1, 1]) {
+      const ear = new THREE.Mesh(
+        new THREE.SphereGeometry(0.042, 12, 12),
+        matSkin
+      );
+      ear.scale.set(0.45, 1.15, 0.7);
+      ear.position.set(side * 0.182, -0.01, -0.01);
+      headGroup.add(ear);
+    }
+
+    // --- CAPELLI POMPADOUR (FONDAMENTALE) ---
+    const hairGroup = new THREE.Group();
+    headGroup.add(hairGroup);
+
+    // 1. Calotta cranica posteriore e superiore nera corvino (#111111)
+    const skullCapGeo = new THREE.SphereGeometry(0.212, 28, 24);
+    skullCapGeo.scale(0.98, 1.08, 1.05);
+    const skullCap = new THREE.Mesh(skullCapGeo, matHairBlack);
+    skullCap.position.set(0, 0.045, -0.035);
+    skullCap.castShadow = true;
+    hairGroup.add(skullCap);
+
+    // 2. Grande volume frontale Pompadour (Quiff che sporge in avanti sopra la fronte)
+    const pompMainGeo = new THREE.CylinderGeometry(0.125, 0.145, 0.34, 24);
+    const pompMain = new THREE.Mesh(pompMainGeo, matHairBlack);
+    pompMain.rotation.z = Math.PI / 2;
+    pompMain.scale.set(1.15, 1.0, 0.88);
+    pompMain.position.set(0, 0.195, 0.105);
+    pompMain.castShadow = true;
+    hairGroup.add(pompMain);
+
+    // Cresta alta del Pompadour scolpita con onda all'indietro
+    const pompCrestGeo = new THREE.SphereGeometry(0.165, 24, 20);
+    pompCrestGeo.scale(1.12, 0.82, 1.28);
+    const pompCrest = new THREE.Mesh(pompCrestGeo, matHairBlack);
+    pompCrest.position.set(0, 0.21, 0.045);
+    pompCrest.rotation.x = -0.25;
+    hairGroup.add(pompCrest);
+
+    // Ciuffo ribelle frontale ("kiss curl" anni '70 sulla fronte)
+    const forelock = new THREE.Mesh(
+      new THREE.ConeGeometry(0.032, 0.095, 10),
+      matHairBlack
+    );
+    forelock.position.set(-0.045, 0.12, 0.205);
+    forelock.rotation.set(0.35, 0, 0.28);
+    hairGroup.add(forelock);
+
+    // Onde laterali gonfie (Anni '70 fuller hair) + Ducktail sulla nuca
+    for (const side of [-1, 1]) {
+      const sideWave = new THREE.Mesh(
+        new THREE.SphereGeometry(0.11, 16, 16),
+        matHairBlack
+      );
+      sideWave.scale.set(0.65, 1.25, 1.35);
+      sideWave.position.set(side * 0.165, 0.05, -0.02);
+      hairGroup.add(sideWave);
+
+      // 3. Basette spesse ("Mutton Chops") simmetriche ai lati delle guance
+      const muttonChop = new THREE.Mesh(
+        new THREE.BoxGeometry(0.046, 0.145, 0.072),
+        matHairBlack
+      );
+      muttonChop.position.set(side * 0.172, -0.045, 0.068);
+      muttonChop.rotation.set(0.12, side * 0.22, side * -0.08);
+      muttonChop.castShadow = true;
+      hairGroup.add(muttonChop);
+    }
+
+    // Nuca a coda d'anatra (Ducktail nape)
+    const napeHair = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.14, 0.11, 0.15, 16),
+      matHairBlack
+    );
+    napeHair.position.set(0, -0.08, -0.105);
+    napeHair.scale.set(1.1, 1, 0.7);
+    hairGroup.add(napeHair);
+
+    // --- OCCHIALI AVIATOR TCB (#FFD700 + Lenti #1a1a2e opacity 0.8) ---
+    const glassesGroup = new THREE.Group();
+    glassesGroup.name = 'glassesGroup';
+    glassesGroup.position.set(0, 0.028, 0.188);
+    headGroup.add(glassesGroup);
+
+    // Doppio ponte frontale dorato
+    const topBridge = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.24, 12), matGold);
+    topBridge.rotation.z = Math.PI / 2;
+    topBridge.position.set(0, 0.042, 0.01);
+    glassesGroup.add(topBridge);
+
+    const midBridge = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.08, 12), matGold);
+    midBridge.rotation.z = Math.PI / 2;
+    midBridge.position.set(0, 0.018, 0.012);
+    glassesGroup.add(midBridge);
+
+    for (const side of [-1, 1]) {
+      const rimGroup = new THREE.Group();
+      rimGroup.position.set(side * 0.078, 0.002, 0.006);
+      rimGroup.rotation.y = side * -0.12;
+
+      // Cerchio montatura dorata Aviator
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.056, 0.0075, 12, 28), matGold);
+      rim.scale.set(1.12, 0.95, 1);
+      rimGroup.add(rim);
+
+      // Lente scura semitrasparente (#1a1a2e, opacity 0.8)
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.054, 28), matLens);
+      lens.scale.set(1.12, 0.95, 1);
+      lens.position.z = 0.002;
+      rimGroup.add(lens);
+
+      // Stanghetta laterale con fregio TCB
+      const temple = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.016, 0.18), matGold);
+      temple.position.set(side * 0.062, 0.014, -0.085);
+      rimGroup.add(temple);
+
+      glassesGroup.add(rimGroup);
+    }
+    // ----------------------------------------------------------------------------
+    // 4.2 BUSTO, COLLETTO, CINTURONE E MANTELLO (`torsoGroup` a y = 1.0)
+    // ----------------------------------------------------------------------------
+    const torsoGroup = new THREE.Group();
+    torsoGroup.name = 'torsoGroup';
+    torsoGroup.position.set(0, 1.0, 0);
+    elvisGroup.add(torsoGroup);
+
+    // Busto principale con CanvasTexture dell'Aquila Americana
+    const torsoGeo = new THREE.CylinderGeometry(0.245, 0.185, 0.56, 32);
+    torsoGeo.scale(1.08, 1.0, 0.78);
+    const torsoMesh = new THREE.Mesh(torsoGeo, matTorsoEagle);
+    torsoMesh.position.set(0, 0.14, 0);
+    torsoMesh.rotation.y = -Math.PI / 2;
+    torsoMesh.castShadow = true;
+    torsoMesh.receiveShadow = true;
+    torsoGroup.add(torsoMesh);
+
+    // Scollo a V profondo sul petto (Triangolo di pelle #F1C27D + Medaglioni d'oro)
+    const chestSkinGeo = new THREE.ConeGeometry(0.115, 0.32, 3);
+    const chestSkin = new THREE.Mesh(chestSkinGeo, matSkin);
+    chestSkin.rotation.z = Math.PI;
+    chestSkin.rotation.y = Math.PI;
+    chestSkin.scale.set(1.0, 1.0, 0.25);
+    chestSkin.position.set(0, 0.27, 0.142);
+    torsoGroup.add(chestSkin);
+
+    // Revers bianchi dello scollo a V bordati di borchie dorate
+    for (const side of [-1, 1]) {
+      const lapel = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.34, 0.025), matSuitWhite);
+      lapel.position.set(side * 0.072, 0.25, 0.155);
+      lapel.rotation.set(-0.08, side * 0.15, side * -0.26);
+      lapel.castShadow = true;
+      torsoGroup.add(lapel);
+    }
+
+    // Catenina dorata e Medaglioni Solari sul petto (come in elvis-reference.jpg)
+    const neckChain = new THREE.Mesh(
+      new THREE.TorusGeometry(0.095, 0.008, 10, 28, Math.PI * 1.15),
+      matGold
+    );
+    neckChain.rotation.set(0.22, 0, Math.PI * 0.92);
+    neckChain.position.set(0, 0.34, 0.152);
+    torsoGroup.add(neckChain);
+
+    for (const [my, mr] of [[0.26, 0.028], [0.19, 0.034]]) {
+      const medallion = new THREE.Mesh(new THREE.CylinderGeometry(mr, mr, 0.012, 20), matGold);
+      medallion.rotation.x = Math.PI / 2;
+      medallion.position.set(0, my, 0.165);
+      torsoGroup.add(medallion);
+    }
+
+    // Colletto Alto Anni '70 (CylinderGeometry con openEnded: true + bordo d'oro)
+    const collarGeo = new THREE.CylinderGeometry(
+      0.215, 0.145, 0.21, 32, 1, true, Math.PI * 0.22, Math.PI * 1.56
+    );
+    const collarMat = new THREE.MeshStandardMaterial({
+      color: COLORS.SUIT_WHITE,
+      roughness: 0.3,
+      side: THREE.DoubleSide,
+    });
+    const collarMesh = new THREE.Mesh(collarGeo, collarMat);
+    collarMesh.position.set(0, 0.48, -0.015);
+    collarMesh.rotation.x = -0.12;
+    collarMesh.castShadow = true;
+    torsoGroup.add(collarMesh);
+
+    const collarGoldRim = new THREE.Mesh(
+      new THREE.TorusGeometry(0.215, 0.009, 12, 36, Math.PI * 1.56),
+      matGold
+    );
+    collarGoldRim.position.set(0, 0.58, -0.028);
+    collarGoldRim.rotation.set(Math.PI / 2 - 0.12, 0, -Math.PI * 0.28);
+    torsoGroup.add(collarGoldRim);
+
+    // --- CINTURONE ICONICO "ALOHA BELT" ---
+    const beltGroup = new THREE.Group();
+    beltGroup.position.set(0, -0.12, 0);
+    torsoGroup.add(beltGroup);
+
+    const beltStrap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.195, 0.202, 0.115, 32),
+      matSuitWhite
+    );
+    beltStrap.scale.set(1.08, 1, 0.8);
+    beltGroup.add(beltStrap);
+
+    // Grande Fibbia Centrale Dorata (rettangolare/ovale con cerchi concentrici e Aquila)
+    const buckleFrame = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.125, 0.035), matGold);
+    buckleFrame.position.set(0, 0, 0.158);
+    beltGroup.add(buckleFrame);
+
+    for (const r of [0.048, 0.032, 0.016]) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.005, 10, 24), matGold);
+      ring.position.set(0, 0, 0.178);
+      beltGroup.add(ring);
+    }
+
+    // Borchie sferiche dorate (SphereGeometry) e medaglioni lungo la cintura
+    const studCount = 18;
+    for (let i = 0; i < studCount; i++) {
+      const angle = (i / studCount) * Math.PI * 2;
+      const sx = Math.sin(angle) * 0.212;
+      const sz = Math.cos(angle) * 0.162;
+      const stud = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 10), matGold);
+      stud.position.set(sx, 0.035, sz);
+      beltGroup.add(stud);
+
+      const studLow = stud.clone();
+      studLow.position.y = -0.035;
+      beltGroup.add(studLow);
+    }
+
+    // Catenelle dorate laterali pendenti sui fianchi (come in elvis-reference.jpg)
+    for (const side of [-1, 1]) {
+      const hipChain = new THREE.Mesh(
+        new THREE.TorusGeometry(0.075, 0.006, 8, 20, Math.PI),
+        matGold
+      );
+      hipChain.position.set(side * 0.145, -0.045, 0.125);
+      hipChain.rotation.set(0.2, side * 0.45, Math.PI);
+      beltGroup.add(hipChain);
+    }
+
+    // --- MANTELLO DA PALCO (Semicono bianco esterno + Fodera interna blu #003566) ---
+    const capeGroup = new THREE.Group();
+    capeGroup.name = 'capeGroup';
+    capeGroup.position.set(0, 0.40, -0.06);
+    torsoGroup.add(capeGroup);
+
+    const capeOuterGeo = new THREE.CylinderGeometry(
+      0.24, 0.56, 0.78, 32, 1, true, Math.PI * 0.58, Math.PI * 0.84
+    );
+    const capeOuterMat = new THREE.MeshStandardMaterial({
+      color: COLORS.SUIT_WHITE,
+      roughness: 0.3,
+      side: THREE.FrontSide,
+    });
+    const capeOuter = new THREE.Mesh(capeOuterGeo, capeOuterMat);
+    capeOuter.position.set(0, -0.36, -0.06);
+    capeOuter.rotation.x = 0.18;
+    capeOuter.castShadow = true;
+    capeGroup.add(capeOuter);
+
+    const capeInnerGeo = new THREE.CylinderGeometry(
+      0.236, 0.552, 0.775, 32, 1, true, Math.PI * 0.58, Math.PI * 0.84
+    );
+    const capeInner = new THREE.Mesh(capeInnerGeo, matCapeBlue);
+    capeInner.position.set(0, -0.36, -0.058);
+    capeInner.rotation.x = 0.18;
+    capeGroup.add(capeInner);
+
+    // ----------------------------------------------------------------------------
+    // 4.3 BRACCIA (`rightArmGroup` con Microfono Vintage, `leftArmGroup` in Posa Rock)
+    // ----------------------------------------------------------------------------
+    function createCuffAndStuds() {
+      const g = new THREE.Group();
+      // Polsino svasato anni '70
+      const cuff = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.055, 0.088, 0.14, 18, 1, true),
+        new THREE.MeshStandardMaterial({ color: COLORS.SUIT_WHITE, roughness: 0.3, side: THREE.DoubleSide })
+      );
+      g.add(cuff);
+      const trim = new THREE.Mesh(new THREE.TorusGeometry(0.086, 0.005, 8, 20), matGold);
+      trim.rotation.x = Math.PI / 2;
+      trim.position.y = -0.068;
+      g.add(trim);
+      return g;
+    }
+
+    // BRACCIO DESTRO (`rightArmGroup`) — Piegato con Microfono Vintage
+    const rightArmGroup = new THREE.Group();
+    rightArmGroup.name = 'rightArmGroup';
+    rightArmGroup.position.set(-0.29, 0.36, 0.0);
+    torsoGroup.add(rightArmGroup);
+
+    const rUpperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.058, 0.28, 16), matSuitWhite);
+    rUpperArm.position.set(-0.06, -0.11, 0.04);
+    rUpperArm.rotation.set(-0.35, 0, -0.45);
+    rUpperArm.castShadow = true;
+    rightArmGroup.add(rUpperArm);
+
+    const rForearmGroup = new THREE.Group();
+    rForearmGroup.position.set(-0.14, -0.22, 0.10);
+    rForearmGroup.rotation.set(-0.85, 0.25, -0.35);
+    rightArmGroup.add(rForearmGroup);
+
+    const rForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.064, 0.25, 16), matSuitWhite);
+    rForearm.position.y = -0.10;
+    rForearmGroup.add(rForearm);
+
+    const rCuff = createCuffAndStuds();
+    rCuff.position.y = -0.19;
+    rForearmGroup.add(rCuff);
+
+    const rHand = new THREE.Mesh(new THREE.SphereGeometry(0.052, 14, 14), matSkin);
+    rHand.position.set(0, -0.27, 0.01);
+    rForearmGroup.add(rHand);
+
+    // Microfono Vintage da Palco (impugnato nella mano destra, come in elvis-reference.jpg)
+    const micGroup = new THREE.Group();
+    micGroup.name = 'micGroup';
+    micGroup.position.set(0, -0.28, 0.03);
+    micGroup.rotation.set(Math.PI * 0.42, 0, -0.25);
+    rForearmGroup.add(micGroup);
+
+    const micHandle = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.016, 0.011, 0.19, 16),
+      matChrome
+    );
+    micGroup.add(micHandle);
+
+    const micHead = new THREE.Mesh(
+      new THREE.SphereGeometry(0.034, 20, 16),
+      new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.85, roughness: 0.25 })
+    );
+    micHead.scale.set(1, 1.25, 1);
+    micHead.position.y = 0.105;
+    micGroup.add(micHead);
+
+    const micBand = new THREE.Mesh(new THREE.TorusGeometry(0.034, 0.004, 8, 20), matGold);
+    micBand.rotation.x = Math.PI / 2;
+    micBand.position.y = 0.102;
+    micGroup.add(micBand);
+
+    // BRACCIO SINISTRO (`leftArmGroup`) — Alzato in Posa Rock / Pointing
+    const leftArmGroup = new THREE.Group();
+    leftArmGroup.name = 'leftArmGroup';
+    leftArmGroup.position.set(0.29, 0.36, 0.0);
+    torsoGroup.add(leftArmGroup);
+
+    const lUpperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.058, 0.27, 16), matSuitWhite);
+    lUpperArm.position.set(0.04, -0.04, 0.11);
+    lUpperArm.rotation.set(-1.15, -0.2, 0.22);
+    lUpperArm.castShadow = true;
+    leftArmGroup.add(lUpperArm);
+
+    const lForearmGroup = new THREE.Group();
+    lForearmGroup.position.set(0.08, -0.08, 0.24);
+    lForearmGroup.rotation.set(-1.38, -0.32, 0.15);
+    leftArmGroup.add(lForearmGroup);
+
+    const lForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.064, 0.24, 16), matSuitWhite);
+    lForearm.position.y = -0.10;
+    lForearmGroup.add(lForearm);
+
+    const lCuff = createCuffAndStuds();
+    lCuff.position.y = -0.18;
+    lForearmGroup.add(lCuff);
+
+    const lHand = new THREE.Mesh(new THREE.SphereGeometry(0.052, 14, 14), matSkin);
+    lHand.position.set(0, -0.26, 0);
+    lForearmGroup.add(lHand);
+
+    // Dito indice puntato verso la folla (come nella foto Aloha from Hawaii)
+    const indexFinger = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.065, 10), matSkin);
+    indexFinger.position.set(-0.01, -0.31, 0.015);
+    lForearmGroup.add(indexFinger);
+
+    // ----------------------------------------------------------------------------
+    // 4.4 BACINO E GAMBE A ZAMPA CON KICKPLEATS ROSSI (`#D90429`)
+    // ----------------------------------------------------------------------------
+    const pelvisGroup = new THREE.Group();
+    pelvisGroup.name = 'pelvisGroup';
+    pelvisGroup.position.set(0, 0.78, 0);
+    elvisGroup.add(pelvisGroup);
+
+    const pelvisMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.20, 0.185, 0.18, 28),
+      matSuitWhite
+    );
+    pelvisMesh.scale.set(1.06, 1, 0.82);
+    pelvisGroup.add(pelvisMesh);
+
+    function createBellBottomLeg(side) {
+      const legGroup = new THREE.Group();
+      legGroup.position.set(side * 0.115, -0.04, 0);
+      // Stance dinamica a gambe divaricate come in elvis-reference.jpg
+      legGroup.rotation.set(side === -1 ? -0.08 : 0.06, side * -0.12, side * 0.21);
+
+      // Coscia
+      const thigh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.095, 0.078, 0.38, 20),
+        matSuitWhite
+      );
+      thigh.position.y = -0.18;
+      thigh.castShadow = true;
+      legGroup.add(thigh);
+
+      // Polpaccio svasato a zampa d'elefante (Bell-Bottom Flare)
+      const calfGroup = new THREE.Group();
+      calfGroup.position.set(0, -0.36, 0);
+      calfGroup.rotation.z = side * -0.08;
+      legGroup.add(calfGroup);
+
+      const bellBottom = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.076, 0.148, 0.39, 24),
+        matSuitWhite
+      );
+      bellBottom.position.y = -0.19;
+      bellBottom.castShadow = true;
+      calfGroup.add(bellBottom);
+
+      // Kickpleats Rossi (#D90429) sui lati esterni dei pantaloni a zampa + borchie d'oro
+      const kickpleat = new THREE.Mesh(
+        new THREE.ConeGeometry(0.058, 0.24, 4),
+        matEagleRed
+      );
+      kickpleat.position.set(side * 0.105, -0.26, 0);
+      kickpleat.rotation.z = side * -0.18;
+      calfGroup.add(kickpleat);
+
+      // Stivaletto bianco anni '70 con tacco cubano
+      const boot = new THREE.Mesh(
+        new THREE.BoxGeometry(0.11, 0.075, 0.22),
+        matSuitWhite
+      );
+      boot.position.set(0, -0.39, 0.035);
+      boot.castShadow = true;
+      calfGroup.add(boot);
+
+      return { legGroup, calfGroup };
+    }
+
+    const rightLeg = createBellBottomLeg(-1);
+    const leftLeg = createBellBottomLeg(1);
+    pelvisGroup.add(rightLeg.legGroup);
+    pelvisGroup.add(leftLeg.legGroup);
+
+    // ============================================================================
+    // 5. CONTROLLI INTERATTIVI UI (POSE, OCCHIALI, MANTELLO, CAMERA PRESETS)
+    // ============================================================================
+    let currentPose = 'stage'; // 'stage' | 'drive'
+    let autoRotate = false;
+
+    function applyPose(pose) {
+      currentPose = pose;
+      if (pose === 'stage') {
+        elvisGroup.position.y = 0;
+        torsoGroup.rotation.set(0, -0.14, 0);
+        headGroup.rotation.set(0.05, 0.18, -0.04);
+        rightArmGroup.rotation.set(0, 0, 0);
+        leftArmGroup.rotation.set(0, 0, 0);
+        micGroup.visible = true;
+        pelvisGroup.visible = true;
+      } else {
+        // Posa Pilota Alfetta GTV (mani sul volante, busto dritto)
+        elvisGroup.position.y = 0;
+        torsoGroup.rotation.set(0.04, 0, 0);
+        headGroup.rotation.set(0, 0, 0);
+        rightArmGroup.rotation.set(-0.55, -0.25, 0.35);
+        leftArmGroup.rotation.set(0.35, 0.25, -0.15);
+        micGroup.visible = false;
+      }
+    }
+
+    document.getElementById('btn-pose-stage').addEventListener('click', (e) => {
+      applyPose('stage');
+      e.target.classList.add('active');
+      document.getElementById('btn-pose-drive').classList.remove('active');
+    });
+
+    document.getElementById('btn-pose-drive').addEventListener('click', (e) => {
+      applyPose('drive');
+      e.target.classList.add('active');
+      document.getElementById('btn-pose-stage').classList.remove('active');
+    });
+
+    document.getElementById('btn-glasses').addEventListener('click', (e) => {
+      glassesGroup.visible = !glassesGroup.visible;
+      e.target.classList.toggle('active', glassesGroup.visible);
+    });
+
+    document.getElementById('btn-cape').addEventListener('click', (e) => {
+      capeGroup.visible = !capeGroup.visible;
+      e.target.classList.toggle('active', capeGroup.visible);
+    });
+
+    document.getElementById('btn-rotate').addEventListener('click', (e) => {
+      autoRotate = !autoRotate;
+      controls.autoRotate = autoRotate;
+      controls.autoRotateSpeed = 2.2;
+      e.target.classList.toggle('active', autoRotate);
+    });
+
+    document.getElementById('btn-cam-front').addEventListener('click', () => {
+      camera.position.set(0.3, 1.35, 3.65);
+      controls.target.set(0, 1.05, 0);
+    });
+
+    document.getElementById('btn-cam-head').addEventListener('click', () => {
+      camera.position.set(0.12, 1.72, 1.15);
+      controls.target.set(0, 1.66, 0.05);
+    });
+
+    document.getElementById('btn-cam-belt').addEventListener('click', () => {
+      camera.position.set(0.18, 1.12, 1.45);
+      controls.target.set(0, 1.08, 0.05);
+    });
+
+    applyPose('stage');
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ============================================================================
+    // 6. ANIMATION LOOP (GROOVE ROCKABILLY & BREATHING)
+    // ============================================================================
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+
+      // Respiro e leggero groove da concerto sul posto
+      torsoGroup.position.y = 1.0 + Math.sin(t * 2.6) * 0.008;
+      headGroup.position.y = 1.65 + Math.sin(t * 2.6 - 0.4) * 0.009;
+      if (currentPose === 'stage') {
+        headGroup.rotation.z = -0.04 + Math.sin(t * 1.8) * 0.025;
+        leftArmGroup.rotation.x = Math.sin(t * 2.6) * 0.04;
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+  </script>
+</body>
+</html>

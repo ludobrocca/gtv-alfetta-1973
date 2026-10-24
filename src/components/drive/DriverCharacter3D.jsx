@@ -303,65 +303,323 @@ function TorsoAndArms({
 }
 
 /**
- * 1. ELVIS PRESLEY — Pompadour, Gold Aviators, White Vegas Jumpsuit with High Collar
+ * Procedural CanvasTextures for Elvis Presley ("Aloha from Hawaii" 1973):
+ * 1. Face Texture with signature crooked smirk, raised brow, and cleft chin
+ * 2. American Eagle Chest Texture (#F8F9FA suit, #D90429 red, #003566 blue, #FFD700 gold studs)
+ */
+function useElvisAlohaTextures() {
+  return useMemo(() => {
+    // 1. Face Smirk Texture
+    const faceCanvas = document.createElement('canvas');
+    faceCanvas.width = 512;
+    faceCanvas.height = 512;
+    const fctx = faceCanvas.getContext('2d');
+    fctx.fillStyle = '#F1C27D';
+    fctx.fillRect(0, 0, 512, 512);
+
+    // Eyebrows
+    fctx.strokeStyle = '#111111';
+    fctx.lineWidth = 9;
+    fctx.lineCap = 'round';
+    fctx.beginPath();
+    fctx.moveTo(180, 210);
+    fctx.quadraticCurveTo(208, 198, 232, 208);
+    fctx.stroke();
+    fctx.beginPath();
+    fctx.moveTo(278, 206);
+    fctx.quadraticCurveTo(308, 186, 338, 201);
+    fctx.stroke();
+
+    // Eyes
+    for (const ex of [208, 304]) {
+      fctx.fillStyle = '#FFFFFF';
+      fctx.beginPath();
+      fctx.ellipse(ex, 234, 21, 13, 0, 0, Math.PI * 2);
+      fctx.fill();
+      fctx.fillStyle = '#1e293b';
+      fctx.beginPath();
+      fctx.arc(ex, 234, 10, 0, Math.PI * 2);
+      fctx.fill();
+      fctx.fillStyle = '#FFFFFF';
+      fctx.beginPath();
+      fctx.arc(ex - 3, 231, 3, 0, Math.PI * 2);
+      fctx.fill();
+    }
+
+    // Crooked Elvis Smirk
+    fctx.fillStyle = '#7f1d1d';
+    fctx.beginPath();
+    fctx.moveTo(218, 323);
+    fctx.quadraticCurveTo(259, 329, 304, 308);
+    fctx.quadraticCurveTo(284, 339, 218, 323);
+    fctx.closePath();
+    fctx.fill();
+
+    fctx.fillStyle = '#F8F9FA';
+    fctx.beginPath();
+    fctx.moveTo(234, 324);
+    fctx.quadraticCurveTo(266, 326, 297, 311);
+    fctx.quadraticCurveTo(279, 329, 234, 324);
+    fctx.closePath();
+    fctx.fill();
+
+    fctx.strokeStyle = '#9e2a2b';
+    fctx.lineWidth = 6;
+    fctx.beginPath();
+    fctx.moveTo(215, 323);
+    fctx.quadraticCurveTo(258, 328, 306, 307);
+    fctx.stroke();
+
+    const faceTex = new THREE.CanvasTexture(faceCanvas);
+    faceTex.colorSpace = THREE.SRGBColorSpace;
+
+    // 2. American Eagle Chest Texture
+    const eagleCanvas = document.createElement('canvas');
+    eagleCanvas.width = 512;
+    eagleCanvas.height = 512;
+    const ectx = eagleCanvas.getContext('2d');
+    ectx.fillStyle = '#F8F9FA';
+    ectx.fillRect(0, 0, 512, 512);
+
+    const cx = 256;
+    for (const side of [-1, 1]) {
+      ectx.fillStyle = '#D90429';
+      ectx.beginPath();
+      ectx.moveTo(cx + side * 28, 210);
+      ectx.lineTo(cx + side * 170, 105);
+      ectx.lineTo(cx + side * 182, 132);
+      ectx.lineTo(cx + side * 38, 238);
+      ectx.closePath();
+      ectx.fill();
+
+      ectx.fillStyle = '#003566';
+      ectx.beginPath();
+      ectx.moveTo(cx + side * 32, 248);
+      ectx.lineTo(cx + side * 175, 152);
+      ectx.lineTo(cx + side * 185, 180);
+      ectx.lineTo(cx + side * 42, 275);
+      ectx.closePath();
+      ectx.fill();
+
+      ectx.fillStyle = '#D90429';
+      ectx.beginPath();
+      ectx.moveTo(cx + side * 38, 285);
+      ectx.lineTo(cx + side * 168, 200);
+      ectx.lineTo(cx + side * 175, 228);
+      ectx.lineTo(cx + side * 48, 312);
+      ectx.closePath();
+      ectx.fill();
+
+      // Gold rhinestones along chevron wings
+      ectx.fillStyle = '#FFD700';
+      for (let i = 0; i <= 12; i++) {
+        const t = i / 12;
+        const x = cx + side * (28 + 142 * t);
+        const y = 208 - 103 * t;
+        ectx.beginPath();
+        ectx.arc(x, y, 3.5, 0, Math.PI * 2);
+        ectx.fill();
+      }
+    }
+
+    const eagleTex = new THREE.CanvasTexture(eagleCanvas);
+    eagleTex.colorSpace = THREE.SRGBColorSpace;
+
+    return { faceTex, eagleTex };
+  }, []);
+}
+
+/**
+ * 1. ELVIS PRESLEY ("Aloha from Hawaii" 1973 Designer Toy Edition)
+ * Palette: #F8F9FA suit, #FFD700 gold, #D90429 red, #003566 cape lining, #111111 hair, #F1C27D skin
  */
 function ElvisModel({ pose }) {
+  const isDriving = pose === 'driving';
+  const { faceTex, eagleTex } = useElvisAlohaTextures();
+
   return (
-    <group>
-      <TorsoAndArms
-        jacketColor="#f8fafc"
-        shirtColor="#e11d48"
-        handColor="#f1c29b"
-        pantsColor="#f8fafc"
-        beltColor="#fbbf24"
-        buckleColor="#f59e0b"
-        shoeColor="#f8fafc"
-        flareLegs
-        pose={pose}
-      >
-        {/* High Vegas Popped Collar */}
-        <mesh position={[0, 0.72, -0.04]} rotation={[0.15, 0, 0]}>
-          <cylinderGeometry args={[0.19, 0.16, 0.16, 7, 1, true, Math.PI * 0.25, Math.PI * 1.5]} />
-          <meshStandardMaterial color="#ffffff" side={THREE.DoubleSide} flatShading />
+    <group name="elvisGroup" position={[0, -0.72, 0]}>
+      {/* 1. HEAD GROUP (y = 1.65) */}
+      <group name="headGroup" position={[0, 1.65, 0]} rotation={[0.04, isDriving ? 0 : 0.14, 0]}>
+        {/* Neck */}
+        <mesh position={[0, -0.17, -0.01]}>
+          <cylinderGeometry args={[0.085, 0.10, 0.16, 18]} />
+          <meshStandardMaterial color="#F1C27D" roughness={0.5} />
         </mesh>
-        {/* Gold Studded Lapels & Belt */}
+
+        {/* Sculpted Face with Procedural Smirk CanvasTexture */}
+        <mesh scale={[0.92, 1.12, 0.96]} rotation={[0, -Math.PI / 2, 0]} castShadow>
+          <sphereGeometry args={[0.195, 28, 24]} />
+          <meshStandardMaterial map={faceTex} roughness={0.48} />
+        </mesh>
+
+        {/* 3D Nose */}
+        <mesh position={[0, 0.005, 0.195]} rotation={[0.28, 0, 0]}>
+          <coneGeometry args={[0.025, 0.072, 10]} />
+          <meshStandardMaterial color="#F1C27D" roughness={0.5} />
+        </mesh>
+
+        {/* Pompadour Hair (#111111, roughness 0.4) + Mutton Chops */}
+        <mesh position={[0, 0.045, -0.035]} scale={[0.98, 1.08, 1.05]} castShadow>
+          <sphereGeometry args={[0.212, 24, 20]} />
+          <meshStandardMaterial color="#111111" roughness={0.4} />
+        </mesh>
+        <mesh position={[0, 0.195, 0.105]} rotation={[0, 0, Math.PI / 2]} scale={[1.15, 1.0, 0.88]} castShadow>
+          <cylinderGeometry args={[0.125, 0.145, 0.34, 20]} />
+          <meshStandardMaterial color="#111111" roughness={0.4} />
+        </mesh>
+        <mesh position={[0, 0.21, 0.045]} rotation={[-0.25, 0, 0]} scale={[1.12, 0.82, 1.28]}>
+          <sphereGeometry args={[0.165, 20, 16]} />
+          <meshStandardMaterial color="#111111" roughness={0.4} />
+        </mesh>
         {[-1, 1].map((s) => (
-          <mesh key={s} position={[s * 0.10, 0.50, 0.23]} rotation={[0, 0, s * -0.25]}>
-            <boxGeometry args={[0.045, 0.28, 0.03]} />
-            <meshStandardMaterial color="#fbbf24" metalness={0.7} roughness={0.3} flatShading />
+          <mesh key={s} position={[s * 0.172, -0.045, 0.068]} rotation={[0.12, s * 0.22, s * -0.08]}>
+            <boxGeometry args={[0.046, 0.145, 0.072]} />
+            <meshStandardMaterial color="#111111" roughness={0.4} />
           </mesh>
         ))}
-      </TorsoAndArms>
 
-      <BaseHead skinColor="#f1c29b" smile />
+        {/* TCB Aviator Sunglasses (#FFD700 + Dark Lenses #1a1a2e opacity 0.8) */}
+        <group position={[0, 0.028, 0.188]}>
+          <mesh position={[0, 0.042, 0.01]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.007, 0.007, 0.24, 10]} />
+            <meshStandardMaterial color="#FFD700" metalness={0.85} roughness={0.2} />
+          </mesh>
+          <mesh position={[0, 0.018, 0.012]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.006, 0.006, 0.08, 10]} />
+            <meshStandardMaterial color="#FFD700" metalness={0.85} roughness={0.2} />
+          </mesh>
+          {[-1, 1].map((s) => (
+            <group key={s} position={[s * 0.078, 0.002, 0.006]} rotation={[0, s * -0.12, 0]}>
+              <mesh scale={[1.12, 0.95, 1]}>
+                <torusGeometry args={[0.056, 0.0075, 10, 24]} />
+                <meshStandardMaterial color="#FFD700" metalness={0.85} roughness={0.2} />
+              </mesh>
+              <mesh position={[0, 0, 0.002]} scale={[1.12, 0.95, 1]}>
+                <circleGeometry args={[0.054, 24]} />
+                <meshStandardMaterial color="#1a1a2e" transparent opacity={0.8} roughness={0.1} />
+              </mesh>
+            </group>
+          ))}
+        </group>
+      </group>
 
-      {/* Jet-Black Pompadour Hair & Sideburns */}
-      <mesh position={[0, 1.24, 0.10]} rotation={[-0.18, 0, 0]}>
-        <boxGeometry args={[0.36, 0.22, 0.38]} />
-        <meshStandardMaterial color="#0f172a" flatShading roughness={0.8} />
-      </mesh>
-      <mesh position={[0, 1.08, -0.08]}>
-        <dodecahedronGeometry args={[0.26, 1]} />
-        <meshStandardMaterial color="#0f172a" flatShading roughness={0.8} />
-      </mesh>
-      {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * 0.22, 0.99, 0.09]}>
-          <boxGeometry args={[0.055, 0.18, 0.09]} />
-          <meshStandardMaterial color="#0f172a" flatShading />
+      {/* 2. TORSO, HIGH COLLAR, ALOHA BELT & CAPE (y = 1.0) */}
+      <group name="torsoGroup" position={[0, 1.0, 0]}>
+        <mesh position={[0, 0.14, 0]} rotation={[0, -Math.PI / 2, 0]} scale={[1.08, 1, 0.78]} castShadow>
+          <cylinderGeometry args={[0.245, 0.185, 0.56, 28]} />
+          <meshStandardMaterial map={eagleTex} roughness={0.3} />
         </mesh>
-      ))}
 
-      {/* Gold Aviator Sunglasses */}
-      <mesh position={[0, 1.06, 0.25]}>
-        <boxGeometry args={[0.32, 0.02, 0.02]} />
-        <meshStandardMaterial color="#fbbf24" metalness={0.8} roughness={0.2} flatShading />
-      </mesh>
-      {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * 0.09, 1.045, 0.25]}>
-          <boxGeometry args={[0.11, 0.075, 0.025]} />
-          <meshStandardMaterial color="#451a03" metalness={0.5} roughness={0.2} flatShading />
+        {/* Deep V-Neck Chest Skin + Gold Chain */}
+        <mesh position={[0, 0.27, 0.142]} rotation={[0, Math.PI, Math.PI]} scale={[1, 1, 0.25]}>
+          <coneGeometry args={[0.115, 0.32, 3]} />
+          <meshStandardMaterial color="#F1C27D" roughness={0.5} />
         </mesh>
-      ))}
+        <mesh position={[0, 0.26, 0.165]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.028, 0.028, 0.012, 16]} />
+          <meshStandardMaterial color="#FFD700" metalness={0.85} roughness={0.2} />
+        </mesh>
+
+        {/* High 1970s Flared Collar (openEnded: true) */}
+        <mesh position={[0, 0.48, -0.015]} rotation={[-0.12, 0, 0]}>
+          <cylinderGeometry args={[0.215, 0.145, 0.21, 28, 1, true, Math.PI * 0.22, Math.PI * 1.56]} />
+          <meshStandardMaterial color="#F8F9FA" roughness={0.3} side={THREE.DoubleSide} />
+        </mesh>
+
+        {/* Iconic Studded Aloha Belt */}
+        <group position={[0, -0.12, 0]}>
+          <mesh scale={[1.08, 1, 0.8]}>
+            <cylinderGeometry args={[0.195, 0.202, 0.115, 24]} />
+            <meshStandardMaterial color="#F8F9FA" roughness={0.3} />
+          </mesh>
+          <mesh position={[0, 0, 0.158]}>
+            <boxGeometry args={[0.16, 0.125, 0.035]} />
+            <meshStandardMaterial color="#FFD700" metalness={0.85} roughness={0.2} />
+          </mesh>
+        </group>
+
+        {/* Stage Cape (#F8F9FA Outer + #003566 Blue Lining) */}
+        <group position={[0, 0.40, -0.06]}>
+          <mesh position={[0, -0.36, -0.06]} rotation={[0.18, 0, 0]}>
+            <cylinderGeometry args={[0.24, 0.56, 0.78, 24, 1, true, Math.PI * 0.58, Math.PI * 0.84]} />
+            <meshStandardMaterial color="#F8F9FA" roughness={0.3} side={THREE.FrontSide} />
+          </mesh>
+          <mesh position={[0, -0.36, -0.058]} rotation={[0.18, 0, 0]}>
+            <cylinderGeometry args={[0.236, 0.552, 0.775, 24, 1, true, Math.PI * 0.58, Math.PI * 0.84]} />
+            <meshStandardMaterial color="#003566" roughness={0.4} side={THREE.BackSide} />
+          </mesh>
+        </group>
+
+        {/* 3. ARMS (Right Arm with Vintage Mic, Left Arm in Rock Pose) */}
+        <group
+          name="rightArmGroup"
+          position={[-0.29, 0.36, 0]}
+          rotation={isDriving ? [-0.65, -0.2, 0.35] : [0, 0, 0]}
+        >
+          <mesh position={[-0.08, -0.18, 0.08]} rotation={[-0.65, 0.15, -0.35]}>
+            <cylinderGeometry args={[0.065, 0.078, 0.42, 14]} />
+            <meshStandardMaterial color="#F8F9FA" roughness={0.3} />
+          </mesh>
+          <mesh position={[-0.14, -0.36, 0.22]}>
+            <sphereGeometry args={[0.052, 12, 12]} />
+            <meshStandardMaterial color="#F1C27D" roughness={0.5} />
+          </mesh>
+          {!isDriving && (
+            <group position={[-0.14, -0.36, 0.26]} rotation={[Math.PI * 0.35, 0, -0.2]}>
+              <mesh>
+                <cylinderGeometry args={[0.015, 0.011, 0.18, 12]} />
+                <meshStandardMaterial color="#e2e8f0" metalness={0.9} roughness={0.15} />
+              </mesh>
+              <mesh position={[0, 0.10, 0]} scale={[1, 1.25, 1]}>
+                <sphereGeometry args={[0.032, 16, 14]} />
+                <meshStandardMaterial color="#FFD700" metalness={0.85} roughness={0.2} />
+              </mesh>
+            </group>
+          )}
+        </group>
+
+        <group
+          name="leftArmGroup"
+          position={[0.29, 0.36, 0]}
+          rotation={isDriving ? [-0.65, 0.2, -0.35] : [0, 0, 0]}
+        >
+          <mesh position={[0.08, -0.08, 0.18]} rotation={[-1.25, -0.22, 0.18]}>
+            <cylinderGeometry args={[0.065, 0.078, 0.42, 14]} />
+            <meshStandardMaterial color="#F8F9FA" roughness={0.3} />
+          </mesh>
+          <mesh position={[0.14, -0.14, 0.36]}>
+            <sphereGeometry args={[0.052, 12, 12]} />
+            <meshStandardMaterial color="#F1C27D" roughness={0.5} />
+          </mesh>
+        </group>
+      </group>
+
+      {/* 4. BELL-BOTTOM LEGS WITH RED KICKPLEATS (#D90429) */}
+      {!isDriving && (
+        <group position={[0, 0.78, 0]}>
+          {[-1, 1].map((s) => (
+            <group key={s} position={[s * 0.115, -0.04, 0]} rotation={[0, s * -0.1, s * 0.18]}>
+              <mesh position={[0, -0.18, 0]}>
+                <cylinderGeometry args={[0.092, 0.076, 0.36, 16]} />
+                <meshStandardMaterial color="#F8F9FA" roughness={0.3} />
+              </mesh>
+              <mesh position={[0, -0.52, 0]}>
+                <cylinderGeometry args={[0.076, 0.145, 0.38, 20]} />
+                <meshStandardMaterial color="#F8F9FA" roughness={0.3} />
+              </mesh>
+              <mesh position={[s * 0.10, -0.58, 0]} rotation={[0, 0, s * -0.18]}>
+                <coneGeometry args={[0.055, 0.22, 4]} />
+                <meshStandardMaterial color="#D90429" roughness={0.35} />
+              </mesh>
+              <mesh position={[0, -0.72, 0.035]}>
+                <boxGeometry args={[0.11, 0.075, 0.22]} />
+                <meshStandardMaterial color="#F8F9FA" roughness={0.3} />
+              </mesh>
+            </group>
+          ))}
+        </group>
+      )}
     </group>
   );
 }

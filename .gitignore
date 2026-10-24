@@ -23,5 +23,13 @@ yarn-error.log*
 __pycache__/
 *.py[cod]
 
+# img2threejs working directories
+.img2threejs/
+elvis/
+*.png
+*.jpg
+*.jpeg
+!public/images/*
+
 # Note: public/models/*.glb is intentionally NOT ignored so the 3D model is tracked in Git.
 !public/models/*.glb

@@ -87,10 +87,6 @@ export function ShowroomBottomSheet({
     if (onSelectCameraPreset) {
       onSelectCameraPreset(preset);
     }
-    // Ensure hood is open when engine preset is selected
-    if (preset.id === 'engine' && !hoodOpen && onToggleHood) {
-      onToggleHood();
-    }
   };
 
   const handleEnterDriveClick = () => {
@@ -114,22 +110,30 @@ export function ShowroomBottomSheet({
       {/* Bottom Sheet Drawer & Dock */}
       <section
         aria-label="Pannello Controlli Showroom Mobile"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        className={`block md:hidden fixed bottom-0 left-0 right-0 z-40 transition-all duration-300 ease-out pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 pt-2.5 rounded-t-3xl shadow-2xl ${
+        className={`block md:hidden fixed bottom-0 left-0 right-0 z-40 transition-all duration-300 ease-out pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 pt-1 rounded-t-3xl shadow-2xl ${
           isLight
             ? 'bg-white/95 text-zinc-900 border-t border-zinc-200 backdrop-blur-xl'
             : 'bg-black/90 text-white border-t border-white/15 backdrop-blur-xl'
         } ${glassClass}`}
       >
-        {/* Subtle Drag Handle Pill */}
-        <div
+        {/* Dedicated Drag Handle / Toggle Header with >=44px Touch Target */}
+        <button
+          type="button"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
           onClick={() => setIsExpanded((prev) => !prev)}
-          className="w-12 h-1.5 rounded-full bg-white/30 mb-2.5 mx-auto cursor-pointer active:scale-95 transition-transform"
-          aria-label={isExpanded ? 'Riduci controlli showroom' : 'Espandi controlli showroom'}
-          role="button"
-          tabIndex={0}
-        />
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setIsExpanded((prev) => !prev);
+            }
+          }}
+          className="py-3 w-full flex items-center justify-center cursor-pointer min-h-[44px] active:scale-95 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-alfa-gold rounded-t-3xl"
+          aria-label={isExpanded ? 'Comprimi controlli showroom' : 'Espandi controlli showroom'}
+          aria-expanded={isExpanded}
+        >
+          <span className="w-12 h-1.5 rounded-full bg-white/30 block pointer-events-none" />
+        </button>
 
         {/* ========================================================= */}
         {/* COLLAPSED STATE (Compact dock ~76-80px + safe area)        */}

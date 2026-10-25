@@ -318,7 +318,7 @@ export function MobileNavDrawer({
 
           {/* e. Tema Showroom (Moon / Sun) */}
           <div
-            className={`w-full min-h-[48px] p-2.5 rounded-xl flex items-center justify-between transition-all ${
+            className={`w-full min-h-[54px] p-2.5 rounded-xl flex items-center justify-between transition-all ${
               isLight
                 ? 'bg-white/80 border border-zinc-200/80 shadow-sm'
                 : 'bg-white/5 border border-white/5'
@@ -339,13 +339,13 @@ export function MobileNavDrawer({
                 </div>
               </div>
             </div>
-            <div className="flex items-center p-1 rounded-lg bg-black/20 shrink-0">
+            <div className="flex items-center p-1 rounded-xl bg-black/20 shrink-0">
               <button
                 type="button"
                 onClick={() => onToggleLighting && onToggleLighting('night')}
-                className={`min-h-[36px] px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                className={`min-h-[44px] min-w-[44px] flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                   lightingMode === 'night'
-                    ? 'bg-zinc-800 text-white shadow-sm'
+                    ? 'bg-zinc-800 text-white shadow-sm font-semibold'
                     : 'text-zinc-400 hover:text-white'
                 }`}
               >
@@ -354,7 +354,7 @@ export function MobileNavDrawer({
               <button
                 type="button"
                 onClick={() => onToggleLighting && onToggleLighting('studio')}
-                className={`min-h-[36px] px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                className={`min-h-[44px] min-w-[44px] flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                   lightingMode === 'studio'
                     ? 'bg-white text-zinc-900 shadow-sm font-semibold'
                     : 'text-zinc-400 hover:text-white'

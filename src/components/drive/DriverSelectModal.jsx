@@ -168,8 +168,8 @@ export function DriverSelectModal({ onCloseToShowroom }) {
     touchStartXRef.current = null;
     touchStartYRef.current = null;
 
-    // Detect horizontal swipe: distance >= 40px, predominantly horizontal, duration < 600ms
-    if (Math.abs(deltaX) >= 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2 && duration < 600) {
+    // Detect horizontal swipe on header: threshold distance >= 85px, horizontal dominance (|deltaY| < 30px), duration < 500ms
+    if (Math.abs(deltaX) >= 85 && Math.abs(deltaY) < 30 && duration < 500) {
       if (deltaX < 0) {
         cycleDriver(1); // Swiped left -> Next
       } else {
@@ -182,6 +182,7 @@ export function DriverSelectModal({ onCloseToShowroom }) {
   useEffect(() => {
     const onKeyDown = (e) => {
       if (driveStore.mode !== 'drive' || driveStore.gameState !== 'selecting') return;
+      if (showMobileStats) return;
       const idx = DRIVERS.findIndex((d) => d.id === selectedId);
       if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
         e.preventDefault();
@@ -198,7 +199,7 @@ export function DriverSelectModal({ onCloseToShowroom }) {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedId]);
+  }, [selectedId, showMobileStats]);
 
   const stats = activeDriver.stats || {
     style: 95,
@@ -218,11 +219,7 @@ export function DriverSelectModal({ onCloseToShowroom }) {
       />
 
       {/* 1. FULL-SCREEN UNFRAMED 3D CHARACTER SHOWCASE STAGE */}
-      <div
-        className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-      >
+      <div className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing">
         <Canvas
           shadows
           dpr={[1, 2]}
@@ -609,7 +606,7 @@ export function DriverSelectModal({ onCloseToShowroom }) {
             <button
               type="button"
               onClick={() => setShowMobileStats(true)}
-              className="min-h-[40px] flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-bold text-zinc-200 active:scale-95 transition hover:bg-white/15 shrink-0 shadow-sm"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-3.5 py-2 text-[11px] font-bold text-zinc-200 active:scale-95 transition hover:bg-white/15 shrink-0 shadow-sm"
             >
               <span>Statistiche & Dettagli 📊</span>
             </button>
@@ -656,7 +653,7 @@ export function DriverSelectModal({ onCloseToShowroom }) {
               <button
                 type="button"
                 onClick={() => setShowMobileStats(false)}
-                className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-xl bg-white/10 text-zinc-300 hover:text-white"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-white/10 text-zinc-300 hover:text-white active:scale-95 transition"
                 aria-label="Chiudi statistiche"
               >
                 ✕
@@ -711,7 +708,7 @@ export function DriverSelectModal({ onCloseToShowroom }) {
             <button
               type="button"
               onClick={() => setShowMobileStats(false)}
-              className="w-full mt-1 py-2.5 rounded-xl bg-white/10 text-xs font-bold uppercase tracking-wider text-zinc-300 hover:bg-white/15 active:scale-95 transition"
+              className="w-full min-h-[44px] min-w-[44px] mt-1 py-2.5 rounded-xl bg-white/10 text-xs font-bold uppercase tracking-wider text-zinc-300 hover:bg-white/15 active:scale-95 transition flex items-center justify-center"
             >
               Chiudi Dettagli
             </button>

@@ -440,7 +440,7 @@ export function Speedometer({ onExitDrive }) {
               Partita Terminata
             </h2>
             <p className="text-xs text-zinc-400 mb-6 font-mono">
-              Alfa Romeo Alfetta GTV 1973
+              Alfa Romeo Alfetta GTV (1976)
             </p>
 
             {/* Score Grid */}

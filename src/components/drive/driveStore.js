@@ -162,6 +162,10 @@ class DriveStore {
     if (driverId) {
       this.selectedDriver = driverId;
     }
+    if (!this.userExplicitlyMuted) {
+      this.soundEnabled = true;
+      driveAudio.setMuted(false);
+    }
     this.resetGame('playing');
   }
 
@@ -241,10 +245,11 @@ class DriveStore {
           `+${pts} PT • SCIA TURBO GTV`,
           'cyan'
         );
-        driveAudio.playCoinPickup();
+        driveAudio.playNearMissWhoosh();
       }
 
       this.targetLane = newLane;
+      this.rpmBlip = 280;
       // Trigger realistic body roll & steering yaw into the chosen direction
       this.carRoll = direction * 0.12;
       this.carYaw = -direction * 0.11;
@@ -309,19 +314,19 @@ class DriveStore {
     } else if (pType === 'bond') {
       this.activePowerups.bond = 6.5;
       this.triggerEventBanner('🍸 007 Q-BRANCH • LICENZA DI SORPASSO!', 'Scudo + Calamita Monete + Turbo', 'amber');
-      driveAudio.playTexShield();
+      driveAudio.playBondSpyChord();
     } else if (pType === 'spiderman') {
       this.activePowerups.spiderman = 7.0;
       this.triggerEventBanner('🕸️ UOMO RAGNO • RAGNATELA MAGNETICA!', 'Cattura tutte le monete in pista', 'rose');
-      driveAudio.playCoinPickup();
+      driveAudio.playSpidermanThwip();
     } else if (pType === 'diabolik') {
       this.activePowerups.diabolik = 6.5;
       this.triggerEventBanner('💎 DIABOLIK • FUGA INVISIBILE 3X!', 'Attraversa gli ostacoli + Monete 3X', 'cyan');
-      driveAudio.playTexShield();
+      driveAudio.playDiabolikStealth();
     } else if (pType === 'callaghan') {
       this.activePowerups.callaghan = 6.5;
       this.triggerEventBanner('🔫 CALLAGHAN • .44 MAGNUM IN AZIONE!', 'Polverizza i blocchi davanti (+200 PT)', 'amber');
-      driveAudio.playSmash();
+      driveAudio.playMagnumShot();
     }
     this.notify();
   }
@@ -335,8 +340,10 @@ class DriveStore {
       this.score += pts;
       if (reason === 'magnum') {
         this.triggerEventBanner('💥 COLPO .44 MAGNUM!', `+${pts} PT • BERSAGLIO ELIMINATO`, 'amber');
+        driveAudio.playMagnumShot();
+      } else {
+        driveAudio.playSmash();
       }
-      driveAudio.playSmash();
       this.notify();
     }
   }
@@ -365,6 +372,7 @@ class DriveStore {
 
   toggleSound() {
     this.soundEnabled = !this.soundEnabled;
+    this.userExplicitlyMuted = !this.soundEnabled;
     driveAudio.setMuted(!this.soundEnabled);
     this.notify();
     return this.soundEnabled;
@@ -489,7 +497,7 @@ class DriveStore {
       this.boostTimer = Math.max(this.boostTimer, 1.2);
       this.score += 300;
       this.triggerEventBanner('🦅 SALTO DEL CRINALE!', '+300 PT • VOLO ALFETTA GTV', 'amber');
-      driveAudio.playCoinPickup();
+      driveAudio.playJumpTakeoff();
     }
     this.prevSlope = currentSlope;
 
@@ -517,16 +525,49 @@ class DriveStore {
     // 6. Spawn Generation along Z
     this.updateSpawns(distUnits, dt);
 
-    // 7. Engine RPM calculation for sound
-    const speedRatio = Math.max(0, Math.min(1, this.speedKmh / 195.0));
-    this.rpm = Math.max(950, Math.min(6200, 1800 + speedRatio * 4200));
-
+    // 7. Authentic 5-Speed Transaxle Gearbox RPM, Shift Clutch Dip & Engine Load
+    const prevGear = this.gear || 1;
+    let newGear = 5;
+    // Gear thresholds: [0, 52, 78, 102, 128, 200] so the car shifts through gears during normal cruise & ramps!
+    const shiftPoints = [0, 52, 76, 98, 124, 210];
     for (let g = 1; g <= 5; g++) {
-      if (this.speedKmh <= this.gearMaxSpeeds[g] || g === 5) {
-        this.gear = g;
+      if (this.speedKmh <= shiftPoints[g] || g === 5) {
+        newGear = g;
         break;
       }
     }
+    if (newGear !== prevGear) {
+      this.gear = newGear;
+      this.shiftTimer = 0.24; // 240ms clutch disengagement & overrun burble
+      if (newGear > prevGear) {
+        driveAudio.playGearShiftPop();
+      }
+    }
+
+    if (this.shiftTimer > 0) {
+      this.shiftTimer = Math.max(0, this.shiftTimer - dt);
+    }
+    if (this.rpmBlip > 0) {
+      this.rpmBlip = Math.max(0, this.rpmBlip - 950 * dt);
+    }
+
+    // Map speed within current gear band to realistic Bialbero RPM (3100 -> 6100 RPM)
+    const gMin = shiftPoints[this.gear - 1] * 0.72;
+    const gMax = shiftPoints[this.gear];
+    const inGearRatio = Math.max(0, Math.min(1, (this.speedKmh - gMin) / Math.max(10, gMax - gMin)));
+    const targetRpm =
+      (this.shiftTimer > 0 ? 3150 : 2850 + inGearRatio * 3150) +
+      (this.airY > 0.04 ? 420 : 0) +
+      (this.rpmBlip || 0);
+    this.rpm = (this.rpm || 950) + (targetRpm - (this.rpm || 950)) * Math.min(1, 14.0 * dt);
+
+    // Engine load (0.25 cruise -> 1.0 uphill climb / nitro / acceleration)
+    const uphillLoad = Math.max(0, currentSlope * 6.5);
+    const accelLoad = this.speedKmh < targetSpeed - 1.5 ? 0.35 : 0.0;
+    this.engineLoad = Math.min(
+      1.0,
+      0.32 + uphillLoad + accelLoad + (isNitro || this.boostTimer > 0 ? 0.45 : 0)
+    );
   }
 
   // Spawns obstacles, coins, and power-ups ahead of the car
@@ -571,6 +612,7 @@ class DriveStore {
           `+${pts} PT • SCIA AERODINAMICA`,
           'cyan'
         );
+        driveAudio.playNearMissWhoosh();
       }
 
       if (obs.z < -10) {

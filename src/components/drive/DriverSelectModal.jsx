@@ -15,6 +15,27 @@ import { DriverCharacter3D } from './DriverCharacter3D';
 import { driveStore } from './driveStore';
 
 /**
+ * Helper to display short, recognizable driver name snippet on mobile avatars
+ */
+function getShortDriverName(driver) {
+  if (!driver) return '';
+  switch (driver.id) {
+    case 'bond':
+      return 'Bond';
+    case 'spiderman':
+      return 'Spiderman';
+    case 'callaghan':
+      return 'Callaghan';
+    case 'mg':
+      return 'MG';
+    case 'tex':
+      return 'Tex';
+    default:
+      return driver.name.split(' ')[0];
+  }
+}
+
+/**
  * 3D Illuminated Showroom Turntable Podium + Volumetric Spotlight Cone
  */
 function ShowcasePodium3D({ accentColor = '#f59e0b' }) {
@@ -78,7 +99,35 @@ function ShowcasePodium3D({ accentColor = '#f59e0b' }) {
 
 export function DriverSelectModal({ onCloseToShowroom }) {
   const [selectedId, setSelectedId] = useState(driveStore.selectedDriver || 'elvis');
+  const [showMobileStats, setShowMobileStats] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 768;
+    }
+    return false;
+  });
+
   const activeDriver = getDriverById(selectedId);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Close stats sheet on Escape
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape' && showMobileStats) {
+        e.preventDefault();
+        setShowMobileStats(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showMobileStats]);
 
   const handleSelect = (id) => {
     setSelectedId(id);
@@ -87,6 +136,46 @@ export function DriverSelectModal({ onCloseToShowroom }) {
 
   const handleStartRace = () => {
     driveStore.startRaceWithDriver(selectedId);
+  };
+
+  const cycleDriver = (dir) => {
+    const idx = DRIVERS.findIndex((d) => d.id === selectedId);
+    const next = DRIVERS[(idx + dir + DRIVERS.length) % DRIVERS.length];
+    handleSelect(next.id);
+  };
+
+  // Touch Swipe detection refs & handlers for mobile 3D stage
+  const touchStartXRef = useRef(null);
+  const touchStartYRef = useRef(null);
+  const touchStartTimeRef = useRef(0);
+
+  const handleTouchStart = (e) => {
+    if (e.touches && e.touches.length === 1) {
+      touchStartXRef.current = e.touches[0].clientX;
+      touchStartYRef.current = e.touches[0].clientY;
+      touchStartTimeRef.current = Date.now();
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    if (touchStartXRef.current === null || !e.changedTouches || e.changedTouches.length === 0) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaX = touchEndX - touchStartXRef.current;
+    const deltaY = touchEndY - touchStartYRef.current;
+    const duration = Date.now() - touchStartTimeRef.current;
+
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+
+    // Detect horizontal swipe: distance >= 40px, predominantly horizontal, duration < 600ms
+    if (Math.abs(deltaX) >= 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2 && duration < 600) {
+      if (deltaX < 0) {
+        cycleDriver(1); // Swiped left -> Next
+      } else {
+        cycleDriver(-1); // Swiped right -> Previous
+      }
+    }
   };
 
   // Keyboard navigation (Left/Right arrows + Enter to start)
@@ -111,12 +200,6 @@ export function DriverSelectModal({ onCloseToShowroom }) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedId]);
 
-  const cycleDriver = (dir) => {
-    const idx = DRIVERS.findIndex((d) => d.id === selectedId);
-    const next = DRIVERS[(idx + dir + DRIVERS.length) % DRIVERS.length];
-    handleSelect(next.id);
-  };
-
   const stats = activeDriver.stats || {
     style: 95,
     reflexes: 90,
@@ -135,11 +218,18 @@ export function DriverSelectModal({ onCloseToShowroom }) {
       />
 
       {/* 1. FULL-SCREEN UNFRAMED 3D CHARACTER SHOWCASE STAGE */}
-      <div className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing">
+      <div
+        className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <Canvas
           shadows
           dpr={[1, 2]}
-          camera={{ position: [0, 1.25, 3.85], fov: 38 }}
+          camera={{
+            position: isMobile ? [0, 1.35, 4.2] : [0, 1.25, 3.85],
+            fov: isMobile ? 42 : 38,
+          }}
         >
           <fog attach="fog" args={['#06080d', 5.5, 13]} />
           <ambientLight intensity={0.75} />
@@ -168,7 +258,7 @@ export function DriverSelectModal({ onCloseToShowroom }) {
           />
 
           {/* Full-Body 3D Low-Poly Character + 3D Turntable Podium */}
-          <group position={[0.22, -0.82, 0]}>
+          <group position={isMobile ? [0, -0.55, 0] : [0.22, -0.82, 0]}>
             <DriverCharacter3D driverId={selectedId} pose="preview" />
             <ShowcasePodium3D accentColor={activeDriver.accentColor} />
             <ContactShadows
@@ -196,13 +286,13 @@ export function DriverSelectModal({ onCloseToShowroom }) {
             maxDistance={5.2}
             minPolarAngle={Math.PI / 3.2}
             maxPolarAngle={Math.PI / 1.92}
-            target={[0.22, 0.28, 0]}
+            target={isMobile ? [0, 0.42, 0] : [0.22, 0.28, 0]}
           />
         </Canvas>
       </div>
 
-      {/* 2. FLOATING GAME HUD OVERLAY (Leaves the 3D Character completely unobstructed) */}
-      <div className="pointer-events-none relative z-10 flex h-full w-full flex-col justify-between p-4 sm:p-6 lg:px-10">
+      {/* 2. DESKTOP FLOATING GAME HUD OVERLAY (md and up - Preserving Desktop Experience AC-013) */}
+      <div className="hidden md:flex pointer-events-none relative z-10 h-full w-full flex-col justify-between p-4 sm:p-6 lg:px-10">
         {/* Top Floating Header */}
         <div className="pointer-events-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -217,7 +307,7 @@ export function DriverSelectModal({ onCloseToShowroom }) {
             </span>
             <div>
               <p className="text-[10px] font-mono font-bold uppercase tracking-[0.28em] text-zinc-400">
-                Alfa Romeo Alfetta GTV (1973) • 3D Character Showcase
+                Alfa Romeo Alfetta GTV (1976) • 3D Character Showcase
               </p>
               <h1 className="text-xl sm:text-2xl font-black tracking-wider uppercase text-white drop-shadow">
                 Scegli il Tuo Pilota
@@ -379,6 +469,255 @@ export function DriverSelectModal({ onCloseToShowroom }) {
           </button>
         </div>
       </div>
+
+      {/* 3. MOBILE GAME HUD OVERLAY (< md - Satisfies AC-009, AC-010, AC-011, AC-012) */}
+      <div className="flex md:hidden pointer-events-none relative z-10 h-full w-full flex-col justify-between">
+        {/* Upper 60% Area: Stage 3D libero, TopBar, open character viewport (AC-009) */}
+        <div
+          className="relative flex-1 min-h-0 w-full flex flex-col justify-between p-3.5 pt-[max(0.75rem,env(safe-area-inset-top))] pointer-events-none"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Mobile Top Bar */}
+          <div className="pointer-events-auto flex items-center justify-between gap-2">
+            {onCloseToShowroom && (
+              <button
+                type="button"
+                onClick={onCloseToShowroom}
+                className="min-h-[44px] min-w-[44px] flex items-center gap-1.5 rounded-2xl border border-white/15 bg-black/60 px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-zinc-200 backdrop-blur-md active:scale-95 hover:border-white/40 transition shadow-lg"
+                aria-label="Torna allo Showroom"
+              >
+                <ChevronLeft className="w-4 h-4 text-white" />
+                <span>Showroom</span>
+              </button>
+            )}
+
+            {/* Active Driver Class Badge */}
+            <div
+              className="min-h-[44px] flex items-center gap-2 rounded-2xl border bg-black/60 px-3.5 py-2 backdrop-blur-md shadow-lg"
+              style={{
+                borderColor: `${activeDriver.accentColor}66`,
+              }}
+            >
+              <span
+                className="h-2 w-2 rounded-full animate-pulse shrink-0"
+                style={{ backgroundColor: activeDriver.accentColor }}
+              />
+              <span
+                className="text-[11px] font-black uppercase tracking-widest"
+                style={{ color: activeDriver.accentColor }}
+              >
+                {activeDriver.badge}
+              </span>
+              <span className="text-[10px] font-mono text-zinc-400">
+                #{DRIVERS.findIndex((d) => d.id === selectedId) + 1}/7
+              </span>
+            </div>
+          </div>
+
+          {/* Middle open area for 3D stage with discreet navigation hints */}
+          <div className="flex-1 w-full flex items-center justify-between pointer-events-none py-2">
+            <button
+              type="button"
+              onClick={() => cycleDriver(-1)}
+              aria-label="Pilota precedente"
+              className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-black/50 text-white backdrop-blur-md active:scale-90 transition shadow-lg opacity-80 hover:opacity-100"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+
+            <div className="pointer-events-none flex items-center gap-1.5 rounded-full border border-white/10 bg-black/45 px-3 py-1 text-[10px] font-medium text-zinc-400 backdrop-blur-md">
+              <Rotate3d className="w-3.5 h-3.5 text-amber-400" />
+              <span>Trascina 360° o swipe</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => cycleDriver(1)}
+              aria-label="Pilota successivo"
+              className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-black/50 text-white backdrop-blur-md active:scale-90 transition shadow-lg opacity-80 hover:opacity-100"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Bottom 40% Dock: Avatar Carousel + Active Driver Info + CTA */}
+        <div className="pointer-events-auto w-full backdrop-blur-xl bg-black/75 rounded-t-3xl border-t border-white/15 p-3.5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl flex flex-col gap-2.5">
+          {/* Horizontal Avatar Carousel (AC-010) */}
+          <div className="flex items-center gap-2 overflow-x-auto py-1 px-0.5 no-scrollbar touch-pan-x">
+            {DRIVERS.map((drv) => {
+              const isSelected = drv.id === selectedId;
+              const isMG = drv.id === 'mg';
+              const shortName = getShortDriverName(drv);
+
+              return (
+                <button
+                  key={drv.id}
+                  type="button"
+                  onClick={() => handleSelect(drv.id)}
+                  data-driver-id={drv.id}
+                  className={`flex-shrink-0 flex flex-col items-center justify-center min-w-[72px] min-h-[58px] p-2 rounded-2xl border transition-all duration-200 active:scale-95 ${
+                    isSelected
+                      ? 'scale-105 border-amber-400 ring-2 ring-amber-400/70 bg-white/20 shadow-lg shadow-amber-500/25'
+                      : 'border-white/10 bg-zinc-900/70 hover:border-white/30 hover:bg-white/5 opacity-80'
+                  }`}
+                >
+                  <div className="flex items-center gap-1 mb-1">
+                    <span
+                      className="h-2 w-2 rounded-full shrink-0 shadow-sm"
+                      style={{ backgroundColor: drv.accentColor }}
+                    />
+                    {isMG ? (
+                      <SparklesIcon className="w-3 h-3 text-teal-400 shrink-0" />
+                    ) : (
+                      <span
+                        className="text-[9px] font-black uppercase tracking-wider"
+                        style={{ color: drv.accentColor }}
+                      >
+                        {drv.badge.split(' ')[0]}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[11px] font-black text-white truncate max-w-[66px] text-center">
+                    {shortName}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Active Driver Info & Stats Toggle (AC-011) */}
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/10">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-black tracking-tight text-white truncate">
+                  {activeDriver.name}
+                </h2>
+                {activeDriver.easterEgg === 'oil_chaos' && (
+                  <span className="flex items-center gap-1 rounded-md bg-teal-500/20 px-1.5 py-0.5 text-[9px] font-bold text-teal-300 border border-teal-500/40 shrink-0">
+                    <Flame className="w-2.5 h-2.5 text-teal-300 animate-pulse" />
+                    EASTER EGG
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] font-medium text-zinc-400 truncate">
+                {activeDriver.subtitle}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowMobileStats(true)}
+              className="min-h-[40px] flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-bold text-zinc-200 active:scale-95 transition hover:bg-white/15 shrink-0 shadow-sm"
+            >
+              <span>Statistiche & Dettagli 📊</span>
+            </button>
+          </div>
+
+          {/* Primary Action CTA (AC-012) */}
+          <button
+            type="button"
+            onClick={handleStartRace}
+            className="w-full min-h-[48px] flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-red-600 via-red-500 to-amber-500 py-3.5 px-6 text-sm font-black uppercase tracking-wider text-white shadow-xl shadow-red-600/30 hover:brightness-110 active:scale-95 transition"
+          >
+            <Play className="w-4 h-4 fill-current" />
+            <span>Gareggia con {activeDriver.name}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 4. EXPANDABLE MOBILE STATS OVERLAY SHEET (AC-011) */}
+      {showMobileStats && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200 pointer-events-auto"
+          onClick={() => setShowMobileStats(false)}
+        >
+          <div
+            className="w-full max-w-lg mx-auto rounded-3xl border border-white/15 bg-[#0e1118]/95 p-5 backdrop-blur-xl shadow-2xl flex flex-col gap-3 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span
+                  className="inline-block rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wider"
+                  style={{
+                    backgroundColor: `${activeDriver.accentColor}25`,
+                    color: activeDriver.accentColor,
+                    border: `1px solid ${activeDriver.accentColor}70`,
+                  }}
+                >
+                  {activeDriver.badge}
+                </span>
+                <h3 className="text-base font-black text-white">
+                  {activeDriver.name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMobileStats(false)}
+                className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-xl bg-white/10 text-zinc-300 hover:text-white"
+                aria-label="Chiudi statistiche"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p
+              className="text-xs italic text-zinc-300 border-l-2 pl-2.5 py-0.5"
+              style={{ borderColor: activeDriver.accentColor }}
+            >
+              {activeDriver.tagline}
+            </p>
+
+            {/* 4 Stat Bars */}
+            <div className="space-y-2 mt-1">
+              {[
+                { label: 'Stile Anni ’70', val: stats.style },
+                { label: 'Riflessi Bialbero', val: stats.reflexes },
+                { label: 'Carisma', val: stats.charisma },
+                { label: 'Tenuta sull’Olio', val: stats.grip },
+              ].map((st) => (
+                <div key={st.label}>
+                  <div className="flex justify-between text-[10px] font-mono uppercase tracking-wider text-zinc-300 mb-0.5">
+                    <span>{st.label}</span>
+                    <span className="font-bold">{st.val}%</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${st.val}%`,
+                        backgroundColor:
+                          st.label === 'Tenuta sull’Olio' && st.val < 30
+                            ? '#f43f5e'
+                            : activeDriver.accentColor,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {activeDriver.easterEgg === 'oil_chaos' && (
+              <div className="flex items-center gap-2.5 rounded-2xl border border-amber-400/50 bg-amber-500/15 p-3 text-xs text-amber-200">
+                <Flame className="w-5 h-5 text-amber-400 shrink-0 animate-pulse" />
+                <span>
+                  <strong>EASTER EGG ATTIVO:</strong> Con <strong>MG</strong> la pista si riempie continuamente di chiazze d’olio su ogni corsia!
+                </span>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowMobileStats(false)}
+              className="w-full mt-1 py-2.5 rounded-xl bg-white/10 text-xs font-bold uppercase tracking-wider text-zinc-300 hover:bg-white/15 active:scale-95 transition"
+            >
+              Chiudi Dettagli
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

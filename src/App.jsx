@@ -27,6 +27,7 @@ import CarViewer, {
 } from './components/CarViewer.jsx';
 import MobileTopBar from './components/mobile/MobileTopBar.jsx';
 import MobileNavDrawer from './components/mobile/MobileNavDrawer.jsx';
+import ShowroomBottomSheet from './components/mobile/ShowroomBottomSheet.jsx';
 import { driveStore } from './components/drive/driveStore';
 import { Speedometer } from './components/drive/Speedometer';
 import { useEngineSound } from './components/drive/useEngineSound';
@@ -738,10 +739,10 @@ export default function App() {
         </aside>
       )}
 
-      {/* BOTTOM GLASSMORPHISM CONTROL DOCK */}
+      {/* BOTTOM GLASSMORPHISM CONTROL DOCK (Desktop: md+) */}
       {sceneMode === 'showroom' && (
         <footer
-          className={`pointer-events-none absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center p-3 sm:p-5 transition-all duration-500 ${
+          className={`pointer-events-none absolute bottom-0 left-0 right-0 z-20 hidden md:flex flex-col items-center p-3 sm:p-5 transition-all duration-500 ${
             hudHidden
               ? 'opacity-0 translate-y-6'
               : 'opacity-100 translate-y-0'
@@ -940,6 +941,24 @@ export default function App() {
           </div>
         </div>
       </footer>
+      )}
+
+      {/* MOBILE SHOWROOM BOTTOM SHEET (< md screens) */}
+      {sceneMode === 'showroom' && !hudHidden && (
+        <ShowroomBottomSheet
+          activePaintId={activePaintId}
+          onSelectPaint={setActivePaintId}
+          activePresetId={activePresetId}
+          onSelectCameraPreset={handleSelectCameraPreset}
+          autoRotate={autoRotate}
+          onToggleAutoRotate={() => setAutoRotate((prev) => !prev)}
+          hoodOpen={hoodOpen}
+          onToggleHood={handleToggleEngineBay}
+          onResetView={handleResetView}
+          onEnterDrive={handleEnterDrive}
+          isLight={isLight}
+          glassClass={glassClass}
+        />
       )}
     </main>
   );

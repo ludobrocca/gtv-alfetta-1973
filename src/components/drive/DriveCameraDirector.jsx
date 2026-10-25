@@ -1,6 +1,6 @@
-// Dynamic 3rd-Person Chase Camera Director for 3-Lane Runner
-// Keeps the Alfetta centered during lane changes, handles Elvis FOV nitro zoom,
-// camera shake, and crash dramatic freeze frame.
+// Fixed Subway-Surfers / OutRun 3rd-Person Arcade Chase Camera Director
+// Strictly locked camera (cannot be rotated by touch/mouse in drive mode),
+// tracks rolling hills (salite/discese), Hill Crest Jumps, and Nitro/Near-Miss FOV surges.
 
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
@@ -9,76 +9,83 @@ import { driveStore } from './driveStore';
 
 export function DriveCameraDirector({ controlsRef }) {
   const { camera } = useThree();
-  const currentPosRef = useRef(new THREE.Vector3(0, 1.25, -3.4));
-  const currentTargetRef = useRef(new THREE.Vector3(0, 0.38, 2.0));
-  const targetFovRef = useRef(45);
+  const currentPosRef = useRef(new THREE.Vector3(0, 1.38, -3.55));
+  const currentTargetRef = useRef(new THREE.Vector3(0, 0.42, 4.5));
+  const targetFovRef = useRef(46);
 
   useEffect(() => {
-    currentPosRef.current.set(0, 1.25, -3.4);
-    currentTargetRef.current.set(0, 0.38, 2.0);
-    camera.fov = 45;
+    currentPosRef.current.set(0, 1.38, -3.55);
+    currentTargetRef.current.set(0, 0.42, 4.5);
+    camera.fov = 46;
     camera.updateProjectionMatrix();
   }, [camera]);
 
   useFrame((_, delta) => {
     if (driveStore.mode !== 'drive') return;
 
-    // Check if user is actively touching OrbitControls
-    if (driveStore.userInteracting) {
-      return;
-    }
-
     const dt = Math.min(delta, 0.1);
     const carX = driveStore.carX;
+    const carY = driveStore.carY;
+    const airY = driveStore.airY;
     const isGameOver = driveStore.gameState === 'gameover';
-    const isElvisActive = driveStore.activePowerups.elvis > 0;
+    const isNitro =
+      driveStore.activePowerups.elvis > 0 ||
+      driveStore.activePowerups.bond > 0 ||
+      driveStore.boostTimer > 0;
     const speed = driveStore.speedKmh;
 
-    // Base target position behind car
-    let targetX = carX * 0.72;
-    let targetY = 1.28;
-    let targetZ = -3.4;
+    // Road elevation under camera (-3.5) and ahead of car (+5.5) for authentic hill framing
+    const camRoadY = driveStore.getRoadElevation(-3.5);
+    const lookRoadY = driveStore.getRoadElevation(5.5);
 
-    let lookX = carX;
-    let lookY = 0.38;
-    let lookZ = 1.8;
+    // Subway Surfers style locked chase camera: follows 68% of carX so lane shifts feel snappy & clear
+    let targetX = carX * 0.68;
+    let targetY = Math.max(carY, camRoadY * 0.65 + carY * 0.35) + 1.38 + airY * 0.55;
+    let targetZ = -3.55 - (airY > 0.05 ? 0.35 : 0);
+
+    let lookX = carX * 0.88;
+    let lookY = lookRoadY * 0.75 + carY * 0.25 + 0.38 + airY * 0.35;
+    let lookZ = 5.5;
 
     if (isGameOver) {
-      // Pull back dramatically on crash
-      targetX = carX - 1.2;
-      targetY = 1.65;
+      targetX = carX - 1.1;
+      targetY = carY + 1.75;
       targetZ = -4.2;
-      lookZ = 0.5;
+      lookY = carY + 0.35;
+      lookZ = 0.6;
     }
 
-    // Speed camera shake
-    const shakeIntensity = (speed / 200) * 0.009;
+    // Subtle high-speed road vibration
+    const shakeIntensity = (speed / 200) * 0.008;
     const shakeX = (Math.random() - 0.5) * shakeIntensity;
     const shakeY = (Math.random() - 0.5) * shakeIntensity;
 
     const targetPos = new THREE.Vector3(targetX + shakeX, targetY + shakeY, targetZ);
     const targetLookAt = new THREE.Vector3(lookX, lookY, lookZ);
 
-    // Elvis Nitro FOV expansion (+12 degrees)
-    const targetFov = isElvisActive ? 57 : (speed > 100 ? 49 : 45);
-    targetFovRef.current = THREE.MathUtils.lerp(targetFovRef.current, targetFov, 0.08);
+    // Dynamic FOV expansion on Nitro, Hill Crest Jump, or high speed
+    const targetFov = isNitro
+      ? 58
+      : airY > 0.05
+      ? 54
+      : speed > 100
+      ? 50
+      : 46;
+    targetFovRef.current = THREE.MathUtils.lerp(targetFovRef.current, targetFov, 0.09);
     if (Math.abs(camera.fov - targetFovRef.current) > 0.1) {
       camera.fov = targetFovRef.current;
       camera.updateProjectionMatrix();
     }
 
-    // Smooth camera interpolation
-    const lerpRate = isGameOver ? 3.0 : 8.0;
+    const lerpRate = isGameOver ? 3.5 : 10.5;
     currentPosRef.current.lerp(targetPos, Math.min(1, dt * lerpRate));
     currentTargetRef.current.lerp(targetLookAt, Math.min(1, dt * lerpRate));
 
     camera.position.copy(currentPosRef.current);
+    camera.lookAt(currentTargetRef.current);
 
     if (controlsRef.current) {
       controlsRef.current.target.copy(currentTargetRef.current);
-      controlsRef.current.update();
-    } else {
-      camera.lookAt(currentTargetRef.current);
     }
   });
 

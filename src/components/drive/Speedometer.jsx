@@ -20,6 +20,12 @@ export function Speedometer({ onExitDrive }) {
   const [selectedDriver, setSelectedDriver] = useState(driveStore.selectedDriver || 'elvis');
   const [activeTex, setActiveTex] = useState(0);
   const [activeElvis, setActiveElvis] = useState(0);
+  const [activeBond, setActiveBond] = useState(0);
+  const [activeSpiderman, setActiveSpiderman] = useState(0);
+  const [activeDiabolik, setActiveDiabolik] = useState(0);
+  const [activeCallaghan, setActiveCallaghan] = useState(0);
+  const [eventBanner, setEventBanner] = useState(null);
+  const [currentZone, setCurrentZone] = useState(() => driveStore.getCurrentZone());
   const [activeLane, setActiveLane] = useState(0);
 
   const touchStartXRef = useRef(0);
@@ -44,6 +50,12 @@ export function Speedometer({ onExitDrive }) {
         setSelectedDriver(driveStore.selectedDriver);
         setActiveTex(driveStore.activePowerups.tex);
         setActiveElvis(driveStore.activePowerups.elvis);
+        setActiveBond(driveStore.activePowerups.bond);
+        setActiveSpiderman(driveStore.activePowerups.spiderman);
+        setActiveDiabolik(driveStore.activePowerups.diabolik);
+        setActiveCallaghan(driveStore.activePowerups.callaghan);
+        setEventBanner(driveStore.eventBanner ? { ...driveStore.eventBanner } : null);
+        setCurrentZone(driveStore.getCurrentZone());
         setActiveLane(driveStore.targetLane);
       }
     };
@@ -69,7 +81,7 @@ export function Speedometer({ onExitDrive }) {
       }
     };
 
-    // Mobile Touch Swipe Gesture Handling
+    // Mobile Touch Swipe Gesture Handling (Subway Surfers snappy one-thumb swipe)
     const handleTouchStart = (e) => {
       if (!e.touches || e.touches.length === 0) return;
       touchStartXRef.current = e.touches[0].clientX;
@@ -81,8 +93,8 @@ export function Speedometer({ onExitDrive }) {
       const dx = e.changedTouches[0].clientX - touchStartXRef.current;
       const dy = e.changedTouches[0].clientY - touchStartYRef.current;
 
-      // Ensure horizontal swipe
-      if (Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy)) {
+      // Snappy horizontal swipe (dx < 0 = Left, dx > 0 = Right)
+      if (Math.abs(dx) > 22 && Math.abs(dx) > Math.abs(dy) * 0.85) {
         if (dx < 0) {
           driveStore.changeLane(-1);
         } else {
@@ -184,47 +196,122 @@ export function Speedometer({ onExitDrive }) {
         </div>
       </div>
 
-      {/* Active Power-Up Timers Banners (Tex Willer & Elvis Presley) + MG Oil Chaos Banner */}
-      <div className="flex flex-col items-center gap-2 w-full max-w-sm mx-auto pointer-events-none mt-2">
-        {selectedDriver === 'mg' && gameState === 'playing' && (
-          <div className="w-full flex items-center justify-center gap-2 px-4 py-1.5 rounded-xl border border-teal-400/60 bg-teal-950/80 backdrop-blur-md shadow-lg text-center">
-            <span className="text-sm">🛢️</span>
-            <span className="text-[11px] font-bold font-mono text-teal-200 uppercase tracking-wider">
-              MODALITÀ MG • CHIAZZE D’OLIO SU OGNI CORSIA!
-            </span>
+      {/* Scenic Zone Badge, Dynamic Arcade Callouts & Active Power-Up Timers */}
+      <div className="flex flex-col items-center gap-1.5 w-full max-w-sm mx-auto pointer-events-none mt-2">
+        {gameState === 'playing' && currentZone && (
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/15 bg-black/60 backdrop-blur-md text-[10px] font-mono text-zinc-300 uppercase tracking-widest shadow-md">
+            <span>{currentZone.icon}</span>
+            <span>{currentZone.name}</span>
           </div>
         )}
-        {activeTex > 0 && (
-          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-950/80 via-black/80 to-amber-950/80 backdrop-blur-md shadow-amber-500/30 shadow-lg animate-pulse">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">🤠</span>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold font-mono text-amber-300 uppercase tracking-wide">
-                  TEX WILLER • INVULNERABILE!
-                </span>
-                <span className="text-[10px] text-amber-200/80">Distruggi gli ostacoli</span>
-              </div>
-            </div>
-            <span className="text-sm font-mono font-bold text-amber-400">
-              {activeTex.toFixed(1)}s
+
+        {eventBanner && gameState === 'playing' && (
+          <div className="w-full flex flex-col items-center justify-center px-4 py-2 rounded-2xl border-2 border-amber-400/90 bg-gradient-to-r from-black/90 via-amber-950/90 to-black/90 backdrop-blur-md shadow-2xl animate-bounce">
+            <span className="text-xs sm:text-sm font-extrabold font-mono text-amber-300 uppercase tracking-wider">
+              {eventBanner.title}
+            </span>
+            <span className="text-[10px] font-mono text-white/90 uppercase tracking-widest">
+              {eventBanner.subtitle}
             </span>
           </div>
         )}
 
+        {selectedDriver === 'mg' && gameState === 'playing' && (
+          <div className="w-full flex items-center justify-center gap-2 px-4 py-1.5 rounded-xl border border-teal-400/60 bg-teal-950/80 backdrop-blur-md shadow-lg text-center">
+            <span className="text-sm">🛢️</span>
+            <span className="text-[11px] font-bold font-mono text-teal-200 uppercase tracking-wider">
+              MODALITÀ MG • DRIFT SULL’OLIO = +150 PT!
+            </span>
+          </div>
+        )}
+
+        {activeTex > 0 && (
+          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-950/80 via-black/80 to-amber-950/80 backdrop-blur-md shadow-lg animate-pulse">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🤠</span>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold font-mono text-amber-300 uppercase">
+                  TEX WILLER • INVULNERABILE!
+                </span>
+                <span className="text-[10px] text-amber-200/80">Travolgi gli ostacoli (+150 pt)</span>
+              </div>
+            </div>
+            <span className="text-sm font-mono font-bold text-amber-400">{activeTex.toFixed(1)}s</span>
+          </div>
+        )}
+
         {activeElvis > 0 && (
-          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-fuchsia-400 bg-gradient-to-r from-fuchsia-950/80 via-black/80 to-fuchsia-950/80 backdrop-blur-md shadow-fuchsia-500/30 shadow-lg animate-pulse">
+          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-fuchsia-400 bg-gradient-to-r from-fuchsia-950/80 via-black/80 to-fuchsia-950/80 backdrop-blur-md shadow-lg animate-pulse">
             <div className="flex items-center gap-2">
               <span className="text-xl">🎸</span>
               <div className="flex flex-col">
-                <span className="text-xs font-bold font-mono text-fuchsia-300 uppercase tracking-wide">
-                  ELVIS • ROCK'N'ROLL NITRO 2X!
+                <span className="text-xs font-bold font-mono text-fuchsia-300 uppercase">
+                  ELVIS • ROCK&apos;N&apos;ROLL NITRO 2X!
                 </span>
-                <span className="text-[10px] text-fuchsia-200/80">Super velocità & punti doppi</span>
+                <span className="text-[10px] text-fuchsia-200/80">Super velocità &amp; punti doppi</span>
               </div>
             </div>
-            <span className="text-sm font-mono font-bold text-fuchsia-300">
-              {activeElvis.toFixed(1)}s
-            </span>
+            <span className="text-sm font-mono font-bold text-fuchsia-300">{activeElvis.toFixed(1)}s</span>
+          </div>
+        )}
+
+        {activeBond > 0 && (
+          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-amber-300 bg-gradient-to-r from-zinc-900/90 via-amber-950/80 to-zinc-900/90 backdrop-blur-md shadow-lg animate-pulse">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🍸</span>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold font-mono text-amber-300 uppercase">
+                  007 Q-BRANCH • SCUDO &amp; TURBO!
+                </span>
+                <span className="text-[10px] text-amber-100/80">Immunità + Calamita Monete 2X</span>
+              </div>
+            </div>
+            <span className="text-sm font-mono font-bold text-amber-300">{activeBond.toFixed(1)}s</span>
+          </div>
+        )}
+
+        {activeSpiderman > 0 && (
+          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-rose-500 bg-gradient-to-r from-rose-950/85 via-blue-950/85 to-rose-950/85 backdrop-blur-md shadow-lg animate-pulse">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🕸️</span>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold font-mono text-rose-300 uppercase">
+                  UOMO RAGNO • RAGNATELA MAGNETICA!
+                </span>
+                <span className="text-[10px] text-rose-100/80">Attira tutte le monete in pista</span>
+              </div>
+            </div>
+            <span className="text-sm font-mono font-bold text-rose-300">{activeSpiderman.toFixed(1)}s</span>
+          </div>
+        )}
+
+        {activeDiabolik > 0 && (
+          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-cyan-400 bg-gradient-to-r from-slate-950/90 via-cyan-950/80 to-slate-950/90 backdrop-blur-md shadow-lg animate-pulse">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">💎</span>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold font-mono text-cyan-300 uppercase">
+                  DIABOLIK • FUGA INVISIBILE 3X!
+                </span>
+                <span className="text-[10px] text-cyan-100/80">Attraversa ostacoli &amp; Monete 3X</span>
+              </div>
+            </div>
+            <span className="text-sm font-mono font-bold text-cyan-300">{activeDiabolik.toFixed(1)}s</span>
+          </div>
+        )}
+
+        {activeCallaghan > 0 && (
+          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-orange-400 bg-gradient-to-r from-stone-950/90 via-orange-950/80 to-stone-950/90 backdrop-blur-md shadow-lg animate-pulse">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🔫</span>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold font-mono text-orange-300 uppercase">
+                  CALLAGHAN • .44 MAGNUM ATTIVA!
+                </span>
+                <span className="text-[10px] text-orange-100/80">Polverizza gli ostacoli davanti</span>
+              </div>
+            </div>
+            <span className="text-sm font-mono font-bold text-orange-300">{activeCallaghan.toFixed(1)}s</span>
           </div>
         )}
       </div>

@@ -2272,20 +2272,28 @@ function AlfaRomeoModel({
         }
       });
 
-      // Lateral position and banking into lanes
+      // Lateral position, hill elevation, crest jump height, hill pitch, and banking into lanes
       if (carDriveGroupRef.current) {
         carDriveGroupRef.current.position.x = driveStore.carX;
+        carDriveGroupRef.current.position.y = driveStore.carY + driveStore.airY;
+        carDriveGroupRef.current.rotation.x = driveStore.carPitch;
         carDriveGroupRef.current.rotation.z = driveStore.carRoll;
         carDriveGroupRef.current.rotation.y = driveStore.carYaw;
       }
 
-      // Tex Willer Golden Shield Aura animation
+      // Tex Willer / 007 / Diabolik Shield Aura animation
       if (texShieldRef.current) {
-        const isTex = driveStore.activePowerups.tex > 0;
-        texShieldRef.current.visible = isTex;
-        if (isTex) {
+        const isTex = driveStore.activePowerups.tex > 0 || driveStore.activePowerups.bond > 0;
+        const isDiabolik = driveStore.activePowerups.diabolik > 0;
+        const showAura = isTex || isDiabolik;
+        texShieldRef.current.visible = showAura;
+        if (showAura) {
           texShieldRef.current.rotation.y += delta * 2.8;
           texShieldRef.current.rotation.x += delta * 1.4;
+          if (texShieldRef.current.material) {
+            texShieldRef.current.material.color.set(isDiabolik ? '#38bdf8' : '#ffd700');
+            texShieldRef.current.material.emissive.set(isDiabolik ? '#0284c7' : '#ffb700');
+          }
         }
       }
 
@@ -2311,6 +2319,8 @@ function AlfaRomeoModel({
       // In showroom mode, reset body suspension and lateral position
       if (carDriveGroupRef.current) {
         carDriveGroupRef.current.position.x = 0;
+        carDriveGroupRef.current.position.y = 0;
+        carDriveGroupRef.current.rotation.x = 0;
         carDriveGroupRef.current.rotation.z = 0;
         carDriveGroupRef.current.rotation.y = 0;
       }
@@ -2624,6 +2634,7 @@ export default function CarViewer({
         <OrbitControls
           ref={controlsRef}
           makeDefault
+          enabled={sceneMode !== 'drive'}
           enablePan={false}
           minPolarAngle={0}
           maxPolarAngle={sceneMode === 'drive' ? Math.PI / 2.02 : Math.PI / 2.05}

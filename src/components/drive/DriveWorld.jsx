@@ -5,22 +5,26 @@
 import React, { useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { driveStore } from './driveStore';
+import { driveStore, laneToX } from './driveStore';
 
-const LANE_WIDTH = 1.35;
 const ROAD_WIDTH = 5.2;
 const ROAD_LENGTH = 130;
+const ROAD_Z_SEGMENTS = 72;
 const FENCE_SPACING = 3.5;
 const POLE_SPACING = 16.0;
 const TREE_SPACING = 14.0;
+const ARCH_SPACING = 9.0;
 
 export function DriveWorld({ lightingMode }) {
   const roadMatRef = useRef();
   const roadMeshRef = useRef();
+  const vergeLeftRef = useRef();
+  const vergeRightRef = useRef();
   const fencesLeftRef = useRef();
   const fencesRightRef = useRef();
   const polesRef = useRef();
   const treesRef = useRef();
+  const tunnelArchesRef = useRef();
   const streaksRef = useRef();
   const headLightLeftRef = useRef();
   const headLightRightRef = useRef();
@@ -155,32 +159,59 @@ export function DriveWorld({ lightingMode }) {
     return geo;
   }, []);
 
-  // Frame Loop: Update world, scroll scenery & run collision detection
+  // 7. Instanced Alpine Tunnel Arches (visible in Galleria zone)
+  const archCount = 12;
+  const archDummy = useMemo(() => new THREE.Object3D(), []);
+
+  // Helper to deform a horizontal PlaneGeometry (rotated -PI/2 on X) to follow getRoadElevation(z)
+  const updateSurfaceElevation = (meshRef) => {
+    if (!meshRef.current || !meshRef.current.geometry) return;
+    const pos = meshRef.current.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const localY = pos.getY(i);
+      const worldZ = -localY;
+      pos.setZ(i, driveStore.getRoadElevation(worldZ));
+    }
+    pos.needsUpdate = true;
+    meshRef.current.geometry.computeVertexNormals();
+  };
+
+  // Frame Loop: Update world, deform rolling hills, scroll scenery & run collision detection
   useFrame((_, delta) => {
     driveStore.update(delta);
 
     const offset = driveStore.roadOffset;
     const speed = driveStore.speedKmh;
+    const isGalleria = driveStore.getCurrentZone().id === 'galleria';
 
     // Scroll road texture
     if (roadTexture) {
       roadTexture.offset.y = -offset * 0.0833;
     }
 
-    // Scroll roadside wooden fences
+    // Deform road and left/right alpine meadows to match rolling hills (salite/discese)
+    updateSurfaceElevation(roadMeshRef);
+    updateSurfaceElevation(vergeLeftRef);
+    updateSurfaceElevation(vergeRightRef);
+
+    // Scroll roadside wooden fences along hills
     if (fencesLeftRef.current && fencesRightRef.current) {
       const totalSpan = fenceCount * FENCE_SPACING;
       for (let i = 0; i < fenceCount; i++) {
         const localZ = ((i * FENCE_SPACING - offset) % totalSpan);
         const zPos = localZ < -35 ? localZ + totalSpan : localZ;
+        const elev = driveStore.getRoadElevation(zPos);
+        const pitch = -Math.atan(driveStore.getRoadSlope(zPos));
 
         // Left fence
-        fenceDummy.position.set(-ROAD_WIDTH * 0.5 - 0.55, 0.42, zPos);
+        fenceDummy.position.set(-ROAD_WIDTH * 0.5 - 0.55, elev + 0.42, zPos);
+        fenceDummy.rotation.set(pitch, 0, 0);
         fenceDummy.updateMatrix();
         fencesLeftRef.current.setMatrixAt(i, fenceDummy.matrix);
 
         // Right fence
-        fenceDummy.position.set(ROAD_WIDTH * 0.5 + 0.55, 0.42, zPos);
+        fenceDummy.position.set(ROAD_WIDTH * 0.5 + 0.55, elev + 0.42, zPos);
+        fenceDummy.rotation.set(pitch, 0, 0);
         fenceDummy.updateMatrix();
         fencesRightRef.current.setMatrixAt(i, fenceDummy.matrix);
       }
@@ -188,27 +219,29 @@ export function DriveWorld({ lightingMode }) {
       fencesRightRef.current.instanceMatrix.needsUpdate = true;
     }
 
-    // Scroll telegraph poles
+    // Scroll telegraph poles along hills
     if (polesRef.current) {
       const totalSpan = poleCount * POLE_SPACING;
       for (let i = 0; i < poleCount; i++) {
         const localZ = ((i * POLE_SPACING - offset) % totalSpan);
         const zPos = localZ < -35 ? localZ + totalSpan : localZ;
-        poleDummy.position.set(ROAD_WIDTH * 0.5 + 2.8, 2.2, zPos);
+        const elev = driveStore.getRoadElevation(zPos);
+        poleDummy.position.set(ROAD_WIDTH * 0.5 + 2.8, elev + 2.2, zPos);
         poleDummy.updateMatrix();
         polesRef.current.setMatrixAt(i, poleDummy.matrix);
       }
       polesRef.current.instanceMatrix.needsUpdate = true;
     }
 
-    // Scroll autumn trees
+    // Scroll autumn trees along hills
     if (treesRef.current) {
       const totalSpan = treeCount * TREE_SPACING;
       for (let i = 0; i < treeCount; i++) {
         const item = treeData[i];
         const localZ = ((i * TREE_SPACING - offset) % totalSpan);
         const zPos = localZ < -40 ? localZ + totalSpan : localZ;
-        treeDummy.position.set(item.x, 1.8 * item.scale, zPos);
+        const elev = driveStore.getRoadElevation(zPos);
+        treeDummy.position.set(item.x, elev + 1.8 * item.scale, zPos);
         treeDummy.scale.set(item.scale, item.scale, item.scale);
         treeDummy.updateMatrix();
         treesRef.current.setMatrixAt(i, treeDummy.matrix);
@@ -216,16 +249,35 @@ export function DriveWorld({ lightingMode }) {
       treesRef.current.instanceMatrix.needsUpdate = true;
     }
 
+    // Scroll illuminated Alpine Tunnel Arches (Galleria zone)
+    if (tunnelArchesRef.current) {
+      tunnelArchesRef.current.visible = isGalleria;
+      if (isGalleria) {
+        const totalSpan = archCount * ARCH_SPACING;
+        for (let i = 0; i < archCount; i++) {
+          const localZ = ((i * ARCH_SPACING - offset) % totalSpan);
+          const zPos = localZ < -25 ? localZ + totalSpan : localZ;
+          const elev = driveStore.getRoadElevation(zPos);
+          const pitch = -Math.atan(driveStore.getRoadSlope(zPos));
+          archDummy.position.set(0, elev + 0.1, zPos);
+          archDummy.rotation.set(pitch, 0, 0);
+          archDummy.updateMatrix();
+          tunnelArchesRef.current.setMatrixAt(i, archDummy.matrix);
+        }
+        tunnelArchesRef.current.instanceMatrix.needsUpdate = true;
+      }
+    }
+
     // Streaks opacity
     if (streaksRef.current) {
-      const streakOpacity = Math.max(0, Math.min(0.5, (speed - 45) / 110));
+      const streakOpacity = Math.max(0, Math.min(0.55, (speed - 45) / 100));
       streaksRef.current.material.opacity = streakOpacity;
     }
 
     // Headlight tracking
     if (headLightLeftRef.current && headLightRightRef.current) {
       const isDrive = driveStore.mode === 'drive';
-      const targetIntensity = isDrive ? (isNight ? 4.5 : 1.8) : 0;
+      const targetIntensity = isDrive ? (isNight || isGalleria ? 4.8 : 1.9) : 0;
       headLightLeftRef.current.intensity = THREE.MathUtils.lerp(
         headLightLeftRef.current.intensity,
         targetIntensity,
@@ -234,25 +286,37 @@ export function DriveWorld({ lightingMode }) {
       headLightRightRef.current.intensity = headLightLeftRef.current.intensity;
     }
 
-    // --- Arcade Collision Detection ---
+    // --- Arcade Collision Detection (Non-Inverted X Coordinates!) ---
     if (driveStore.gameState === 'playing') {
       const carX = driveStore.carX;
-      const isTexActive = driveStore.activePowerups.tex > 0;
+      const airY = driveStore.airY;
+      const isSmashActive =
+        driveStore.activePowerups.tex > 0 ||
+        driveStore.activePowerups.bond > 0 ||
+        driveStore.activePowerups.callaghan > 0;
+      const isGhostActive = driveStore.activePowerups.diabolik > 0;
 
-      // 1. Obstacle Collisions (Car length ~1.8, width ~0.7)
+      // 1. Obstacle Collisions
       for (let i = 0; i < driveStore.obstacles.length; i++) {
         const obs = driveStore.obstacles[i];
         if (!obs.active) continue;
 
-        const obsX = obs.lane * LANE_WIDTH;
+        const obsX = laneToX(obs.lane);
         const dx = Math.abs(carX - obsX);
-        const dz = Math.abs(obs.z); // Car is centered at Z = 0
+        const dz = Math.abs(obs.z);
 
-        // Collision zone
-        if (dz < 1.4 && dx < 0.65) {
+        if (dz < 1.38 && dx < 0.65) {
+          // Jumping high over a hill crest clears low oil slicks and road barriers!
+          if (airY > 0.36 && (obs.type === 'oil' || obs.type === 'barrier')) {
+            continue;
+          }
           if (obs.type === 'oil') {
             driveStore.hitOilSlick(obs.id);
-          } else if (isTexActive) {
+          } else if (isGhostActive) {
+            obs.active = false;
+            driveStore.score += 120;
+            driveStore.triggerEventBanner('💎 FUGA DIABOLIK!', '+120 PT • OSTACOLO ATTRAVERSATO', 'cyan');
+          } else if (isSmashActive) {
             driveStore.smashObstacle(obs.id);
           } else {
             driveStore.triggerCrash();
@@ -265,11 +329,11 @@ export function DriveWorld({ lightingMode }) {
         const coin = driveStore.coins[i];
         if (!coin.active) continue;
 
-        const coinX = coin.lane * LANE_WIDTH;
+        const coinX = coin.xOverride !== undefined ? coin.xOverride : laneToX(coin.lane);
         const dx = Math.abs(carX - coinX);
         const dz = Math.abs(coin.z);
 
-        if (dz < 1.3 && dx < 0.7) {
+        if (dz < 1.35 && dx < 0.72) {
           driveStore.collectCoin(coin.id);
         }
       }
@@ -279,11 +343,11 @@ export function DriveWorld({ lightingMode }) {
         const pow = driveStore.powerups[i];
         if (!pow.active) continue;
 
-        const powX = pow.lane * LANE_WIDTH;
+        const powX = laneToX(pow.lane);
         const dx = Math.abs(carX - powX);
         const dz = Math.abs(pow.z);
 
-        if (dz < 1.4 && dx < 0.75) {
+        if (dz < 1.45 && dx < 0.78) {
           driveStore.collectPowerup(pow.id);
         }
       }
@@ -295,14 +359,14 @@ export function DriveWorld({ lightingMode }) {
 
   return (
     <group position={[0, 0, 0]}>
-      {/* 1. Clean 3-Lane Asphalt Highway (Zero clipping hills) */}
+      {/* 1. 3-Lane Asphalt Highway with Dynamic Rolling Hills (Salite & Discese) */}
       <mesh
         ref={roadMeshRef}
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, -0.002, 0]}
         receiveShadow
       >
-        <planeGeometry args={[ROAD_WIDTH, ROAD_LENGTH, 1, 32]} />
+        <planeGeometry args={[ROAD_WIDTH, ROAD_LENGTH, 1, ROAD_Z_SEGMENTS]} />
         <meshStandardMaterial
           ref={roadMatRef}
           map={roadTexture}
@@ -311,13 +375,14 @@ export function DriveWorld({ lightingMode }) {
         />
       </mesh>
 
-      {/* 2. Flat Alpine Meadow Verges (Left & Right) */}
+      {/* 2. Rolling Alpine Meadow Verges (Left & Right) */}
       <mesh
+        ref={vergeLeftRef}
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[-ROAD_WIDTH * 0.5 - 28, -0.005, 0]}
+        position={[-ROAD_WIDTH * 0.5 - 28, -0.006, 0]}
         receiveShadow
       >
-        <planeGeometry args={[56, ROAD_LENGTH]} />
+        <planeGeometry args={[56, ROAD_LENGTH, 1, ROAD_Z_SEGMENTS]} />
         <meshStandardMaterial
           map={grassTexture}
           roughness={0.92}
@@ -325,11 +390,12 @@ export function DriveWorld({ lightingMode }) {
         />
       </mesh>
       <mesh
+        ref={vergeRightRef}
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[ROAD_WIDTH * 0.5 + 28, -0.005, 0]}
+        position={[ROAD_WIDTH * 0.5 + 28, -0.006, 0]}
         receiveShadow
       >
-        <planeGeometry args={[56, ROAD_LENGTH]} />
+        <planeGeometry args={[56, ROAD_LENGTH, 1, ROAD_Z_SEGMENTS]} />
         <meshStandardMaterial
           map={grassTexture}
           roughness={0.92}
@@ -373,6 +439,22 @@ export function DriveWorld({ lightingMode }) {
       >
         <coneGeometry args={[1.5, 3.8, 7]} />
         <meshStandardMaterial color="#c28e28" roughness={0.8} />
+      </instancedMesh>
+
+      {/* 5b. Instanced Illuminated Alpine Tunnel Arches (Galleria Zone) */}
+      <instancedMesh
+        ref={tunnelArchesRef}
+        args={[null, null, archCount]}
+        visible={false}
+      >
+        <torusGeometry args={[3.4, 0.22, 10, 28, Math.PI]} />
+        <meshStandardMaterial
+          color="#334155"
+          roughness={0.5}
+          metalness={0.4}
+          emissive="#f59e0b"
+          emissiveIntensity={0.35}
+        />
       </instancedMesh>
 
       {/* 6. Speed Motion Streaks */}
@@ -424,7 +506,7 @@ export function DriveWorld({ lightingMode }) {
   );
 }
 
-// Subcomponent rendering all dynamic active entities on track
+// Subcomponent rendering all dynamic active entities on track (aligned to rolling hills & non-inverted lanes)
 function TrackEntities() {
   const obstacles = driveStore.obstacles;
   const coins = driveStore.coins;
@@ -435,13 +517,15 @@ function TrackEntities() {
       {/* Obstacles */}
       {obstacles.map((obs) => {
         if (!obs.active) return null;
-        const x = obs.lane * LANE_WIDTH;
+        const x = laneToX(obs.lane);
+        const y = driveStore.getRoadElevation(obs.z);
+        const pitch = -Math.atan(driveStore.getRoadSlope(obs.z));
         if (obs.type === 'fiat500') {
-          return <Fiat500Obstacle key={obs.id} x={x} z={obs.z} />;
+          return <Fiat500Obstacle key={obs.id} x={x} y={y} z={obs.z} pitch={pitch} />;
         } else if (obs.type === 'barrier') {
-          return <BarrierObstacle key={obs.id} x={x} z={obs.z} />;
+          return <BarrierObstacle key={obs.id} x={x} y={y} z={obs.z} pitch={pitch} />;
         } else if (obs.type === 'oil') {
-          return <OilSlickObstacle key={obs.id} x={x} z={obs.z} />;
+          return <OilSlickObstacle key={obs.id} x={x} y={y} z={obs.z} pitch={pitch} />;
         }
         return null;
       })}
@@ -449,36 +533,39 @@ function TrackEntities() {
       {/* Gold Quadrifoglio Coins */}
       {coins.map((coin) => {
         if (!coin.active) return null;
-        return <GoldCoin key={coin.id} x={coin.lane * LANE_WIDTH} z={coin.z} />;
+        const x = coin.xOverride !== undefined ? coin.xOverride : laneToX(coin.lane);
+        const y = driveStore.getRoadElevation(coin.z);
+        return <GoldCoin key={coin.id} x={x} y={y} z={coin.z} />;
       })}
 
-      {/* Themed Power-ups */}
+      {/* Driver-Themed Power-ups */}
       {powerups.map((p) => {
         if (!p.active) return null;
-        const x = p.lane * LANE_WIDTH;
+        const x = laneToX(p.lane);
+        const y = driveStore.getRoadElevation(p.z);
         if (p.type === 'tex') {
-          return <TexStetsonHat key={p.id} x={x} z={p.z} />;
+          return <TexStetsonHat key={p.id} x={x} y={y} z={p.z} />;
         } else if (p.type === 'elvis') {
-          return <ElvisGoldenVinyl key={p.id} x={x} z={p.z} />;
+          return <ElvisGoldenVinyl key={p.id} x={x} y={y} z={p.z} />;
         }
-        return null;
+        return <DriverSpecialPowerup key={p.id} type={p.type} x={x} y={y} z={p.z} />;
       })}
     </group>
   );
 }
 
-// Vintage Fiat 500 Retro Model
-function Fiat500Obstacle({ x, z }) {
+// Vintage Fiat 500 Retro Model (follows hill elevation & slope pitch)
+function Fiat500Obstacle({ x, y = 0, z, pitch = 0 }) {
   const meshRef = useRef();
   useFrame((state) => {
     if (meshRef.current) {
-      // Subtle chassis bounce
-      meshRef.current.position.y = 0.28 + Math.sin(state.clock.elapsedTime * 14) * 0.008;
+      meshRef.current.position.y = y + 0.28 + Math.sin(state.clock.elapsedTime * 14) * 0.008;
+      meshRef.current.rotation.x = pitch;
     }
   });
 
   return (
-    <group ref={meshRef} position={[x, 0.28, z]}>
+    <group ref={meshRef} position={[x, y + 0.28, z]} rotation={[pitch, 0, 0]}>
       {/* Fiat Lower Chassis (Pastel Cream / Sky Blue vintage paint) */}
       <mesh castShadow receiveShadow position={[0, 0, 0]}>
         <boxGeometry args={[0.78, 0.36, 1.4]} />
@@ -534,9 +621,9 @@ function Fiat500Obstacle({ x, z }) {
 }
 
 // Vintage Red & White Striped Road Construction Barrier
-function BarrierObstacle({ x, z }) {
+function BarrierObstacle({ x, y = 0, z, pitch = 0 }) {
   return (
-    <group position={[x, 0.28, z]}>
+    <group position={[x, y + 0.28, z]} rotation={[pitch, 0, 0]}>
       {/* Two Wooden Stand Legs */}
       <mesh position={[-0.48, -0.04, 0]} castShadow>
         <boxGeometry args={[0.06, 0.52, 0.32]} />
@@ -573,10 +660,10 @@ function BarrierObstacle({ x, z }) {
   );
 }
 
-// Oil Slick Decal on Road Surface
-function OilSlickObstacle({ x, z }) {
+// Oil Slick Decal on Road Surface (follows hill slope)
+function OilSlickObstacle({ x, y = 0, z, pitch = 0 }) {
   return (
-    <mesh position={[x, 0.005, z]} rotation={[-Math.PI / 2, 0, 0]}>
+    <mesh position={[x, y + 0.012, z]} rotation={[-Math.PI / 2 + pitch, 0, 0]}>
       <circleGeometry args={[0.55, 16]} />
       <meshStandardMaterial
         color="#08080a"
@@ -590,18 +677,18 @@ function OilSlickObstacle({ x, z }) {
 }
 
 // Gold Quadrifoglio Alfa Coin
-function GoldCoin({ x, z }) {
+function GoldCoin({ x, y = 0, z }) {
   const coinRef = useRef();
 
   useFrame((state) => {
     if (coinRef.current) {
       coinRef.current.rotation.y = state.clock.elapsedTime * 4.0;
-      coinRef.current.position.y = 0.35 + Math.sin(state.clock.elapsedTime * 6.0 + z) * 0.06;
+      coinRef.current.position.y = y + 0.36 + Math.sin(state.clock.elapsedTime * 6.0 + z) * 0.06;
     }
   });
 
   return (
-    <group ref={coinRef} position={[x, 0.35, z]}>
+    <group ref={coinRef} position={[x, y + 0.36, z]}>
       <mesh castShadow rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.22, 0.22, 0.04, 16]} />
         <meshStandardMaterial
@@ -617,34 +704,30 @@ function GoldCoin({ x, z }) {
 }
 
 // 🤠 Tex Willer Stetson Cowboy Hat 3D Mesh
-function TexStetsonHat({ x, z }) {
+function TexStetsonHat({ x, y = 0, z }) {
   const hatRef = useRef();
 
   useFrame((state) => {
     if (hatRef.current) {
       hatRef.current.rotation.y = state.clock.elapsedTime * 2.8;
-      hatRef.current.position.y = 0.45 + Math.sin(state.clock.elapsedTime * 5.0) * 0.08;
+      hatRef.current.position.y = y + 0.45 + Math.sin(state.clock.elapsedTime * 5.0) * 0.08;
     }
   });
 
   return (
-    <group ref={hatRef} position={[x, 0.45, z]}>
-      {/* Wide Curved Stetson Brim */}
+    <group ref={hatRef} position={[x, y + 0.45, z]}>
       <mesh castShadow rotation={[0, 0, 0]}>
         <cylinderGeometry args={[0.36, 0.38, 0.02, 24]} />
         <meshStandardMaterial color="#ece5d8" roughness={0.7} />
       </mesh>
-      {/* Indented Crown */}
       <mesh position={[0, 0.12, 0]} castShadow>
         <cylinderGeometry args={[0.18, 0.22, 0.22, 16]} />
         <meshStandardMaterial color="#ece5d8" roughness={0.7} />
       </mesh>
-      {/* Brown Leather Hatband */}
       <mesh position={[0, 0.03, 0]}>
         <cylinderGeometry args={[0.225, 0.225, 0.04, 16]} />
         <meshStandardMaterial color="#54371e" roughness={0.6} />
       </mesh>
-      {/* Golden Aura Ring */}
       <mesh rotation={[Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.42, 0.46, 24]} />
         <meshBasicMaterial color="#ffcc00" side={THREE.DoubleSide} />
@@ -654,19 +737,18 @@ function TexStetsonHat({ x, z }) {
 }
 
 // 🎸 Elvis Presley Golden Vinyl Record 3D Mesh
-function ElvisGoldenVinyl({ x, z }) {
+function ElvisGoldenVinyl({ x, y = 0, z }) {
   const vinylRef = useRef();
 
   useFrame((state) => {
     if (vinylRef.current) {
       vinylRef.current.rotation.y = state.clock.elapsedTime * 3.5;
-      vinylRef.current.position.y = 0.45 + Math.sin(state.clock.elapsedTime * 5.5) * 0.08;
+      vinylRef.current.position.y = y + 0.45 + Math.sin(state.clock.elapsedTime * 5.5) * 0.08;
     }
   });
 
   return (
-    <group ref={vinylRef} position={[x, 0.45, z]}>
-      {/* Golden Grooved Disc */}
+    <group ref={vinylRef} position={[x, y + 0.45, z]}>
       <mesh castShadow rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.34, 0.34, 0.02, 32]} />
         <meshStandardMaterial
@@ -677,15 +759,52 @@ function ElvisGoldenVinyl({ x, z }) {
           emissiveIntensity={0.3}
         />
       </mesh>
-      {/* Center Vintage Red Record Label */}
       <mesh position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[0.12, 24]} />
         <meshStandardMaterial color="#b21818" roughness={0.4} />
       </mesh>
-      {/* Center Spindle Hole */}
       <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[0.03, 16]} />
         <meshBasicMaterial color="#111111" />
+      </mesh>
+    </group>
+  );
+}
+
+// 🍸🕸️💎🔫 Signature Power-Ups for Bond, Spider-Man, Diabolik & Callaghan
+function DriverSpecialPowerup({ type, x, y = 0, z }) {
+  const ref = useRef();
+  useFrame((state) => {
+    if (ref.current) {
+      ref.current.rotation.y = state.clock.elapsedTime * 3.2;
+      ref.current.position.y = y + 0.46 + Math.sin(state.clock.elapsedTime * 5.2) * 0.08;
+    }
+  });
+
+  const colorMap = {
+    bond: '#fbbf24',      // Golden 007 Gadget Octahedron
+    spiderman: '#e11d48', // Crimson Spider-Web Orb
+    diabolik: '#38bdf8',  // Sparkling Blue Diamond
+    callaghan: '#f59e0b', // Brass .44 Magnum Star Badge
+  };
+  const col = colorMap[type] || '#fbbf24';
+
+  return (
+    <group ref={ref} position={[x, y + 0.46, z]}>
+      <mesh castShadow>
+        <octahedronGeometry args={[0.3, type === 'spiderman' ? 2 : 0]} />
+        <meshStandardMaterial
+          color={col}
+          metalness={0.85}
+          roughness={0.15}
+          emissive={col}
+          emissiveIntensity={0.35}
+          wireframe={type === 'spiderman'}
+        />
+      </mesh>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.4, 0.45, 24]} />
+        <meshBasicMaterial color={col} side={THREE.DoubleSide} />
       </mesh>
     </group>
   );

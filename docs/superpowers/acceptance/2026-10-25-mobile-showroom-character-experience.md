@@ -2,7 +2,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-25-mobile-showroom-character-experience-design.md`  
 **Date:** 2026-10-25  
-**Status:** Draft  
+**Status:** Approved  
 
 ---
 

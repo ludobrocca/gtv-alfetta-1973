@@ -375,7 +375,7 @@ export default function App() {
             <div className="flex flex-wrap items-center gap-2.5 mb-1.5">
               <span className="inline-block w-2 h-2 rounded-full bg-[#9E1B24] shadow-[0_0_8px_#C8102E]" />
               <span className="font-mono text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-alfa-gold font-medium">
-                CENTRO STILE • MILANO 1973
+                CENTRO STILE • MILANO 1976
               </span>
               {/* Authentic Vintage Black License Plate Badge */}
               <span
@@ -388,7 +388,7 @@ export default function App() {
 
             <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-semibold tracking-tight leading-none">
               Alfa Romeo Alfetta GTV{' '}
-              <span className="italic font-normal text-alfa-gold">(1973)</span>
+              <span className="italic font-normal text-alfa-gold">(1976)</span>
             </h1>
 
             {/* Customizable Dedication for Dad */}

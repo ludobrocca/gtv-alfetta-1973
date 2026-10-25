@@ -25,6 +25,8 @@ import CarViewer, {
   CAMERA_PRESETS,
   PAINT_FINISHES,
 } from './components/CarViewer.jsx';
+import MobileTopBar from './components/mobile/MobileTopBar.jsx';
+import MobileNavDrawer from './components/mobile/MobileNavDrawer.jsx';
 import { driveStore } from './components/drive/driveStore';
 import { Speedometer } from './components/drive/Speedometer';
 import { useEngineSound } from './components/drive/useEngineSound';
@@ -184,6 +186,7 @@ export default function App() {
   const [showRealPhoto, setShowRealPhoto] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [hudHidden, setHudHidden] = useState(false);
+  const [isNavDrawerOpen, setIsNavDrawerOpen] = useState(false);
   const [hoodOpen, setHoodOpen] = useState(() => {
     try {
       return new URL(window.location.href).searchParams.get('preset') === 'engine';
@@ -232,6 +235,7 @@ export default function App() {
     setAutoRotate(false);
     setShowSpecs(false);
     setShowRealPhoto(false);
+    setIsNavDrawerOpen(false);
   };
 
   const handleExitDrive = () => {
@@ -359,10 +363,10 @@ export default function App() {
         }}
       />
 
-      {/* TOP HEADER OVERLAY */}
+      {/* TOP HEADER OVERLAY (Desktop >= md) */}
       {sceneMode === 'showroom' && (
         <header
-          className={`pointer-events-none absolute top-0 left-0 right-0 z-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 sm:p-6 lg:px-8 transition-all duration-500 ${
+          className={`pointer-events-none absolute top-0 left-0 right-0 z-20 hidden md:flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 sm:p-6 lg:px-8 transition-all duration-500 ${
             hudHidden
               ? 'opacity-0 -translate-y-4'
               : 'opacity-100 translate-y-0'
@@ -529,12 +533,54 @@ export default function App() {
         </header>
       )}
 
+      {/* MOBILE TOP BAR (< md screens) */}
+      {sceneMode === 'showroom' && (
+        <MobileTopBar
+          onOpenDrawer={() => setIsNavDrawerOpen(true)}
+          hudHidden={hudHidden}
+          onHideHud={() => setHudHidden(true)}
+          isLight={isLight}
+          glassClass={glassClass}
+        />
+      )}
+
+      {/* MOBILE NAVIGATION DRAWER */}
+      {sceneMode === 'showroom' && (
+        <MobileNavDrawer
+          isOpen={isNavDrawerOpen}
+          onClose={() => setIsNavDrawerOpen(false)}
+          isLight={isLight}
+          lightingMode={lightingMode}
+          onToggleLighting={(mode) => {
+            if (mode) setLightingMode(mode);
+            else setLightingMode((m) => (m === 'studio' ? 'night' : 'studio'));
+          }}
+          onOpenGallery={() => {
+            setShowRealPhoto(true);
+            setShowSpecs(false);
+          }}
+          onOpenSpecs={() => {
+            setShowSpecs(true);
+            setShowRealPhoto(false);
+          }}
+          onToggleEngineBay={handleToggleEngineBay}
+          hoodOpen={hoodOpen}
+          activePresetId={activePresetId}
+          photosCount={REAL_PHOTOS.length}
+          dedication={dedication}
+          onSaveDedication={(newDedication) => {
+            setDedication(newDedication);
+            setDraftDedication(newDedication);
+          }}
+        />
+      )}
+
       {/* FLOATING RESTORE HUD BUTTON WHEN HIDDEN */}
       {hudHidden && (
         <button
           type="button"
           onClick={() => setHudHidden(false)}
-          className={`pointer-events-auto fixed top-5 right-5 z-30 flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium transition-all ${glassClass}`}
+          className={`pointer-events-auto fixed top-[max(1.25rem,env(safe-area-inset-top))] right-4 sm:right-5 z-30 flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all active:scale-95 min-h-[44px] ${glassClass}`}
         >
           <Eye className="w-4 h-4 text-alfa-gold" />
           <span>Mostra Controlli</span>

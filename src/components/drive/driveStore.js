@@ -24,6 +24,9 @@ export const RPM_LIMITER = 6500;
 export const RPM_MAX = 7000;
 export const OVERDRIVE_BONUS_KMH = 20;
 export const OVERDRIVE_DURATION = 3.5;
+export const PERFECT_SHIFT_BONUS_KMH = 10; // instant speed kick on a perfect doppietta
+export const GOOD_SHIFT_BONUS_KMH = 5;     // instant speed kick on a good (early) shift
+export const SHIFT_BOOST_ACCEL_MULT = 1.5; // in-gear accel multiplier during boost/drafting
 
 // In Three.js with camera at -Z looking toward +Z, +X is Screen-LEFT and -X is Screen-RIGHT.
 // Mapping lane (-1 = Left, 0 = Center, +1 = Right) to -lane * LANE_WIDTH makes Left = Left and Right = Right!
@@ -439,15 +442,15 @@ class DriveStore {
 
       if (this.gear < 5) {
         this.gear++;
-        this.speedKmh = Math.min(215, this.speedKmh + 25);
+        this.speedKmh = Math.min(215, this.speedKmh + PERFECT_SHIFT_BONUS_KMH);
         this.shiftFeedback = {
           quality: 'perfect',
-          label: '⚡ DOPPIETTA PERFETTA! +25 KM/H',
+          label: `⚡ DOPPIETTA PERFETTA! +${PERFECT_SHIFT_BONUS_KMH} KM/H`,
           timer: 1.5,
         };
         this.triggerEventBanner(
           `⚡ DOPPIETTA PERFETTA ${this.gear}ª MARCIA!`,
-          `+${pts} PT • TURBO BIALBERO +25 KM/H`,
+          `+${pts} PT • TURBO BIALBERO +${PERFECT_SHIFT_BONUS_KMH} KM/H`,
           'amber'
         );
       } else {
@@ -477,7 +480,7 @@ class DriveStore {
       this.rpm >= RPM_SHIFT_GOOD
     ) {
       this.gear++;
-      this.speedKmh = Math.min(215, this.speedKmh + 10);
+      this.speedKmh = Math.min(215, this.speedKmh + GOOD_SHIFT_BONUS_KMH);
       const pts = 150 * this.furyMultiplier;
       this.score += pts;
       this.addUltimateCharge(10);
@@ -485,7 +488,7 @@ class DriveStore {
       this.shiftTimer = 0.24;
       this.shiftFeedback = {
         quality: 'good',
-        label: '⚙️ CAMBIATA BUONA',
+        label: `⚙️ CAMBIATA BUONA +${GOOD_SHIFT_BONUS_KMH} KM/H`,
         timer: 1.5,
       };
       driveAudio.playGearShiftPop();
@@ -892,10 +895,14 @@ class DriveStore {
       targetSpeed += OVERDRIVE_BONUS_KMH;
     }
 
-    const accelRate =
-      isNitro || this.boostTimer > 0 || this.isDrafting
-        ? 85.0
-        : (GEAR_ACCEL[currentGear] || 20.0);
+    // Nitro keeps its punchy 85 km/h/s; boost/drafting only give a moderate
+    // in-gear torque kick so each gear still takes a few seconds to climb.
+    const gearAccel = GEAR_ACCEL[currentGear] || 20.0;
+    const accelRate = isNitro
+      ? 85.0
+      : this.boostTimer > 0 || this.isDrafting
+        ? gearAccel * SHIFT_BOOST_ACCEL_MULT
+        : gearAccel;
 
     if (this.speedKmh < targetSpeed) {
       this.speedKmh = Math.min(targetSpeed, this.speedKmh + accelRate * dt);

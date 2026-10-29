@@ -25,6 +25,9 @@ export const RPM_LIMITER = 6500;
 export const RPM_MAX = 7000;
 export const OVERDRIVE_BONUS_KMH = 20;
 export const OVERDRIVE_DURATION = 3.5;
+export const PERFECT_SHIFT_BONUS_KMH = 10;
+export const GOOD_SHIFT_BONUS_KMH = 5;
+export const SHIFT_BOOST_ACCEL_MULT = 1.5;
 ```
 
 ### Nuovo stato
@@ -46,8 +49,8 @@ export const OVERDRIVE_DURATION = 3.5;
 
 ### `triggerPerfectShift()` — ritorna `false | true`
 - Non `playing` → `false`.
-- **Perfetta** (`shiftWindowActive === true`): logica attuale (punti 350×furia, +25% ultimate, furia+1, boost 1.8, `shiftFlashTimer = 0.55`, `perfectShiftsCount++`, `playPerfectShiftBackfire`), `shiftCooldown = 0.6`. Se `gear < 5` → `gear++`, `speed = min(215, speed + 25)`, feedback `perfect` "⚡ DOPPIETTA PERFETTA! +25 KM/H". Se `gear === 5` → `overdriveTimer = OVERDRIVE_DURATION`, feedback `overdrive` "🔥 OVERDRIVE AUTODELTA 6.500 RPM!".
-- **Buona** (`!shiftWindowActive && gear < 5 && shiftCooldown <= 0 && rpm >= RPM_SHIFT_GOOD`): `gear++`, `speed += 10`, `150×furia` punti, `+10%` ultimate, `shiftCooldown = 0.6`, `shiftTimer = 0.24`, `playGearShiftPop`, feedback `good` "⚙️ CAMBIATA BUONA".
+- **Perfetta** (`shiftWindowActive === true`): logica attuale (punti 350×furia, +25% ultimate, furia+1, boost 1.8, `shiftFlashTimer = 0.55`, `perfectShiftsCount++`, `playPerfectShiftBackfire`), `shiftCooldown = 0.6`. Se `gear < 5` → `gear++`, `speed = min(215, speed + PERFECT_SHIFT_BONUS_KMH)`, feedback `perfect` "⚡ DOPPIETTA PERFETTA! +10 KM/H". Se `gear === 5` → `overdriveTimer = OVERDRIVE_DURATION`, feedback `overdrive` "🔥 OVERDRIVE AUTODELTA 6.500 RPM!".
+- **Buona** (`!shiftWindowActive && gear < 5 && shiftCooldown <= 0 && rpm >= RPM_SHIFT_GOOD`): `gear++`, `speed += GOOD_SHIFT_BONUS_KMH`, `150×furia` punti, `+10%` ultimate, `shiftCooldown = 0.6`, `shiftTimer = 0.24`, `playGearShiftPop`, feedback `good` "⚙️ CAMBIATA BUONA +5 KM/H".
 - Altrimenti `false`.
 
 ### `handleFrontalImpact()`

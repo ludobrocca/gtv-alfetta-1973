@@ -123,6 +123,8 @@ const {
   RPM_MAX,
   OVERDRIVE_BONUS_KMH,
   OVERDRIVE_DURATION,
+  PERFECT_SHIFT_BONUS_KMH,
+  GOOD_SHIFT_BONUS_KMH,
 } = await import('../src/components/drive/driveStore.js');
 
 driveStore.setMode('drive');
@@ -188,6 +190,8 @@ runTest('AC-001', 'Costanti & Reset (GEAR_BANDS 5 bande, GEAR_ACCEL, soglie RPM,
   assert.strictEqual(RPM_MAX, 7000, 'RPM_MAX must be 7000');
   assert.strictEqual(OVERDRIVE_BONUS_KMH, 20, 'OVERDRIVE_BONUS_KMH must be 20');
   assert.strictEqual(OVERDRIVE_DURATION, 3.5, 'OVERDRIVE_DURATION must be 3.5');
+  assert.strictEqual(PERFECT_SHIFT_BONUS_KMH, 10, 'PERFECT_SHIFT_BONUS_KMH must be 10');
+  assert.strictEqual(GOOD_SHIFT_BONUS_KMH, 5, 'GOOD_SHIFT_BONUS_KMH must be 5');
 
   // Validate resetGame('playing') initial state
   driveStore.resetGame('playing');
@@ -238,7 +242,7 @@ runTest('AC-002', 'Progressione reale in marcia (6s in 1ª: marcia resta 1, velo
 // -------------------------------------------------------------
 // AC-003 — Doppietta perfetta
 // -------------------------------------------------------------
-runTest('AC-003', 'Doppietta perfetta (shiftWindowActive in 2ª: gear 3, speed +25 cap 215, perfectShiftsCount+1, flash, feedback, cooldown)', () => {
+runTest('AC-003', 'Doppietta perfetta (shiftWindowActive in 2ª: gear 3, speed +10 cap 215, perfectShiftsCount+1, flash, feedback, cooldown)', () => {
   driveStore.resetGame('playing');
   driveStore.gear = 2;
   driveStore.speedKmh = 80;
@@ -251,7 +255,7 @@ runTest('AC-003', 'Doppietta perfetta (shiftWindowActive in 2ª: gear 3, speed +
   const result = driveStore.triggerPerfectShift();
   assert.strictEqual(result, true, 'triggerPerfectShift must return true on perfect shift');
   assert.strictEqual(driveStore.gear, 3, 'Gear must advance from 2 to 3');
-  assert.strictEqual(driveStore.speedKmh, initialSpeed + 25, 'speedKmh must increase by +25');
+  assert.strictEqual(driveStore.speedKmh, initialSpeed + PERFECT_SHIFT_BONUS_KMH, 'speedKmh must increase by +PERFECT_SHIFT_BONUS_KMH (+10)');
   assert.strictEqual(driveStore.perfectShiftsCount, initialShifts + 1, 'perfectShiftsCount must increment by 1');
   assert.strictEqual(driveStore.shiftFlashTimer, 0.55, 'shiftFlashTimer must be set to 0.55s');
   assert.ok(driveStore.shiftFeedback !== null, 'shiftFeedback must be present');
@@ -261,7 +265,7 @@ runTest('AC-003', 'Doppietta perfetta (shiftWindowActive in 2ª: gear 3, speed +
 
   // Verify speed cap at 215 km/h
   driveStore.gear = 2;
-  driveStore.speedKmh = 205;
+  driveStore.speedKmh = 208;
   driveStore.shiftWindowActive = true;
   driveStore.shiftCooldown = 0;
   driveStore.triggerPerfectShift();
@@ -285,7 +289,7 @@ runTest('AC-004', 'Cambiata buona & rifiuto (rpm=4600 in 2ª: buona gear 3 senza
   const resGood = driveStore.triggerPerfectShift();
   assert.strictEqual(resGood, true, 'triggerPerfectShift must return true for good shift at 4600 RPM');
   assert.strictEqual(driveStore.gear, 3, 'Gear must advance from 2 to 3 on good shift');
-  assert.strictEqual(driveStore.speedKmh, initialSpeed + 10, 'speedKmh must increase by +10 on good shift');
+  assert.strictEqual(driveStore.speedKmh, initialSpeed + GOOD_SHIFT_BONUS_KMH, 'speedKmh must increase by +GOOD_SHIFT_BONUS_KMH (+5) on good shift');
   assert.ok(driveStore.shiftFeedback !== null, 'shiftFeedback must be present');
   assert.strictEqual(driveStore.shiftFeedback.quality, 'good', 'shiftFeedback quality must be "good"');
   assert.strictEqual(driveStore.perfectShiftsCount, initialShifts, 'perfectShiftsCount must remain unchanged on good shift');

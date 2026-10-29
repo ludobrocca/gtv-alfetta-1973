@@ -24,7 +24,6 @@ export function Speedometer({ onExitDrive }) {
   const [activeSpiderman, setActiveSpiderman] = useState(0);
   const [activeDiabolik, setActiveDiabolik] = useState(0);
   const [activeCallaghan, setActiveCallaghan] = useState(0);
-  const [eventBanner, setEventBanner] = useState(null);
   const [currentZone, setCurrentZone] = useState(() => driveStore.getCurrentZone());
   const [activeLane, setActiveLane] = useState(0);
   const [furyMultiplier, setFuryMultiplier] = useState(driveStore.furyMultiplier || 1);
@@ -69,7 +68,6 @@ export function Speedometer({ onExitDrive }) {
         setActiveDiabolik(driveStore.activePowerups.diabolik);
         setActiveCallaghan(driveStore.activePowerups.callaghan);
         setActiveMg(driveStore.activePowerups.mg || 0);
-        setEventBanner(driveStore.eventBanner ? { ...driveStore.eventBanner } : null);
         setCurrentZone(driveStore.getCurrentZone());
         setActiveLane(driveStore.targetLane);
         setFuryMultiplier(driveStore.furyMultiplier);
@@ -160,6 +158,20 @@ export function Speedometer({ onExitDrive }) {
   }, []);
 
   const needleDeg = -135 + (Math.min(220, speed) / 220) * 270;
+
+  // Diegetic Power-up state computation for Veglia Borletti Timer Ring (AC-002)
+  const powerupList = [
+    { id: 'elvis', time: activeElvis, max: 7.0, color: '#e879f9', icon: '🎸' },
+    { id: 'tex', time: activeTex, max: 7.0, color: '#fbbf24', icon: '🤠' },
+    { id: 'bond', time: activeBond, max: 7.0, color: '#fcd34d', icon: '🍸' },
+    { id: 'spiderman', time: activeSpiderman, max: 7.0, color: '#f43f5e', icon: '🕸️' },
+    { id: 'diabolik', time: activeDiabolik, max: 7.0, color: '#38bdf8', icon: '💎' },
+    { id: 'callaghan', time: activeCallaghan, max: 7.0, color: '#f97316', icon: '🔫' },
+    { id: 'mg', time: activeMg, max: 7.0, color: '#2dd4bf', icon: '👑' },
+  ];
+  const activePowerup = powerupList.find((p) => p.time > 0);
+  const progress = activePowerup ? Math.min(1, Math.max(0, activePowerup.time / activePowerup.max)) : 0;
+  const isExpiringSoon = activePowerup ? activePowerup.time <= 1.5 : false;
 
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 sm:p-5 z-20 select-none">
@@ -306,140 +318,6 @@ export function Speedometer({ onExitDrive }) {
             </div>
           </div>
         )}
-
-        {/* Slipstream Drafting Active Indicator */}
-        {gameState === 'playing' && isDrafting && (
-          <div className="w-full flex items-center justify-center gap-1.5 px-3 py-1 rounded-full border-2 border-cyan-400 bg-cyan-950/90 backdrop-blur-md shadow-[0_0_15px_rgba(34,211,238,0.5)] animate-pulse">
-            <span className="text-[10px] sm:text-xs font-mono font-bold text-cyan-200 uppercase tracking-wider text-center">
-              💨 SCIA AERODINAMICA ATTIVA • SCARTA PER SORPASSO FIONDA!
-            </span>
-          </div>
-        )}
-
-        {eventBanner && gameState === 'playing' && (
-          <div className="w-full flex flex-col items-center justify-center px-4 py-2 rounded-2xl border-2 border-amber-400/90 bg-gradient-to-r from-black/90 via-amber-950/90 to-black/90 backdrop-blur-md shadow-2xl animate-bounce">
-            <span className="text-xs sm:text-sm font-extrabold font-mono text-amber-300 uppercase tracking-wider">
-              {eventBanner.title}
-            </span>
-            <span className="text-[10px] font-mono text-white/90 uppercase tracking-widest">
-              {eventBanner.subtitle}
-            </span>
-          </div>
-        )}
-
-        {selectedDriver === 'mg' && gameState === 'playing' && (
-          <div className="w-full flex items-center justify-center gap-2 px-4 py-1.5 rounded-xl border border-teal-400/60 bg-teal-950/80 backdrop-blur-md shadow-lg text-center">
-            <span className="text-sm">🛢️</span>
-            <span className="text-[11px] font-bold font-mono text-teal-200 uppercase tracking-wider">
-              MODALITÀ MG • DRIFT SULL’OLIO = +150 PT!
-            </span>
-          </div>
-        )}
-
-        {activeTex > 0 && (
-          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-950/80 via-black/80 to-amber-950/80 backdrop-blur-md shadow-lg animate-pulse">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">🤠</span>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold font-mono text-amber-300 uppercase">
-                  TEX WILLER • INVULNERABILE!
-                </span>
-                <span className="text-[10px] text-amber-200/80">Travolgi gli ostacoli (+150 pt)</span>
-              </div>
-            </div>
-            <span className="text-sm font-mono font-bold text-amber-400">{activeTex.toFixed(1)}s</span>
-          </div>
-        )}
-
-        {activeElvis > 0 && (
-          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-fuchsia-400 bg-gradient-to-r from-fuchsia-950/80 via-black/80 to-fuchsia-950/80 backdrop-blur-md shadow-lg animate-pulse">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">🎸</span>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold font-mono text-fuchsia-300 uppercase">
-                  ELVIS • ROCK&apos;N&apos;ROLL NITRO 2X!
-                </span>
-                <span className="text-[10px] text-fuchsia-200/80">Super velocità &amp; punti doppi</span>
-              </div>
-            </div>
-            <span className="text-sm font-mono font-bold text-fuchsia-300">{activeElvis.toFixed(1)}s</span>
-          </div>
-        )}
-
-        {activeBond > 0 && (
-          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-amber-300 bg-gradient-to-r from-zinc-900/90 via-amber-950/80 to-zinc-900/90 backdrop-blur-md shadow-lg animate-pulse">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">🍸</span>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold font-mono text-amber-300 uppercase">
-                  007 Q-BRANCH • SCUDO &amp; TURBO!
-                </span>
-                <span className="text-[10px] text-amber-100/80">Immunità + Calamita Monete 2X</span>
-              </div>
-            </div>
-            <span className="text-sm font-mono font-bold text-amber-300">{activeBond.toFixed(1)}s</span>
-          </div>
-        )}
-
-        {activeSpiderman > 0 && (
-          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-rose-500 bg-gradient-to-r from-rose-950/85 via-blue-950/85 to-rose-950/85 backdrop-blur-md shadow-lg animate-pulse">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">🕸️</span>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold font-mono text-rose-300 uppercase">
-                  UOMO RAGNO • RAGNATELA MAGNETICA!
-                </span>
-                <span className="text-[10px] text-rose-100/80">Attira tutte le monete in pista</span>
-              </div>
-            </div>
-            <span className="text-sm font-mono font-bold text-rose-300">{activeSpiderman.toFixed(1)}s</span>
-          </div>
-        )}
-
-        {activeDiabolik > 0 && (
-          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-cyan-400 bg-gradient-to-r from-slate-950/90 via-cyan-950/80 to-slate-950/90 backdrop-blur-md shadow-lg animate-pulse">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">💎</span>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold font-mono text-cyan-300 uppercase">
-                  DIABOLIK • FUGA INVISIBILE 3X!
-                </span>
-                <span className="text-[10px] text-cyan-100/80">Attraversa ostacoli &amp; Monete 3X</span>
-              </div>
-            </div>
-            <span className="text-sm font-mono font-bold text-cyan-300">{activeDiabolik.toFixed(1)}s</span>
-          </div>
-        )}
-
-        {activeCallaghan > 0 && (
-          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-orange-400 bg-gradient-to-r from-stone-950/90 via-orange-950/80 to-stone-950/90 backdrop-blur-md shadow-lg animate-pulse">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">🔫</span>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold font-mono text-orange-300 uppercase">
-                  CALLAGHAN • .44 MAGNUM ATTIVA!
-                </span>
-                <span className="text-[10px] text-orange-100/80">Polverizza gli ostacoli davanti</span>
-              </div>
-            </div>
-            <span className="text-sm font-mono font-bold text-orange-300">{activeCallaghan.toFixed(1)}s</span>
-          </div>
-        )}
-
-        {activeMg > 0 && (
-          <div className="w-full flex items-center justify-between px-4 py-2 rounded-xl border-2 border-teal-400 bg-gradient-to-r from-teal-950/85 via-black/80 to-teal-950/85 backdrop-blur-md shadow-lg animate-pulse">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">👑</span>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold font-mono text-teal-300 uppercase">
-                  MG • REGINA DELL’OLIO 3X!
-                </span>
-                <span className="text-[10px] text-teal-100/80">Scudo Ranger + Magnete + Bonus Sbandate</span>
-              </div>
-            </div>
-            <span className="text-sm font-mono font-bold text-teal-300">{activeMg.toFixed(1)}s</span>
-          </div>
-        )}
       </div>
 
       {/* Spacer to push controls to bottom */}
@@ -519,6 +397,63 @@ export function Speedometer({ onExitDrive }) {
             } flex items-center justify-center`}
             title={shiftWindowActive ? 'CAMBIA ADESSO! Tocca per Doppietta' : 'Tachimetro Veglia Borletti'}
           >
+            {/* Diegetic Power-Up SVG Timer Ring (AC-002) */}
+            {activePowerup && (
+              <>
+                <svg
+                  className={`absolute -inset-1.5 w-[calc(100%+12px)] h-[calc(100%+12px)] pointer-events-none z-10 ${
+                    isExpiringSoon ? 'animate-pulse' : ''
+                  }`}
+                  viewBox="0 0 200 200"
+                  style={{
+                    filter: `drop-shadow(0 0 ${isExpiringSoon ? '10px' : '5px'} ${activePowerup.color})`,
+                    animation: isExpiringSoon ? 'pulse 0.5s cubic-bezier(0.4, 0, 0.6, 1) infinite' : undefined,
+                  }}
+                >
+                  {/* Background Track Circle */}
+                  <circle
+                    cx="100"
+                    cy="100"
+                    r="95"
+                    fill="none"
+                    stroke={activePowerup.color}
+                    strokeWidth="3"
+                    opacity="0.25"
+                  />
+                  {/* Draining Countdown Timer Ring */}
+                  <circle
+                    cx="100"
+                    cy="100"
+                    r="95"
+                    fill="none"
+                    stroke={activePowerup.color}
+                    strokeWidth="5"
+                    strokeLinecap="round"
+                    strokeDasharray={2 * Math.PI * 95}
+                    strokeDashoffset={(1 - progress) * 2 * Math.PI * 95}
+                    transform="rotate(-90 100 100)"
+                  />
+                </svg>
+
+                {/* Circular Badge at the top of the dial bezel */}
+                <div
+                  className={`absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full border bg-black/90 backdrop-blur-md shadow-lg font-mono text-[10px] sm:text-[11px] font-bold text-white whitespace-nowrap transition-all ${
+                    isExpiringSoon ? 'animate-pulse scale-105' : ''
+                  }`}
+                  style={{
+                    borderColor: activePowerup.color,
+                    boxShadow: `0 0 10px ${activePowerup.color}88`,
+                    animation: isExpiringSoon ? 'pulse 0.5s cubic-bezier(0.4, 0, 0.6, 1) infinite' : undefined,
+                  }}
+                >
+                  <span>{activePowerup.icon}</span>
+                  <span style={{ color: activePowerup.color }}>
+                    {activePowerup.time.toFixed(1)}s
+                  </span>
+                </div>
+              </>
+            )}
+
             <div className="absolute inset-1 rounded-full border border-white/25 pointer-events-none" />
             <div className="relative w-full h-full rounded-full bg-[#111417] flex items-center justify-center overflow-hidden shadow-inner">
               {/* Speed Dial Radial Hash Ticks */}

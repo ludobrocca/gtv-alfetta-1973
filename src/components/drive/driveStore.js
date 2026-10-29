@@ -86,6 +86,14 @@ class DriveStore {
     this.rampJumpsCount = 0;
     this.slingshotsCount = 0;
 
+    // 3D Diegetic VFX Timers
+    this.shiftFlashTimer = 0;
+    this.takedownSparkTimer = 0;
+    this.takedownSparkSide = 1;
+    this.repairFlashTimer = 0;
+    this.magnumShotTimer = 0;
+    this.magnumTargetZ = 10;
+
     // Near-Miss Combo & Arcade Event Callout Banner
     this.nearMissCombo = 0;
     this.nearMissTimer = 0;
@@ -256,6 +264,14 @@ class DriveStore {
     this.rampJumpsCount = 0;
     this.slingshotsCount = 0;
 
+    // 3D Diegetic VFX Timers
+    this.shiftFlashTimer = 0;
+    this.takedownSparkTimer = 0;
+    this.takedownSparkSide = 1;
+    this.repairFlashTimer = 0;
+    this.magnumShotTimer = 0;
+    this.magnumTargetZ = 10;
+
     Object.keys(this.activePowerups).forEach((k) => {
       this.activePowerups[k] = 0;
     });
@@ -303,6 +319,9 @@ class DriveStore {
       if (obs.knockX === undefined) obs.knockX = laneToX(obs.lane);
       if (obs.rotY === undefined) obs.rotY = 0;
 
+      this.takedownSparkTimer = 0.50;
+      this.takedownSparkSide = direction !== 0 ? Math.sign(direction) : 1;
+
       this.takedownsCount++;
       const pts = 300 * this.furyMultiplier;
       this.score += pts;
@@ -315,6 +334,7 @@ class DriveStore {
         if (this.repairProgress >= 3) {
           this.armorState = 'intact';
           this.repairProgress = 0;
+          this.repairFlashTimer = 0.85;
           this.triggerEventBanner(
             '🔧 MECCANICA ALFA RIPRISTINATA!',
             `SPORTELLATA +${pts} PT • PARAURTI INTATTO`,
@@ -382,6 +402,7 @@ class DriveStore {
     this.boostTimer = Math.max(this.boostTimer, 1.8);
     this.speedKmh = Math.min(215, this.speedKmh + 25);
     this.rpmBlip = 650;
+    this.shiftFlashTimer = 0.55;
     this.triggerEventBanner(
       `⚡ DOPPIETTA PERFETTA ${this.gear}ª MARCIA!`,
       `+${pts} PT • TURBO BIALBERO +25 KM/H`,
@@ -408,6 +429,9 @@ class DriveStore {
     const wasDamaged = this.armorState === 'damaged';
     this.armorState = 'intact';
     this.repairProgress = 0;
+    if (wasDamaged) {
+      this.repairFlashTimer = 0.85;
+    }
     this.triggerEventBanner(
       wasDamaged ? '🦅 DECOLLO RAMPA + AUTO RIPARATA!' : '🦅 DECOLLO SU RAMPA!',
       `+${pts} PT • VOLO SOPRA LO SBARRAMENTO`,
@@ -655,6 +679,8 @@ class DriveStore {
       this.addUltimateCharge(15);
       this.addFury(1);
       if (reason === 'magnum') {
+        this.magnumShotTimer = 0.38;
+        this.magnumTargetZ = obs.z || 10;
         this.triggerEventBanner('💥 COLPO .44 MAGNUM!', `+${pts} PT • BERSAGLIO ELIMINATO`, 'amber');
         driveAudio.playMagnumShot();
       } else {
@@ -814,6 +840,12 @@ class DriveStore {
       this.eventBanner.timer = Math.max(0, this.eventBanner.timer - dt);
       if (this.eventBanner.timer === 0) this.eventBanner = null;
     }
+
+    // 3D Diegetic VFX Timers
+    if (this.shiftFlashTimer > 0) this.shiftFlashTimer = Math.max(0, this.shiftFlashTimer - dt);
+    if (this.takedownSparkTimer > 0) this.takedownSparkTimer = Math.max(0, this.takedownSparkTimer - dt);
+    if (this.repairFlashTimer > 0) this.repairFlashTimer = Math.max(0, this.repairFlashTimer - dt);
+    if (this.magnumShotTimer > 0) this.magnumShotTimer = Math.max(0, this.magnumShotTimer - dt);
 
     // 4. Distance, Odometer & Scenic Zone Progression
     const speedMps = (this.speedKmh * 1000) / 3600;

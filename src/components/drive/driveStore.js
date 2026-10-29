@@ -20,6 +20,22 @@ export const SCENIC_ZONES = [
   { id: 'riviera', name: 'Lungolago • Riviera del Tramonto', icon: '🌅' },
 ];
 
+export const DRIVER_RANKS = [
+  { threshold: 70000, title: 'Leggenda del Quadrifoglio', icon: '🍀', tier: 5 },
+  { threshold: 35000, title: 'Collaudatore Autodelta', icon: '🔥', tier: 4 },
+  { threshold: 15000, title: 'Pilota Corsie Veloci', icon: '🏁', tier: 3 },
+  { threshold: 5000, title: 'Amante del Bialbero', icon: '⚙️', tier: 2 },
+  { threshold: 0, title: 'Turista di Abano', icon: '🚗', tier: 1 },
+];
+
+export function getDriverRank(score = 0) {
+  if (score >= 70000) return { title: 'Leggenda del Quadrifoglio', icon: '🍀', tier: 5 };
+  if (score >= 35000) return { title: 'Collaudatore Autodelta', icon: '🔥', tier: 4 };
+  if (score >= 15000) return { title: 'Pilota Corsie Veloci', icon: '🏁', tier: 3 };
+  if (score >= 5000) return { title: 'Amante del Bialbero', icon: '⚙️', tier: 2 };
+  return { title: 'Turista di Abano', icon: '🚗', tier: 1 };
+}
+
 class DriveStore {
   constructor() {
     this.mode = 'showroom'; // 'showroom' | 'drive'
@@ -53,6 +69,23 @@ class DriveStore {
     this.skidTimer = 0;         // Oil slick traction loss timer
     this.boostTimer = 0;        // Near-miss / jump micro-turbo timer
 
+    // --- Burnout x Bialbero Combat & Arcade Dynamics ---
+    this.armorState = 'intact'; // 'intact' | 'damaged'
+    this.repairProgress = 0;    // 0..3 takedowns to repair
+    this.furyMultiplier = 1;    // 1..10 dynamic score multiplier
+    this.furyTimer = 0;         // countdown before multiplier decays
+    this.ultimateCharge = 0;    // 0..100 chargeable pilot ultimate bar
+    this.isDrafting = false;    // true when slipstreaming behind a Fiat 500
+    this.draftTimer = 0;        // time spent in slipstream
+    this.shiftWindowActive = false; // true when RPM is in redline shift window
+    this.shiftCooldown = 0;     // cooldown between redline shift prompts
+    this.laneChangeTimer = 0;   // active window after lane change for lateral takedown detection
+    this.lastLaneDirection = 0; // -1 or +1
+    this.takedownsCount = 0;
+    this.perfectShiftsCount = 0;
+    this.rampJumpsCount = 0;
+    this.slingshotsCount = 0;
+
     // Near-Miss Combo & Arcade Event Callout Banner
     this.nearMissCombo = 0;
     this.nearMissTimer = 0;
@@ -70,6 +103,15 @@ class DriveStore {
       this.bestScore = 0;
     }
 
+    // Top-5 Hall of Fame Leaderboard
+    this.leaderboard = [];
+    try {
+      const savedLb = localStorage.getItem('alfetta_top5_leaderboard');
+      this.leaderboard = savedLb ? JSON.parse(savedLb) || [] : [];
+    } catch (_) {
+      this.leaderboard = [];
+    }
+
     // Active Power-ups (duration in seconds)
     this.activePowerups = {
       tex: 0,       // Invulnerability golden shield & smash
@@ -78,6 +120,7 @@ class DriveStore {
       spiderman: 0, // Web Magnet (pulls coins from all 3 lanes)
       diabolik: 0,  // Stealth Ghost Cloak (phase through obstacles + 3x coins)
       callaghan: 0, // .44 Magnum Auto-Blast (destroys obstacles ahead)
+      mg: 0,        // Maria Grazia: Regina dell'Olio 3X
     };
 
     // Dynamic Objects on Track
@@ -112,6 +155,10 @@ class DriveStore {
 
   getCurrentZone() {
     return SCENIC_ZONES[this.currentZoneIndex] || SCENIC_ZONES[0];
+  }
+
+  getDriverRank(score) {
+    return getDriverRank(score !== undefined ? score : this.score);
   }
 
   triggerEventBanner(title, subtitle, color = 'amber') {
@@ -191,6 +238,24 @@ class DriveStore {
     this.coinsCollected = 0;
     this.distanceMeters = 0;
     this.roadOffset = 0;
+
+    // Reset Burnout x Bialbero mechanics
+    this.armorState = 'intact';
+    this.repairProgress = 0;
+    this.furyMultiplier = 1;
+    this.furyTimer = 0;
+    this.ultimateCharge = 0;
+    this.isDrafting = false;
+    this.draftTimer = 0;
+    this.shiftWindowActive = false;
+    this.shiftCooldown = 0;
+    this.laneChangeTimer = 0;
+    this.lastLaneDirection = 0;
+    this.takedownsCount = 0;
+    this.perfectShiftsCount = 0;
+    this.rampJumpsCount = 0;
+    this.slingshotsCount = 0;
+
     Object.keys(this.activePowerups).forEach((k) => {
       this.activePowerups[k] = 0;
     });
@@ -217,12 +282,200 @@ class DriveStore {
     this.notify();
   }
 
+  addFury(amount = 1) {
+    this.furyMultiplier = Math.min(10, Math.max(1, this.furyMultiplier + amount));
+    this.furyTimer = 7.5;
+  }
+
+  addUltimateCharge(percent) {
+    this.ultimateCharge = Math.min(100, Math.max(0, this.ultimateCharge + percent));
+  }
+
+  takedownObstacle(id, direction = 1) {
+    const obs = this.obstacles.find((o) => o.id === id);
+    if (obs && (obs.active || !obs.knockedOut)) {
+      obs.active = false;
+      obs.knockedOut = true;
+      const dir = direction !== 0 ? Math.sign(direction) : 1;
+      obs.vx = -dir * 11.5;
+      obs.vz = 9.0;
+      obs.vRot = dir * 10.0;
+      if (obs.knockX === undefined) obs.knockX = laneToX(obs.lane);
+      if (obs.rotY === undefined) obs.rotY = 0;
+
+      this.takedownsCount++;
+      const pts = 300 * this.furyMultiplier;
+      this.score += pts;
+      this.addUltimateCharge(35);
+      this.addFury(1);
+      this.boostTimer = Math.max(this.boostTimer, 1.1);
+
+      if (this.armorState === 'damaged') {
+        this.repairProgress++;
+        if (this.repairProgress >= 3) {
+          this.armorState = 'intact';
+          this.repairProgress = 0;
+          this.triggerEventBanner(
+            '🔧 MECCANICA ALFA RIPRISTINATA!',
+            `SPORTELLATA +${pts} PT • PARAURTI INTATTO`,
+            'emerald'
+          );
+          driveAudio.playArmorRepair();
+        } else {
+          this.triggerEventBanner(
+            `💥 SPORTELLATA TAKEDOWN! (${this.repairProgress}/3 🔧)`,
+            `+${pts} PT • +35% ULTIMATE`,
+            'amber'
+          );
+          driveAudio.playTakedownSlam();
+        }
+      } else {
+        this.triggerEventBanner(
+          `💥 SPORTELLATA TAKEDOWN x${this.furyMultiplier}!`,
+          `+${pts} PT • +35% ULTIMATE`,
+          'amber'
+        );
+        driveAudio.playTakedownSlam();
+      }
+
+      this.notify();
+      return true;
+    }
+    return false;
+  }
+
+  handleFrontalImpact(id) {
+    if (id !== undefined) {
+      const obs = this.obstacles.find((o) => o.id === id);
+      if (obs) obs.active = false;
+    }
+    if (this.armorState === 'intact') {
+      this.armorState = 'damaged';
+      this.repairProgress = 0;
+      this.furyMultiplier = 1;
+      this.furyTimer = 0;
+      this.speedKmh = Math.max(48, this.speedKmh * 0.72);
+      this.triggerEventBanner(
+        '⚠️ PARAURTI DANNEGGIATO!',
+        'FAI 3 SPORTELLATE O PRENDI 1 RAMPA PER RIPARARE',
+        'rose'
+      );
+      driveAudio.playArmorDamage();
+      this.notify();
+      return 'damaged';
+    } else {
+      this.triggerCrash();
+      return 'gameover';
+    }
+  }
+
+  triggerPerfectShift() {
+    if (this.gameState !== 'playing' || !this.shiftWindowActive) return false;
+    this.shiftWindowActive = false;
+    this.shiftCooldown = 4.2;
+    this.gear = Math.min(5, (this.gear || 1) + 1);
+    this.perfectShiftsCount++;
+    const pts = 350 * this.furyMultiplier;
+    this.score += pts;
+    this.addUltimateCharge(25);
+    this.addFury(1);
+    this.boostTimer = Math.max(this.boostTimer, 1.8);
+    this.speedKmh = Math.min(215, this.speedKmh + 25);
+    this.rpmBlip = 650;
+    this.triggerEventBanner(
+      `⚡ DOPPIETTA PERFETTA ${this.gear}ª MARCIA!`,
+      `+${pts} PT • TURBO BIALBERO +25 KM/H`,
+      'amber'
+    );
+    driveAudio.playPerfectShiftBackfire();
+    this.notify();
+    return true;
+  }
+
+  hitRamp(id) {
+    if (id !== undefined) {
+      const obs = this.obstacles.find((o) => o.id === id);
+      if (obs) obs.active = false;
+    }
+    this.verticalVel = 4.4;
+    this.airY = Math.max(0.08, this.airY);
+    this.boostTimer = Math.max(this.boostTimer, 1.6);
+    this.rampJumpsCount++;
+    const pts = 500 * this.furyMultiplier;
+    this.score += pts;
+    this.addUltimateCharge(30);
+    this.addFury(1);
+    const wasDamaged = this.armorState === 'damaged';
+    this.armorState = 'intact';
+    this.repairProgress = 0;
+    this.triggerEventBanner(
+      wasDamaged ? '🦅 DECOLLO RAMPA + AUTO RIPARATA!' : '🦅 DECOLLO SU RAMPA!',
+      `+${pts} PT • VOLO SOPRA LO SBARRAMENTO`,
+      'emerald'
+    );
+    driveAudio.playRampLaunch();
+    this.notify();
+    return true;
+  }
+
+  activateUltimate() {
+    if (this.gameState !== 'playing' || this.ultimateCharge < 100) return false;
+    this.ultimateCharge = 0;
+    this.addFury(1);
+    const drv = this.selectedDriver || 'elvis';
+
+    if (drv === 'mg') {
+      this.activePowerups.mg = 7.0;
+      this.activePowerups.tex = 7.0;
+      this.activePowerups.spiderman = 7.0;
+      this.triggerEventBanner(
+        '👑 MG ULTIMATE • REGINA DELL’OLIO 3X!',
+        'Scudo Ranger + Magnete Monete + Sovraprezzo Olio',
+        'teal'
+      );
+      driveAudio.playTexShield();
+    } else if (drv === 'tex') {
+      this.activePowerups.tex = 7.0;
+      this.triggerEventBanner('🤠 TEX WILLER • SCUDO RANGER!', 'Travolgi ogni ostacolo +150 PT', 'amber');
+      driveAudio.playTexShield();
+    } else if (drv === 'elvis') {
+      this.activePowerups.elvis = 7.0;
+      this.triggerEventBanner("🎸 ELVIS • ROCK'N'ROLL NITRO 2X!", '175 km/h & Punti Doppi', 'fuchsia');
+      driveAudio.playElvisRockabilly(7.0);
+    } else if (drv === 'bond') {
+      this.activePowerups.bond = 7.0;
+      this.triggerEventBanner('🍸 007 Q-BRANCH • LICENZA DI SORPASSO!', 'Scudo + Calamita Monete + Turbo', 'amber');
+      driveAudio.playBondSpyChord();
+    } else if (drv === 'spiderman') {
+      this.activePowerups.spiderman = 7.0;
+      this.triggerEventBanner('🕸️ UOMO RAGNO • RAGNATELA MAGNETICA!', 'Cattura tutte le monete in pista', 'rose');
+      driveAudio.playSpidermanThwip();
+    } else if (drv === 'diabolik') {
+      this.activePowerups.diabolik = 7.0;
+      this.triggerEventBanner('💎 DIABOLIK • FUGA INVISIBILE 3X!', 'Attraversa gli ostacoli + Monete 3X', 'cyan');
+      driveAudio.playDiabolikStealth();
+    } else if (drv === 'callaghan') {
+      this.activePowerups.callaghan = 7.0;
+      this.triggerEventBanner('🔫 CALLAGHAN • .44 MAGNUM IN AZIONE!', 'Polverizza i blocchi davanti (+200 PT)', 'amber');
+      driveAudio.playMagnumShot();
+    } else {
+      this.activePowerups.tex = 7.0;
+      this.triggerEventBanner('⚡ SUPER PILOTA ULTIMATE!', 'Potenza massima sbloccata', 'amber');
+      driveAudio.playTexShield();
+    }
+
+    this.notify();
+    return true;
+  }
+
   // Lane Change: -1 for Left, +1 for Right (non-inverted!)
   changeLane(direction) {
     if (this.gameState !== 'playing') return;
     const newLane = Math.max(-1, Math.min(1, this.targetLane + direction));
     if (newLane !== this.targetLane) {
-      // Check for "Sfioro da Brivido" (last-second lane switch right in front of an obstacle in the old lane!)
+      this.laneChangeTimer = 0.38;
+      this.lastLaneDirection = direction;
+
       const oldLane = this.targetLane;
       const closeObstacle = this.obstacles.find(
         (o) =>
@@ -233,12 +486,34 @@ class DriveStore {
           o.z > 0.8 &&
           o.z < 9.5
       );
-      if (closeObstacle) {
+
+      // Check for Slipstream Slingshot (Sorpasso Fionda in Scia)
+      if (this.draftTimer >= 0.35) {
+        this.slingshotsCount++;
+        this.draftTimer = 0;
+        this.isDrafting = false;
+        if (closeObstacle) closeObstacle.nearMissed = true;
+        this.addFury(1);
+        this.addUltimateCharge(20);
+        this.boostTimer = Math.max(this.boostTimer, 1.4);
+        const pts = 250 * this.furyMultiplier;
+        this.score += pts;
+        this.triggerEventBanner(
+          `💨 SORPASSO FIONDA IN SCIA x${this.furyMultiplier}!`,
+          `+${pts} PT • +20% ULTIMATE`,
+          'cyan'
+        );
+        driveAudio.playNearMissWhoosh();
+      } else if (closeObstacle) {
+        // Last-second dodge near miss ("Sfioro da Brivido")
         closeObstacle.nearMissed = true;
+        this.slingshotsCount++;
+        this.addFury(1);
+        this.addUltimateCharge(20);
         this.nearMissCombo = Math.min(5, this.nearMissCombo + 1);
         this.nearMissTimer = 4.0;
-        this.boostTimer = 1.1;
-        const pts = 250 * this.nearMissCombo;
+        this.boostTimer = Math.max(this.boostTimer, 1.4);
+        const pts = 250 * this.nearMissCombo * this.furyMultiplier;
         this.score += pts;
         this.triggerEventBanner(
           `⚡ SFIORO DA BRIVIDO ${this.nearMissCombo > 1 ? `x${this.nearMissCombo}` : ''}!`,
@@ -255,6 +530,26 @@ class DriveStore {
       this.carYaw = -direction * 0.11;
       this.notify();
     }
+  }
+
+  updateLeaderboard(entry) {
+    if (!entry) {
+      const rank = this.getDriverRank(this.score);
+      entry = {
+        score: this.score,
+        distance: Math.round(this.distanceMeters),
+        driverId: this.selectedDriver,
+        rankTitle: rank.title,
+        rankIcon: rank.icon,
+        date: new Date().toISOString(),
+      };
+    }
+    this.leaderboard.push(entry);
+    this.leaderboard.sort((a, b) => (b.score || 0) - (a.score || 0));
+    this.leaderboard = this.leaderboard.slice(0, 5);
+    try {
+      localStorage.setItem('alfetta_top5_leaderboard', JSON.stringify(this.leaderboard));
+    } catch (_) {}
   }
 
   // Crash into vehicle or barrier (Game Over occurs ONLY here!)
@@ -274,6 +569,17 @@ class DriveStore {
       } catch (_) {}
     }
 
+    // Top-5 leaderboard update (AC-008)
+    const rank = this.getDriverRank(this.score);
+    this.updateLeaderboard({
+      score: this.score,
+      distance: Math.round(this.distanceMeters),
+      driverId: this.selectedDriver,
+      rankTitle: rank.title,
+      rankIcon: rank.icon,
+      date: new Date().toISOString(),
+    });
+
     driveAudio.playCrash();
     this.notify();
   }
@@ -290,7 +596,9 @@ class DriveStore {
           : this.activePowerups.elvis > 0 || this.activePowerups.bond > 0
           ? 2
           : 1;
-      this.score += 50 * multiplier;
+      const pts = 50 * multiplier * this.furyMultiplier;
+      this.score += pts;
+      this.addUltimateCharge(3);
       driveAudio.playCoinPickup();
       this.notify();
     }
@@ -327,6 +635,12 @@ class DriveStore {
       this.activePowerups.callaghan = 6.5;
       this.triggerEventBanner('🔫 CALLAGHAN • .44 MAGNUM IN AZIONE!', 'Polverizza i blocchi davanti (+200 PT)', 'amber');
       driveAudio.playMagnumShot();
+    } else if (pType === 'mg') {
+      this.activePowerups.mg = 7.0;
+      this.activePowerups.tex = 7.0;
+      this.activePowerups.spiderman = 7.0;
+      this.triggerEventBanner('👑 MG POWER • REGINA DELL’OLIO 3X!', 'Scudo Ranger + Magnete Monete', 'teal');
+      driveAudio.playTexShield();
     }
     this.notify();
   }
@@ -336,8 +650,10 @@ class DriveStore {
     const obs = this.obstacles.find((o) => o.id === id);
     if (obs && obs.active) {
       obs.active = false;
-      const pts = reason === 'magnum' ? 200 : 150;
+      const pts = (reason === 'magnum' ? 200 : 150) * this.furyMultiplier;
       this.score += pts;
+      this.addUltimateCharge(15);
+      this.addFury(1);
       if (reason === 'magnum') {
         this.triggerEventBanner('💥 COLPO .44 MAGNUM!', `+${pts} PT • BERSAGLIO ELIMINATO`, 'amber');
         driveAudio.playMagnumShot();
@@ -362,8 +678,10 @@ class DriveStore {
       }
       // Easter Egg MG: Turning oil slicks into bonus points ("Regina del Drift!")
       if (this.selectedDriver === 'mg') {
-        this.score += 150;
-        this.triggerEventBanner('🛢️ CONTROSTERZO MG!', '+150 PT • REGINA DEL DRIFT SULL’OLIO', 'teal');
+        const pts = 150 * this.furyMultiplier;
+        this.score += pts;
+        this.addUltimateCharge(15);
+        this.triggerEventBanner('🛢️ CONTROSTERZO MG!', `+${pts} PT • REGINA DEL DRIFT SULL’OLIO`, 'teal');
       }
       driveAudio.playSkid();
       this.notify();
@@ -419,6 +737,34 @@ class DriveStore {
       return;
     }
 
+    // Lane change window decay
+    if (this.laneChangeTimer > 0) {
+      this.laneChangeTimer = Math.max(0, this.laneChangeTimer - dt);
+    }
+
+    // Fury multiplier decay (AC-007)
+    if (this.furyTimer > 0) {
+      this.furyTimer = Math.max(0, this.furyTimer - dt);
+      if (this.furyTimer === 0 && this.furyMultiplier > 1) {
+        this.furyMultiplier = Math.max(1, this.furyMultiplier - 1);
+        if (this.furyMultiplier > 1) {
+          this.furyTimer = 3.5;
+        }
+      }
+    }
+
+    // Slipstream Drafting check (AC-003)
+    const draftCar = this.obstacles.find(
+      (o) => o.active && o.type === 'fiat500' && o.lane === this.targetLane && o.z > 2.0 && o.z < 18.0
+    );
+    if (draftCar) {
+      this.isDrafting = true;
+      this.draftTimer += dt;
+    } else {
+      this.isDrafting = false;
+      this.draftTimer = Math.max(0, this.draftTimer - dt * 1.5);
+    }
+
     // 1. Target Speed & Acceleration
     const isNitro = this.activePowerups.elvis > 0 || this.activePowerups.bond > 0;
     let targetSpeed = BASE_SPEED;
@@ -426,10 +772,10 @@ class DriveStore {
       targetSpeed = ELVIS_SPEED;
     } else {
       const ramp = Math.min(58, this.distanceMeters * 0.038);
-      targetSpeed = BASE_SPEED + ramp + (this.boostTimer > 0 ? 22 : 0);
+      targetSpeed = BASE_SPEED + ramp + (this.boostTimer > 0 ? 22 : 0) + (this.isDrafting ? 12 : 0);
     }
 
-    const accelRate = isNitro || this.boostTimer > 0 ? 85.0 : 28.0;
+    const accelRate = isNitro || this.boostTimer > 0 || this.isDrafting ? 85.0 : 28.0;
     if (this.speedKmh < targetSpeed) {
       this.speedKmh = Math.min(targetSpeed, this.speedKmh + accelRate * dt);
     } else if (this.speedKmh > targetSpeed) {
@@ -495,8 +841,8 @@ class DriveStore {
       this.verticalVel = Math.min(3.4, 1.9 + (this.speedKmh / 160) * 1.2);
       this.airY = 0.02;
       this.boostTimer = Math.max(this.boostTimer, 1.2);
-      this.score += 300;
-      this.triggerEventBanner('🦅 SALTO DEL CRINALE!', '+300 PT • VOLO ALFETTA GTV', 'amber');
+      this.score += 300 * this.furyMultiplier;
+      this.triggerEventBanner('🦅 SALTO DEL CRINALE!', `+${300 * this.furyMultiplier} PT • VOLO ALFETTA GTV`, 'amber');
       driveAudio.playJumpTakeoff();
     }
     this.prevSlope = currentSlope;
@@ -514,8 +860,8 @@ class DriveStore {
     const targetPitch = -Math.atan(currentSlope) + (this.airY > 0 ? this.verticalVel * 0.045 : 0);
     this.carPitch += (targetPitch - this.carPitch) * Math.min(1, 10.0 * dt);
 
-    // Score accumulation
-    const scoreMultiplier = isNitro ? 2 : 1;
+    // Score accumulation (incorporating furyMultiplier)
+    const scoreMultiplier = (isNitro ? 2 : 1) * this.furyMultiplier;
     this.score += Math.round(speedMps * dt * scoreMultiplier);
 
     // Wheel rotation
@@ -561,6 +907,13 @@ class DriveStore {
       (this.rpmBlip || 0);
     this.rpm = (this.rpm || 950) + (targetRpm - (this.rpm || 950)) * Math.min(1, 14.0 * dt);
 
+    // Redline Shift Window check (AC-004)
+    if (this.shiftCooldown > 0) {
+      this.shiftCooldown = Math.max(0, this.shiftCooldown - dt);
+    }
+    this.shiftWindowActive =
+      this.shiftCooldown <= 0 && (this.rpm >= 5200 || this.isDrafting || this.speedKmh >= 76);
+
     // Engine load (0.25 cruise -> 1.0 uphill climb / nitro / acceleration)
     const uphillLoad = Math.max(0, currentSlope * 6.5);
     const accelLoad = this.speedKmh < targetSpeed - 1.5 ? 0.35 : 0.0;
@@ -572,12 +925,21 @@ class DriveStore {
 
   // Spawns obstacles, coins, and power-ups ahead of the car
   updateSpawns(distUnits, dt = 0.016) {
-    const isMagnet = this.activePowerups.spiderman > 0 || this.activePowerups.bond > 0;
+    const isMagnet = this.activePowerups.spiderman > 0 || this.activePowerups.bond > 0 || this.activePowerups.mg > 0;
     const isMagnum = this.activePowerups.callaghan > 0;
 
     // Scroll existing entities towards car (-Z relative motion)
     for (let i = this.obstacles.length - 1; i >= 0; i--) {
       const obs = this.obstacles[i];
+
+      // If knocked out by takedown, position/physics is updated in DriveWorld.jsx
+      if (obs.knockedOut) {
+        if (obs.z < -10 || obs.z > 80 || (obs.knockX !== undefined && Math.abs(obs.knockX) > 14)) {
+          this.obstacles.splice(i, 1);
+        }
+        continue;
+      }
+
       const prevZ = obs.z;
 
       if (obs.type === 'fiat500') {
@@ -605,7 +967,9 @@ class DriveStore {
         obs.nearMissed = true;
         this.nearMissCombo = Math.min(5, this.nearMissCombo + 1);
         this.nearMissTimer = 3.5;
-        const pts = 150 * this.nearMissCombo;
+        this.addFury(1);
+        this.addUltimateCharge(15);
+        const pts = 150 * this.nearMissCombo * this.furyMultiplier;
         this.score += pts;
         this.triggerEventBanner(
           `💨 SORPASSO A FILO ${this.nearMissCombo > 1 ? `x${this.nearMissCombo}` : ''}!`,
@@ -624,7 +988,7 @@ class DriveStore {
       const coin = this.coins[i];
       coin.z -= distUnits;
 
-      // Spider-Man Web Magnet / 007 Q-Magnet pulls nearby coins across lanes directly to the car!
+      // Spider-Man Web Magnet / 007 Q-Magnet / MG Magnet pulls nearby coins across lanes directly to the car!
       if (isMagnet && coin.active && coin.z > -1.0 && coin.z < 16.0) {
         const curX = coin.xOverride !== undefined ? coin.xOverride : laneToX(coin.lane);
         coin.xOverride = curX + (this.carX - curX) * Math.min(1, 11.0 * dt);
@@ -655,8 +1019,51 @@ class DriveStore {
     const spawnZ = 58;
     const roll = Math.random();
 
-    if (roll < 0.45) {
-      // 1. Obstacle + Coins in alternate lanes
+    if (roll < 0.24) {
+      // 1. Stunt Ramp Pack (AC-005):
+      // Ramp in one lane, barriers across other lanes at spawnZ + 6.5, and 4 aerial coins
+      const rampLane = lanes[Math.floor(Math.random() * lanes.length)];
+      this.obstacles.push({
+        id: `ramp_${Date.now()}_${Math.random()}`,
+        type: 'ramp',
+        lane: rampLane,
+        z: spawnZ,
+        active: true,
+      });
+
+      // Barriers / Fiat 500 across lanes at spawnZ + 6.5 so jumping the ramp clears them!
+      const blockedLanes = lanes.filter((l) => l !== rampLane);
+      blockedLanes.forEach((l) => {
+        const obsType = Math.random() > 0.4 ? 'barrier' : 'fiat500';
+        this.obstacles.push({
+          id: `obs_block_${Date.now()}_${l}_${Math.random()}`,
+          type: obsType,
+          lane: l,
+          z: spawnZ + 6.5,
+          active: true,
+        });
+      });
+      // Also barrier at rampLane at spawnZ + 6.5 (cleared by jumping!)
+      this.obstacles.push({
+        id: `obs_block_ramp_${Date.now()}_${rampLane}_${Math.random()}`,
+        type: 'barrier',
+        lane: rampLane,
+        z: spawnZ + 6.5,
+        active: true,
+      });
+
+      // 4 aerial coins along the jump parabola
+      for (let k = 0; k < 4; k++) {
+        this.coins.push({
+          id: `coin_air_${Date.now()}_${k}_${Math.random()}`,
+          lane: rampLane,
+          z: spawnZ + 2.0 + k * 2.5,
+          yOffset: 1.15 + Math.sin((k / 3) * Math.PI) * 0.65,
+          active: true,
+        });
+      }
+    } else if (roll < 0.54) {
+      // 2. Obstacle + Coins in alternate lanes
       const obsLane = lanes[Math.floor(Math.random() * lanes.length)];
       const freeLanes = lanes.filter((l) => l !== obsLane);
       const coinLane = freeLanes[Math.floor(Math.random() * freeLanes.length)];
@@ -678,8 +1085,8 @@ class DriveStore {
           active: true,
         });
       }
-    } else if (roll < 0.70) {
-      // 2. Oil Slick + Fiat in another lane
+    } else if (roll < 0.74) {
+      // 3. Oil Slick + Fiat in another lane
       const oilLane = lanes[Math.floor(Math.random() * lanes.length)];
       this.obstacles.push({
         id: `oil_${Date.now()}`,
@@ -698,8 +1105,8 @@ class DriveStore {
         z: spawnZ + 8,
         active: true,
       });
-    } else if (roll < 0.89) {
-      // 3. Driver-Themed Power-up (70% chance for current driver's signature gadget!)
+    } else if (roll < 0.90) {
+      // 4. Driver-Themed Power-up (70% chance for current driver's signature gadget!)
       const pLane = lanes[Math.floor(Math.random() * lanes.length)];
       const allPowerups = ['elvis', 'tex', 'bond', 'spiderman', 'diabolik', 'callaghan'];
       const driverPref = allPowerups.includes(this.selectedDriver)
@@ -718,7 +1125,7 @@ class DriveStore {
         active: true,
       });
     } else {
-      // 4. Pure Coin Highway (2 lanes of gold coins)
+      // 5. Pure Coin Highway (2 lanes of gold coins)
       const chosenLanes = [lanes[0], lanes[2]];
       chosenLanes.forEach((l) => {
         for (let k = 0; k < 4; k++) {

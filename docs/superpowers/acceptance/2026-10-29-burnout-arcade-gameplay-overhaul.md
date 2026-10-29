@@ -2,7 +2,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-29-burnout-arcade-gameplay-overhaul-design.md`  
 **Date:** 2026-10-29  
-**Status:** Draft  
+**Status:** Approved  
 
 ---
 

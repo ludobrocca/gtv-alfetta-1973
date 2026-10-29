@@ -17,6 +17,7 @@ import { driveStore } from './drive/driveStore';
 import { DriveWorld } from './drive/DriveWorld';
 import { DriveCameraDirector } from './drive/DriveCameraDirector';
 import { DriverCharacter3D } from './drive/DriverCharacter3D';
+import { CarPowerupVFX } from './drive/CarPowerupVFX.jsx';
 
 const MODEL_PATH = '/models/alfa-romeo-1973-cad.glb?v=21';
 const ENGINE_MODEL_PATH = '/models/alfetta-bialbero-engine.glb?v=3';
@@ -2281,6 +2282,29 @@ function AlfaRomeoModel({
         carDriveGroupRef.current.rotation.y = driveStore.carYaw;
       }
 
+      // Diabolik Ghost Cloak (AC-005)
+      const diabolikTime = driveStore.activePowerups.diabolik || 0;
+      const isDiabolikGhost =
+        sceneMode === 'drive' &&
+        diabolikTime > 0 &&
+        (diabolikTime > 1.5 || Math.sin(state.clock.elapsedTime * 28) > 0);
+      if (materialsMap && materialsMap.CarPaint) {
+        materialsMap.CarPaint.transparent = isDiabolikGhost;
+        materialsMap.CarPaint.opacity = isDiabolikGhost ? 0.42 : 1.0;
+        if (materialsMap.CarPaint.emissive) {
+          materialsMap.CarPaint.emissive.set(isDiabolikGhost ? '#0284c7' : '#000000');
+          materialsMap.CarPaint.emissiveIntensity = isDiabolikGhost ? 0.35 : 0.0;
+        }
+      }
+      if (materialsMap && materialsMap.CarPaintRear) {
+        materialsMap.CarPaintRear.transparent = isDiabolikGhost;
+        materialsMap.CarPaintRear.opacity = isDiabolikGhost ? 0.42 : 1.0;
+        if (materialsMap.CarPaintRear.emissive) {
+          materialsMap.CarPaintRear.emissive.set(isDiabolikGhost ? '#0284c7' : '#000000');
+          materialsMap.CarPaintRear.emissiveIntensity = isDiabolikGhost ? 0.35 : 0.0;
+        }
+      }
+
       // Tex Willer / 007 / Diabolik Shield Aura animation
       if (texShieldRef.current) {
         const isTex = driveStore.activePowerups.tex > 0 || driveStore.activePowerups.bond > 0;
@@ -2331,6 +2355,22 @@ function AlfaRomeoModel({
         bodyGroupRef.current.position.y = 0;
         bodyGroupRef.current.rotation.z = 0;
       }
+      if (materialsMap && materialsMap.CarPaint) {
+        materialsMap.CarPaint.transparent = false;
+        materialsMap.CarPaint.opacity = 1.0;
+        if (materialsMap.CarPaint.emissive) {
+          materialsMap.CarPaint.emissive.set('#000000');
+          materialsMap.CarPaint.emissiveIntensity = 0.0;
+        }
+      }
+      if (materialsMap && materialsMap.CarPaintRear) {
+        materialsMap.CarPaintRear.transparent = false;
+        materialsMap.CarPaintRear.opacity = 1.0;
+        if (materialsMap.CarPaintRear.emissive) {
+          materialsMap.CarPaintRear.emissive.set('#000000');
+          materialsMap.CarPaintRear.emissiveIntensity = 0.0;
+        }
+      }
     }
   });
 
@@ -2365,6 +2405,9 @@ function AlfaRomeoModel({
           emissiveIntensity={0.65}
         />
       </mesh>
+
+      {/* 3D Diegetic Car Powerup & Mechanical State VFX */}
+      {sceneMode === 'drive' && <CarPowerupVFX />}
     </group>
   );
 }

@@ -7,6 +7,7 @@ import { Volume2, VolumeX, ArrowLeft, Trophy, ChevronLeft, ChevronRight, RotateC
 import { driveStore } from './driveStore';
 import { getDriverById } from './driversData';
 import { DriverSelectModal } from './DriverSelectModal';
+import { AlfaGearboxConsole } from './AlfaGearboxConsole';
 
 export function Speedometer({ onExitDrive }) {
   const [speed, setSpeed] = useState(0);
@@ -40,6 +41,10 @@ export function Speedometer({ onExitDrive }) {
   const [leaderboard, setLeaderboard] = useState(driveStore.leaderboard || []);
   const [activeMg, setActiveMg] = useState(driveStore.activePowerups?.mg || 0);
   const [rpm, setRpm] = useState(Math.round(driveStore.rpm || 950));
+  const [overdriveActive, setOverdriveActive] = useState((driveStore.overdriveTimer || 0) > 0);
+  const [shiftFeedback, setShiftFeedback] = useState(
+    driveStore.shiftFeedback ? { ...driveStore.shiftFeedback } : null
+  );
 
   const touchStartXRef = useRef(0);
   const touchStartYRef = useRef(0);
@@ -83,6 +88,10 @@ export function Speedometer({ onExitDrive }) {
         setSlingshotsCount(driveStore.slingshotsCount);
         setLeaderboard(driveStore.leaderboard || []);
         setRpm(Math.round(driveStore.rpm || 950));
+        setOverdriveActive((driveStore.overdriveTimer || 0) > 0);
+        setShiftFeedback(
+          driveStore.shiftFeedback ? { ...driveStore.shiftFeedback } : null
+        );
       }
     };
     animId = requestAnimationFrame(tick);
@@ -327,25 +336,18 @@ export function Speedometer({ onExitDrive }) {
       <div className="flex flex-col items-center w-full max-w-4xl mx-auto pointer-events-auto gap-2">
         {/* Interactive Redline Shift Prompt & Ultimate Button (Thumb Zone) */}
         {gameState === 'playing' && (
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 w-full max-w-md px-2">
-            {/* 1. Spia/Bottone "CAMBIA! / DOPPIETTA" */}
-            {shiftWindowActive ? (
-              <button
-                onClick={() => driveStore.triggerPerfectShift()}
-                className="w-full flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border-2 border-red-500 bg-gradient-to-r from-red-600 via-amber-500 to-red-600 text-white font-mono text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(239,68,68,0.8)] animate-pulse active:scale-95 cursor-pointer"
-                title="Tocca per Doppietta Perfetta"
-              >
-                ⚡ CAMBIA! ({gear}ª → {Math.min(5, gear + 1)}ª)
-              </button>
-            ) : (
-              <div className="w-full flex-1 flex items-center justify-between px-3 py-1.5 rounded-xl border border-white/10 bg-black/60 backdrop-blur-md text-zinc-400 font-mono text-[11px]">
-                <span className="flex items-center gap-1 text-zinc-300 font-bold">
-                  <span className="w-2 h-2 rounded-full bg-amber-500/80" />
-                  {gear}ª MARCIA
-                </span>
-                <span className="text-[10px] text-zinc-400 font-mono">{rpm} RPM</span>
-              </div>
-            )}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 w-full max-w-xl px-2">
+            {/* 1. Transaxle Gearbox Console & Autodelta Tachometer */}
+            <div className="w-full sm:flex-[1.4]">
+              <AlfaGearboxConsole
+                gear={gear}
+                rpm={rpm}
+                shiftWindowActive={shiftWindowActive}
+                overdriveActive={overdriveActive}
+                shiftFeedback={shiftFeedback}
+                onShift={() => driveStore.triggerPerfectShift()}
+              />
+            </div>
 
             {/* 2. Barra/Bottone "ULTIMATE PILOTA" */}
             {ultimateCharge >= 100 ? (
@@ -522,7 +524,7 @@ export function Speedometer({ onExitDrive }) {
                       : 'text-amber-400/90 bg-black/40'
                   }`}
                 >
-                  {gear}ª MARCIA
+                  {overdriveActive ? `${gear}ª OD` : `${gear}ª MARCIA`}
                 </span>
               </div>
 

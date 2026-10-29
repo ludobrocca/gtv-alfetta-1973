@@ -8,6 +8,23 @@ export const LANE_WIDTH = 1.35; // Lateral distance between lanes
 const BASE_SPEED = 68;          // Normal cruise speed in km/h
 const ELVIS_SPEED = 175;        // Elvis / 007 Rock'n'Roll nitro speed
 
+export const GEAR_BANDS = [
+  null,
+  { min: 0,   max: 76  }, // 1ª
+  { min: 65,  max: 102 }, // 2ª
+  { min: 88,  max: 128 }, // 3ª
+  { min: 112, max: 154 }, // 4ª
+  { min: 138, max: 195 }, // 5ª
+];
+export const GEAR_ACCEL = [0, 26, 20, 15, 11, 8]; // km/h/s in-gear acceleration
+export const RPM_IDLE = 1500;
+export const RPM_SHIFT_GOOD = 4200;
+export const RPM_SHIFT_PERFECT = 5200;
+export const RPM_LIMITER = 6500;
+export const RPM_MAX = 7000;
+export const OVERDRIVE_BONUS_KMH = 20;
+export const OVERDRIVE_DURATION = 3.5;
+
 // In Three.js with camera at -Z looking toward +Z, +X is Screen-LEFT and -X is Screen-RIGHT.
 // Mapping lane (-1 = Left, 0 = Center, +1 = Right) to -lane * LANE_WIDTH makes Left = Left and Right = Right!
 export function laneToX(lane) {
@@ -79,6 +96,11 @@ class DriveStore {
     this.draftTimer = 0;        // time spent in slipstream
     this.shiftWindowActive = false; // true when RPM is in redline shift window
     this.shiftCooldown = 0;     // cooldown between redline shift prompts
+    this.overdriveTimer = 0;    // Autodelta overdrive duration timer (s)
+    this.limiterTimer = 0;      // Rev limiter continuous bouncing timer for 3s assist (s)
+    this.shiftFeedback = null;  // { quality: 'perfect'|'good'|'overdrive'|'auto', label, timer }
+    this.shiftTimer = 0;        // clutch disengagement timer (s)
+    this.rpmBlip = 0;
     this.laneChangeTimer = 0;   // active window after lane change for lateral takedown detection
     this.lastLaneDirection = 0; // -1 or +1
     this.takedownsCount = 0;
@@ -241,7 +263,14 @@ class DriveStore {
     this.nearMissTimer = 0;
     this.eventBanner = null;
     this.currentZoneIndex = 0;
-    this.speedKmh = initialState === 'playing' ? BASE_SPEED : 0;
+    this.speedKmh = initialState === 'playing' ? 40 : 0;
+    this.gear = 1;
+    this.rpm = initialState === 'playing' ? RPM_IDLE : 950;
+    this.overdriveTimer = 0;
+    this.limiterTimer = 0;
+    this.shiftFeedback = null;
+    this.shiftTimer = 0;
+    this.rpmBlip = 0;
     this.score = 0;
     this.coinsCollected = 0;
     this.distanceMeters = 0;
@@ -371,6 +400,8 @@ class DriveStore {
     }
     if (this.armorState === 'intact') {
       this.armorState = 'damaged';
+      this.gear = Math.max(1, (this.gear || 1) - 2);
+      this.overdriveTimer = 0;
       this.repairProgress = 0;
       this.furyMultiplier = 1;
       this.furyTimer = 0;
@@ -390,27 +421,79 @@ class DriveStore {
   }
 
   triggerPerfectShift() {
-    if (this.gameState !== 'playing' || !this.shiftWindowActive) return false;
-    this.shiftWindowActive = false;
-    this.shiftCooldown = 4.2;
-    this.gear = Math.min(5, (this.gear || 1) + 1);
-    this.perfectShiftsCount++;
-    const pts = 350 * this.furyMultiplier;
-    this.score += pts;
-    this.addUltimateCharge(25);
-    this.addFury(1);
-    this.boostTimer = Math.max(this.boostTimer, 1.8);
-    this.speedKmh = Math.min(215, this.speedKmh + 25);
-    this.rpmBlip = 650;
-    this.shiftFlashTimer = 0.55;
-    this.triggerEventBanner(
-      `⚡ DOPPIETTA PERFETTA ${this.gear}ª MARCIA!`,
-      `+${pts} PT • TURBO BIALBERO +25 KM/H`,
-      'amber'
-    );
-    driveAudio.playPerfectShiftBackfire();
-    this.notify();
-    return true;
+    if (this.gameState !== 'playing') return false;
+
+    // Perfect shift branch (Redline / Doppietta perfetta)
+    if (this.shiftWindowActive) {
+      this.shiftWindowActive = false;
+      this.shiftCooldown = 0.6;
+      this.perfectShiftsCount++;
+      const pts = 350 * this.furyMultiplier;
+      this.score += pts;
+      this.addUltimateCharge(25);
+      this.addFury(1);
+      this.boostTimer = Math.max(this.boostTimer, 1.8);
+      this.shiftFlashTimer = 0.55;
+      this.shiftTimer = 0.24;
+      this.rpmBlip = 650;
+
+      if (this.gear < 5) {
+        this.gear++;
+        this.speedKmh = Math.min(215, this.speedKmh + 25);
+        this.shiftFeedback = {
+          quality: 'perfect',
+          label: '⚡ DOPPIETTA PERFETTA! +25 KM/H',
+          timer: 1.5,
+        };
+        this.triggerEventBanner(
+          `⚡ DOPPIETTA PERFETTA ${this.gear}ª MARCIA!`,
+          `+${pts} PT • TURBO BIALBERO +25 KM/H`,
+          'amber'
+        );
+      } else {
+        this.overdriveTimer = OVERDRIVE_DURATION;
+        this.shiftFeedback = {
+          quality: 'overdrive',
+          label: '🔥 OVERDRIVE AUTODELTA 6.500 RPM!',
+          timer: 1.8,
+        };
+        this.triggerEventBanner(
+          '🔥 OVERDRIVE AUTODELTA!',
+          '6.500 RPM • MASSIMA POTENZA BIALBERO',
+          'fuchsia'
+        );
+      }
+
+      driveAudio.playPerfectShiftBackfire();
+      this.notify();
+      return true;
+    }
+
+    // Good shift branch (!shiftWindowActive && gear < 5 && shiftCooldown <= 0 && rpm >= RPM_SHIFT_GOOD)
+    if (
+      !this.shiftWindowActive &&
+      this.gear < 5 &&
+      this.shiftCooldown <= 0 &&
+      this.rpm >= RPM_SHIFT_GOOD
+    ) {
+      this.gear++;
+      this.speedKmh = Math.min(215, this.speedKmh + 10);
+      const pts = 150 * this.furyMultiplier;
+      this.score += pts;
+      this.addUltimateCharge(10);
+      this.shiftCooldown = 0.6;
+      this.shiftTimer = 0.24;
+      this.shiftFeedback = {
+        quality: 'good',
+        label: '⚙️ CAMBIATA BUONA',
+        timer: 1.5,
+      };
+      driveAudio.playGearShiftPop();
+      this.notify();
+      return true;
+    }
+
+    return false;
   }
 
   hitRamp(id) {
@@ -793,15 +876,27 @@ class DriveStore {
 
     // 1. Target Speed & Acceleration
     const isNitro = this.activePowerups.elvis > 0 || this.activePowerups.bond > 0;
-    let targetSpeed = BASE_SPEED;
+    const currentGear = Math.max(1, Math.min(5, this.gear || 1));
+    const band = GEAR_BANDS[currentGear];
+    let targetSpeed;
     if (isNitro) {
       targetSpeed = ELVIS_SPEED;
+    } else if (currentGear < 5) {
+      targetSpeed = band.max;
     } else {
       const ramp = Math.min(58, this.distanceMeters * 0.038);
-      targetSpeed = BASE_SPEED + ramp + (this.boostTimer > 0 ? 22 : 0) + (this.isDrafting ? 12 : 0);
+      const boostBonus = (this.boostTimer > 0 ? 22 : 0) + (this.isDrafting ? 12 : 0);
+      targetSpeed = Math.min(band.max, 140 + ramp + boostBonus);
+    }
+    if (this.overdriveTimer > 0) {
+      targetSpeed += OVERDRIVE_BONUS_KMH;
     }
 
-    const accelRate = isNitro || this.boostTimer > 0 || this.isDrafting ? 85.0 : 28.0;
+    const accelRate =
+      isNitro || this.boostTimer > 0 || this.isDrafting
+        ? 85.0
+        : (GEAR_ACCEL[currentGear] || 20.0);
+
     if (this.speedKmh < targetSpeed) {
       this.speedKmh = Math.min(targetSpeed, this.speedKmh + accelRate * dt);
     } else if (this.speedKmh > targetSpeed) {
@@ -903,23 +998,25 @@ class DriveStore {
     // 6. Spawn Generation along Z
     this.updateSpawns(distUnits, dt);
 
-    // 7. Authentic 5-Speed Transaxle Gearbox RPM, Shift Clutch Dip & Engine Load
-    const prevGear = this.gear || 1;
-    let newGear = 5;
-    // Gear thresholds: [0, 52, 78, 102, 128, 200] so the car shifts through gears during normal cruise & ramps!
-    const shiftPoints = [0, 52, 76, 98, 124, 210];
-    for (let g = 1; g <= 5; g++) {
-      if (this.speedKmh <= shiftPoints[g] || g === 5) {
-        newGear = g;
-        break;
-      }
-    }
-    if (newGear !== prevGear) {
-      this.gear = newGear;
-      this.shiftTimer = 0.24; // 240ms clutch disengagement & overrun burble
-      if (newGear > prevGear) {
-        driveAudio.playGearShiftPop();
-      }
+    // 7. Authentic 5-Speed Transaxle Gearbox, RPM & Limiter Dynamics
+    let g = Math.max(1, Math.min(5, this.gear || 1));
+    let currentBand = GEAR_BANDS[g];
+
+    // Auto-correction: upshift if speed exceeds band ceiling, downshift if below floor
+    if (this.speedKmh > currentBand.max + 3 && g < 5) {
+      this.gear = ++g;
+      currentBand = GEAR_BANDS[g];
+      this.shiftTimer = 0.24;
+      this.shiftFeedback = {
+        quality: 'auto',
+        label: '⚙️ CAMBIATA ASSISTITA',
+        timer: 1.5,
+      };
+      driveAudio.playGearShiftPop();
+    } else if (this.speedKmh < currentBand.min - 5 && g > 1) {
+      this.gear = --g;
+      currentBand = GEAR_BANDS[g];
+      this.shiftTimer = 0.24;
     }
 
     if (this.shiftTimer > 0) {
@@ -929,22 +1026,67 @@ class DriveStore {
       this.rpmBlip = Math.max(0, this.rpmBlip - 950 * dt);
     }
 
-    // Map speed within current gear band to realistic Bialbero RPM (3100 -> 6100 RPM)
-    const gMin = shiftPoints[this.gear - 1] * 0.72;
-    const gMax = shiftPoints[this.gear];
-    const inGearRatio = Math.max(0, Math.min(1, (this.speedKmh - gMin) / Math.max(10, gMax - gMin)));
-    const targetRpm =
-      (this.shiftTimer > 0 ? 3150 : 2850 + inGearRatio * 3150) +
-      (this.airY > 0.04 ? 420 : 0) +
-      (this.rpmBlip || 0);
-    this.rpm = (this.rpm || 950) + (targetRpm - (this.rpm || 950)) * Math.min(1, 14.0 * dt);
+    // RPM mapping per gear band (RPM_IDLE -> RPM_MAX - 300)
+    const gMin = currentBand.min * 0.72;
+    const gMax = currentBand.max;
+    const denom = gMax - gMin;
+    const ratio = denom > 0 ? Math.max(0, Math.min(1, (this.speedKmh - gMin) / denom)) : 0;
 
-    // Redline Shift Window check (AC-004)
+    const airBonus = this.airY > 0.04 ? 420 : 0;
+    const blip = this.rpmBlip || 0;
+    let targetRpm =
+      this.shiftTimer > 0
+        ? 3150
+        : RPM_IDLE + ratio * (RPM_MAX - 300 - RPM_IDLE) + airBonus + blip;
+
+    if (this.overdriveTimer > 0) {
+      targetRpm = Math.max(targetRpm, 6500);
+    }
+
+    this.rpm = (this.rpm || RPM_IDLE) + (targetRpm - (this.rpm || RPM_IDLE)) * Math.min(1, 14.0 * dt);
+
+    // Rev limiter oscillation & 3-second assisted upshift
+    if (
+      this.rpm >= RPM_LIMITER ||
+      (this.limiterTimer > 0 && targetRpm >= RPM_LIMITER)
+    ) {
+      this.limiterTimer += dt;
+      if (this.limiterTimer > 3.0 && this.gear < 5) {
+        this.gear++;
+        this.shiftTimer = 0.24;
+        this.shiftFeedback = {
+          quality: 'auto',
+          label: '⚙️ CAMBIATA ASSISTITA',
+          timer: 1.5,
+        };
+        driveAudio.playGearShiftPop();
+        this.limiterTimer = 0;
+      }
+      const t = (typeof performance !== 'undefined' ? performance.now() : Date.now()) * 0.001;
+      this.rpm += Math.sin(t * 60) * 120;
+    } else {
+      this.limiterTimer = 0;
+    }
+
+    // Shift window gating
     if (this.shiftCooldown > 0) {
       this.shiftCooldown = Math.max(0, this.shiftCooldown - dt);
     }
     this.shiftWindowActive =
-      this.shiftCooldown <= 0 && (this.rpm >= 5200 || this.isDrafting || this.speedKmh >= 76);
+      this.shiftCooldown <= 0 &&
+      this.rpm >= RPM_SHIFT_PERFECT &&
+      !(this.gear === 5 && this.overdriveTimer > 0);
+
+    // Decrement overdrive & shiftFeedback timers
+    if (this.overdriveTimer > 0) {
+      this.overdriveTimer = Math.max(0, this.overdriveTimer - dt);
+    }
+    if (this.shiftFeedback) {
+      this.shiftFeedback.timer = Math.max(0, this.shiftFeedback.timer - dt);
+      if (this.shiftFeedback.timer <= 0) {
+        this.shiftFeedback = null;
+      }
+    }
 
     // Engine load (0.25 cruise -> 1.0 uphill climb / nitro / acceleration)
     const uphillLoad = Math.max(0, currentSlope * 6.5);

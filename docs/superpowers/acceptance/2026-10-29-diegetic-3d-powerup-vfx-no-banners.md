@@ -2,7 +2,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-29-diegetic-3d-powerup-vfx-no-banners-design.md`  
 **Date:** 2026-10-29  
-**Status:** Draft  
+**Status:** Approved  
 
 ---
 

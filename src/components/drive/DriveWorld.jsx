@@ -574,6 +574,10 @@ function TrackEntities() {
   const obstacles = driveStore.obstacles;
   const coins = driveStore.coins;
   const powerups = driveStore.powerups;
+  const isWebMagnet =
+    driveStore.activePowerups.spiderman > 0 ||
+    driveStore.activePowerups.bond > 0 ||
+    driveStore.activePowerups.mg > 0;
 
   return (
     <group>
@@ -614,6 +618,22 @@ function TrackEntities() {
         const y = driveStore.getRoadElevation(coin.z);
         return <GoldCoin key={coin.id} x={x} y={y} z={coin.z} yOffset={coin.yOffset || 0} />;
       })}
+
+      {/* Spider-Man Web Magnet Tethers pulling coins to the Alfetta */}
+      {isWebMagnet &&
+        coins.map((coin) => {
+          if (!coin.active || coin.z <= -0.5 || coin.z >= 16.0) return null;
+          const x = coin.xOverride !== undefined ? coin.xOverride : laneToX(coin.lane);
+          const y = driveStore.getRoadElevation(coin.z);
+          return (
+            <SpiderWebTether
+              key={`web_${coin.id}`}
+              start={[driveStore.carX, driveStore.carY + driveStore.airY + 0.34, 0.45]}
+              end={[x, y + 0.36 + (coin.yOffset || 0), coin.z]}
+              color={driveStore.activePowerups.spiderman > 0 ? '#f8fafc' : '#fde047'}
+            />
+          );
+        })}
 
       {/* Driver-Themed Power-ups */}
       {powerups.map((p) => {
@@ -849,6 +869,50 @@ function OilSlickObstacle({ x, y = 0, z, pitch = 0 }) {
         opacity={0.88}
       />
     </mesh>
+  );
+}
+
+// 🕸️ Spider-Man Web Magnet Dynamic 3D Tether connecting car front to magnetized coin
+export function SpiderWebTether({ start, end, color = '#ffffff' }) {
+  const { midpoint, quaternion, len } = useMemo(() => {
+    const p1 = new THREE.Vector3(start[0], start[1], start[2]);
+    const p2 = new THREE.Vector3(end[0], end[1], end[2]);
+    const dir = new THREE.Vector3().subVectors(p2, p1);
+    const len = dir.length();
+    const midpoint = [
+      (start[0] + end[0]) / 2,
+      (start[1] + end[1]) / 2,
+      (start[2] + end[2]) / 2,
+    ];
+    const quat = new THREE.Quaternion();
+    if (len > 0.0001) {
+      quat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+    }
+    return { midpoint, quaternion: quat, len };
+  }, [start[0], start[1], start[2], end[0], end[1], end[2]]);
+
+  if (len < 0.05) return null;
+
+  return (
+    <group>
+      {/* Taut glowing cylinder strand */}
+      <mesh position={midpoint} quaternion={quaternion}>
+        <cylinderGeometry args={[0.018, 0.028, len, 6]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.65}
+          roughness={0.2}
+          transparent
+          opacity={0.88}
+        />
+      </mesh>
+      {/* Small web attachment ring around the coin */}
+      <mesh position={end} rotation={[Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.22, 0.28, 16]} />
+        <meshBasicMaterial color={color} side={THREE.DoubleSide} transparent opacity={0.75} />
+      </mesh>
+    </group>
   );
 }
 

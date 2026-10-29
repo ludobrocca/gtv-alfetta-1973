@@ -286,6 +286,17 @@ export function DriveWorld({ lightingMode }) {
       headLightRightRef.current.intensity = headLightLeftRef.current.intensity;
     }
 
+    // Animate knocked-out obstacles (burnout lateral takedown spin & fly-off physics)
+    for (let i = 0; i < driveStore.obstacles.length; i++) {
+      const obs = driveStore.obstacles[i];
+      if (obs.knockedOut) {
+        obs.knockX = (obs.knockX !== undefined ? obs.knockX : laneToX(obs.lane)) + (obs.vx || 0) * delta;
+        obs.z += (obs.vz || 0) * delta;
+        obs.rotY = (obs.rotY || 0) + (obs.vRot || 0) * delta;
+        obs.rotZ = (obs.rotZ || 0) + (obs.vRot || 0) * 0.35 * delta;
+      }
+    }
+
     // --- Arcade Collision Detection (Non-Inverted X Coordinates!) ---
     if (driveStore.gameState === 'playing') {
       const carX = driveStore.carX;
@@ -293,8 +304,13 @@ export function DriveWorld({ lightingMode }) {
       const isSmashActive =
         driveStore.activePowerups.tex > 0 ||
         driveStore.activePowerups.bond > 0 ||
-        driveStore.activePowerups.callaghan > 0;
+        driveStore.activePowerups.callaghan > 0 ||
+        driveStore.activePowerups.mg > 0;
       const isGhostActive = driveStore.activePowerups.diabolik > 0;
+      const isMagnet =
+        driveStore.activePowerups.spiderman > 0 ||
+        driveStore.activePowerups.bond > 0 ||
+        driveStore.activePowerups.mg > 0;
 
       // 1. Obstacle Collisions
       for (let i = 0; i < driveStore.obstacles.length; i++) {
@@ -305,26 +321,67 @@ export function DriveWorld({ lightingMode }) {
         const dx = Math.abs(carX - obsX);
         const dz = Math.abs(obs.z);
 
-        if (dz < 1.38 && dx < 0.65) {
-          // Jumping high over a hill crest clears low oil slicks and road barriers!
-          if (airY > 0.36 && (obs.type === 'oil' || obs.type === 'barrier')) {
+        // Stunt Ramp takeoff
+        if (obs.type === 'ramp') {
+          if (dz < 1.55 && dx < 0.75) {
+            driveStore.hitRamp(obs.id);
+          }
+          continue;
+        }
+
+        // Flying high clears oil slicks, barriers, and Fiat 500s below
+        if (airY > 0.42) {
+          if (obs.type === 'oil' || obs.type === 'barrier' || obs.type === 'fiat500') {
             continue;
           }
+        }
+        if (airY > 0.35 && obs.type === 'oil') {
+          continue;
+        }
+
+        if (dz < 1.45 && dx < 0.75) {
           if (obs.type === 'oil') {
             driveStore.hitOilSlick(obs.id);
-          } else if (isGhostActive) {
+            continue;
+          }
+
+          if (isGhostActive) {
             obs.active = false;
             driveStore.score += 120;
             driveStore.triggerEventBanner('💎 FUGA DIABOLIK!', '+120 PT • OSTACOLO ATTRAVERSATO', 'cyan');
-          } else if (isSmashActive) {
+            continue;
+          }
+
+          if (isSmashActive) {
             driveStore.smashObstacle(obs.id);
-          } else {
-            driveStore.triggerCrash();
+            continue;
+          }
+
+          // Fiat 500: Burnout Lateral Sportellata Takedown vs Frontal Impact
+          if (obs.type === 'fiat500') {
+            const isSportellata =
+              driveStore.laneChangeTimer > 0 ||
+              Math.abs(carX - laneToX(driveStore.targetLane)) > 0.14 ||
+              (dx > 0.30 && dz < 1.45);
+
+            if (isSportellata) {
+              const takedownDir = driveStore.lastLaneDirection || (carX > obsX ? 1 : -1);
+              driveStore.takedownObstacle(obs.id, takedownDir);
+              continue;
+            } else {
+              driveStore.handleFrontalImpact(obs.id);
+              continue;
+            }
+          }
+
+          if (obs.type === 'barrier') {
+            driveStore.handleFrontalImpact(obs.id);
+            continue;
           }
         }
       }
 
-      // 2. Coin Pickups
+      // 2. Coin Pickups (including aerial coins above ramps)
       for (let i = 0; i < driveStore.coins.length; i++) {
         const coin = driveStore.coins[i];
         if (!coin.active) continue;
@@ -333,8 +390,14 @@ export function DriveWorld({ lightingMode }) {
         const dx = Math.abs(carX - coinX);
         const dz = Math.abs(coin.z);
 
-        if (dz < 1.35 && dx < 0.72) {
-          driveStore.collectCoin(coin.id);
+        if (dz < 1.45 && dx < 0.78) {
+          if (coin.yOffset !== undefined) {
+            if (Math.abs(airY - coin.yOffset) < 1.15 || isMagnet) {
+              driveStore.collectCoin(coin.id);
+            }
+          } else {
+            driveStore.collectCoin(coin.id);
+          }
         }
       }
 
@@ -514,28 +577,42 @@ function TrackEntities() {
 
   return (
     <group>
-      {/* Obstacles */}
+      {/* Obstacles & Stunt Ramps */}
       {obstacles.map((obs) => {
-        if (!obs.active) return null;
-        const x = laneToX(obs.lane);
+        if (!obs.active && !obs.knockedOut) return null;
+        const xPos = obs.knockedOut && obs.knockX !== undefined ? obs.knockX : laneToX(obs.lane);
         const y = driveStore.getRoadElevation(obs.z);
         const pitch = -Math.atan(driveStore.getRoadSlope(obs.z));
+
         if (obs.type === 'fiat500') {
-          return <Fiat500Obstacle key={obs.id} x={x} y={y} z={obs.z} pitch={pitch} />;
-        } else if (obs.type === 'barrier') {
-          return <BarrierObstacle key={obs.id} x={x} y={y} z={obs.z} pitch={pitch} />;
-        } else if (obs.type === 'oil') {
-          return <OilSlickObstacle key={obs.id} x={x} y={y} z={obs.z} pitch={pitch} />;
+          return (
+            <Fiat500Obstacle
+              key={obs.id}
+              x={xPos}
+              y={y}
+              z={obs.z}
+              pitch={pitch}
+              rotY={obs.rotY || 0}
+              rotZ={obs.rotZ || 0}
+              knockedOut={obs.knockedOut}
+            />
+          );
+        } else if (obs.type === 'ramp' && obs.active) {
+          return <StuntRamp key={obs.id} x={xPos} y={y} z={obs.z} pitch={pitch} />;
+        } else if (obs.type === 'barrier' && obs.active) {
+          return <BarrierObstacle key={obs.id} x={xPos} y={y} z={obs.z} pitch={pitch} />;
+        } else if (obs.type === 'oil' && obs.active) {
+          return <OilSlickObstacle key={obs.id} x={xPos} y={y} z={obs.z} pitch={pitch} />;
         }
         return null;
       })}
 
-      {/* Gold Quadrifoglio Coins */}
+      {/* Gold Quadrifoglio Coins (Ground & Aerial Jump Arcs) */}
       {coins.map((coin) => {
         if (!coin.active) return null;
         const x = coin.xOverride !== undefined ? coin.xOverride : laneToX(coin.lane);
         const y = driveStore.getRoadElevation(coin.z);
-        return <GoldCoin key={coin.id} x={x} y={y} z={coin.z} />;
+        return <GoldCoin key={coin.id} x={x} y={y} z={coin.z} yOffset={coin.yOffset || 0} />;
       })}
 
       {/* Driver-Themed Power-ups */}
@@ -554,22 +631,23 @@ function TrackEntities() {
   );
 }
 
-// Vintage Fiat 500 Retro Model (follows hill elevation & slope pitch)
-function Fiat500Obstacle({ x, y = 0, z, pitch = 0 }) {
+// Vintage Fiat 500 Retro Model (follows hill elevation & slope pitch, supports takedown knockout spins)
+function Fiat500Obstacle({ x, y = 0, z, pitch = 0, rotY = 0, rotZ = 0, knockedOut = false }) {
   const meshRef = useRef();
   useFrame((state) => {
     if (meshRef.current) {
-      meshRef.current.position.y = y + 0.28 + Math.sin(state.clock.elapsedTime * 14) * 0.008;
-      meshRef.current.rotation.x = pitch;
+      const bob = knockedOut ? 0 : Math.sin(state.clock.elapsedTime * 14) * 0.008;
+      meshRef.current.position.set(x, y + 0.28 + bob, z);
+      meshRef.current.rotation.set(pitch, rotY, rotZ);
     }
   });
 
   return (
-    <group ref={meshRef} position={[x, y + 0.28, z]} rotation={[pitch, 0, 0]}>
+    <group ref={meshRef} position={[x, y + 0.28, z]} rotation={[pitch, rotY, rotZ]}>
       {/* Fiat Lower Chassis (Pastel Cream / Sky Blue vintage paint) */}
       <mesh castShadow receiveShadow position={[0, 0, 0]}>
         <boxGeometry args={[0.78, 0.36, 1.4]} />
-        <meshStandardMaterial color="#4d8299" roughness={0.3} metalness={0.6} />
+        <meshStandardMaterial color={knockedOut ? '#d97706' : '#4d8299'} roughness={0.3} metalness={0.6} />
       </mesh>
       {/* Rounded Cabin Roof */}
       <mesh castShadow position={[0, 0.26, -0.05]}>
@@ -616,6 +694,104 @@ function Fiat500Obstacle({ x, y = 0, z, pitch = 0 }) {
         <cylinderGeometry args={[0.16, 0.16, 0.08, 12]} />
         <meshStandardMaterial color="#1a1a1a" roughness={0.9} />
       </mesh>
+    </group>
+  );
+}
+
+// 🚧 Procedural 3D Stunt Ramp with Angled Deck, Guardrails & Glowing Neon Chevrons
+function StuntRamp({ x, y = 0, z, pitch = 0 }) {
+  const rampAngle = -0.22; // ~12.6° incline toward +Z takeoff
+
+  return (
+    <group position={[x, y, z]} rotation={[pitch, 0, 0]}>
+      {/* Heavy Steel Undercarriage Frame */}
+      <mesh position={[0, 0.14, 0.12]} castShadow receiveShadow>
+        <boxGeometry args={[1.28, 0.28, 1.8]} />
+        <meshStandardMaterial color="#1e242b" metalness={0.75} roughness={0.35} />
+      </mesh>
+
+      {/* Angled Ramp Deck (High-vis hazard gold/amber) */}
+      <group position={[0, 0.28, 0]} rotation={[rampAngle, 0, 0]}>
+        <mesh castShadow receiveShadow position={[0, 0, 0]}>
+          <boxGeometry args={[1.32, 0.08, 2.2]} />
+          <meshStandardMaterial color="#f59e0b" metalness={0.4} roughness={0.4} />
+        </mesh>
+
+        {/* Black Hazard Traction Strips across deck */}
+        {[-0.65, -0.25, 0.15, 0.55].map((sZ, idx) => (
+          <mesh key={idx} position={[0, 0.045, sZ]}>
+            <boxGeometry args={[1.24, 0.01, 0.14]} />
+            <meshStandardMaterial color="#18181b" roughness={0.9} />
+          </mesh>
+        ))}
+
+        {/* Glowing Neon Directional Chevrons pointing forward (+Z) */}
+        {[-0.45, 0.0, 0.45].map((cZ, idx) => (
+          <group key={`chev_${idx}`} position={[0, 0.048, cZ]}>
+            {/* Left wing */}
+            <mesh position={[-0.08, 0, 0]} rotation={[0, 0.55, 0]}>
+              <boxGeometry args={[0.08, 0.01, 0.28]} />
+              <meshStandardMaterial
+                color="#fef08a"
+                emissive="#f59e0b"
+                emissiveIntensity={2.2}
+                roughness={0.2}
+              />
+            </mesh>
+            {/* Right wing */}
+            <mesh position={[0.08, 0, 0]} rotation={[0, -0.55, 0]}>
+              <boxGeometry args={[0.08, 0.01, 0.28]} />
+              <meshStandardMaterial
+                color="#fef08a"
+                emissive="#f59e0b"
+                emissiveIntensity={2.2}
+                roughness={0.2}
+              />
+            </mesh>
+          </group>
+        ))}
+
+        {/* Glowing Takeoff Lip Edge */}
+        <mesh position={[0, 0.045, 1.05]}>
+          <boxGeometry args={[1.32, 0.06, 0.08]} />
+          <meshStandardMaterial
+            color="#38bdf8"
+            emissive="#38bdf8"
+            emissiveIntensity={2.5}
+            roughness={0.1}
+          />
+        </mesh>
+
+        {/* Left Side Guardrail */}
+        <mesh position={[-0.64, 0.14, 0]} castShadow>
+          <boxGeometry args={[0.06, 0.26, 2.2]} />
+          <meshStandardMaterial color="#dc2626" roughness={0.5} />
+        </mesh>
+        {/* Left Warning Beacon */}
+        <mesh position={[-0.64, 0.30, 1.05]}>
+          <cylinderGeometry args={[0.05, 0.05, 0.08, 10]} />
+          <meshStandardMaterial
+            color="#fbbf24"
+            emissive="#f59e0b"
+            emissiveIntensity={3.0}
+          />
+        </mesh>
+
+        {/* Right Side Guardrail */}
+        <mesh position={[0.64, 0.14, 0]} castShadow>
+          <boxGeometry args={[0.06, 0.26, 2.2]} />
+          <meshStandardMaterial color="#dc2626" roughness={0.5} />
+        </mesh>
+        {/* Right Warning Beacon */}
+        <mesh position={[0.64, 0.30, 1.05]}>
+          <cylinderGeometry args={[0.05, 0.05, 0.08, 10]} />
+          <meshStandardMaterial
+            color="#fbbf24"
+            emissive="#f59e0b"
+            emissiveIntensity={3.0}
+          />
+        </mesh>
+      </group>
     </group>
   );
 }
@@ -677,18 +853,18 @@ function OilSlickObstacle({ x, y = 0, z, pitch = 0 }) {
 }
 
 // Gold Quadrifoglio Alfa Coin
-function GoldCoin({ x, y = 0, z }) {
+function GoldCoin({ x, y = 0, z, yOffset = 0 }) {
   const coinRef = useRef();
 
   useFrame((state) => {
     if (coinRef.current) {
       coinRef.current.rotation.y = state.clock.elapsedTime * 4.0;
-      coinRef.current.position.y = y + 0.36 + Math.sin(state.clock.elapsedTime * 6.0 + z) * 0.06;
+      coinRef.current.position.y = y + 0.36 + yOffset + Math.sin(state.clock.elapsedTime * 6.0 + z) * 0.06;
     }
   });
 
   return (
-    <group ref={coinRef} position={[x, y + 0.36, z]}>
+    <group ref={coinRef} position={[x, y + 0.36 + yOffset, z]}>
       <mesh castShadow rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.22, 0.22, 0.04, 16]} />
         <meshStandardMaterial

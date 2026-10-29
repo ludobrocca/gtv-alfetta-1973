@@ -2,7 +2,7 @@
 // Provides high-performance per-frame physics access for useFrame loops
 // and pure 3-lane Subway Surfers endless runner mechanics (fair, visual, no blind turn deaths).
 
-import { driveAudio } from './DriveAudio';
+import { driveAudio } from './DriveAudio.js';
 
 export const LANE_WIDTH = 1.35; // Lateral distance between lanes
 const BASE_SPEED = 68;          // Normal cruise speed in km/h

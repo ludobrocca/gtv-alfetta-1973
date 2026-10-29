@@ -76,4 +76,59 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  .gear-knob-shake,
+  .animate-gear-knob-shake {
+    animation: gear-knob-shake 0.08s linear infinite;
+  }
+
+  .gear-limiter-flash,
+  .animate-gear-limiter-flash {
+    animation: gear-limiter-flash 0.14s ease-in-out infinite;
+  }
+
+  .shift-feedback-pop {
+    animation: shift-feedback-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+}
+
+/* Alfa Romeo Alfetta GTV 1976 Transaxle Console Keyframes */
+@keyframes gear-knob-shake {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-1.5px, 1px);
+  }
+  40% {
+    transform: translate(1.5px, -1px);
+  }
+  60% {
+    transform: translate(-1px, -1px);
+  }
+  80% {
+    transform: translate(1px, 1px);
+  }
+}
+
+@keyframes gear-limiter-flash {
+  0%, 100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  50% {
+    opacity: 0.35;
+    filter: brightness(1.7) drop-shadow(0 0 8px rgba(239, 68, 68, 0.9));
+  }
+}
+
+@keyframes shift-feedback-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 4px) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
 }

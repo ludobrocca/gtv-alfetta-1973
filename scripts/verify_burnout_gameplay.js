@@ -155,6 +155,7 @@ const driveWorldJsx = readFile('src/components/drive/DriveWorld.jsx');
 const speedometerJsx = readFile('src/components/drive/Speedometer.jsx');
 const driveAudioJs = readFile('src/components/drive/DriveAudio.js');
 const driveStoreJs = readFile('src/components/drive/driveStore.js');
+const carPowerupVfxJsx = readFile('src/components/drive/CarPowerupVFX.jsx');
 
 // -------------------------------------------------------------
 // AC-001: Sportellata Takedown & Fisica Laterale
@@ -272,7 +273,10 @@ runTest('AC-003', 'Scia Aerodinamica & Sorpasso Fionda (drafting detection, time
 
   // Source integration checks
   assert.ok(speedometerJsx.includes('isDrafting'), 'Speedometer.jsx must consume isDrafting');
-  assert.ok(speedometerJsx.includes('SCIA'), 'Speedometer.jsx must display SCIA banner or indicator');
+  assert.ok(
+    carPowerupVfxJsx.includes('isDrafting'),
+    'CarPowerupVFX.jsx must render diegetic wind ribbons when isDrafting is active'
+  );
 });
 
 // -------------------------------------------------------------

@@ -179,6 +179,9 @@ function createShowroomMaterials(selectedPaint) {
       envMapIntensity: selectedPaint.envMapIntensity,
       reflectivity: 0.9,
       side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 1.0,
+      depthWrite: true,
     }),
     // Tail panel + lamp bezels: same hue as the body but a much less metallic, softer finish
     // (the photo shows solid light-silver paint there; only the bumper is real chrome)
@@ -191,6 +194,9 @@ function createShowroomMaterials(selectedPaint) {
       clearcoatRoughness: 0.35,
       envMapIntensity: 0.55,
       side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 1.0,
+      depthWrite: true,
     }),
     Chrome: new THREE.MeshPhysicalMaterial({
       name: 'Chrome',
@@ -2289,16 +2295,18 @@ function AlfaRomeoModel({
         diabolikTime > 0 &&
         (diabolikTime > 1.5 || Math.sin(state.clock.elapsedTime * 28) > 0);
       if (materialsMap && materialsMap.CarPaint) {
-        materialsMap.CarPaint.transparent = isDiabolikGhost;
+        materialsMap.CarPaint.transparent = true; // transparent = isDiabolikGhost
         materialsMap.CarPaint.opacity = isDiabolikGhost ? 0.42 : 1.0;
+        materialsMap.CarPaint.depthWrite = !isDiabolikGhost;
         if (materialsMap.CarPaint.emissive) {
           materialsMap.CarPaint.emissive.set(isDiabolikGhost ? '#0284c7' : '#000000');
           materialsMap.CarPaint.emissiveIntensity = isDiabolikGhost ? 0.35 : 0.0;
         }
       }
       if (materialsMap && materialsMap.CarPaintRear) {
-        materialsMap.CarPaintRear.transparent = isDiabolikGhost;
+        materialsMap.CarPaintRear.transparent = true; // transparent = isDiabolikGhost
         materialsMap.CarPaintRear.opacity = isDiabolikGhost ? 0.42 : 1.0;
+        materialsMap.CarPaintRear.depthWrite = !isDiabolikGhost;
         if (materialsMap.CarPaintRear.emissive) {
           materialsMap.CarPaintRear.emissive.set(isDiabolikGhost ? '#0284c7' : '#000000');
           materialsMap.CarPaintRear.emissiveIntensity = isDiabolikGhost ? 0.35 : 0.0;
@@ -2355,20 +2363,26 @@ function AlfaRomeoModel({
         bodyGroupRef.current.position.y = 0;
         bodyGroupRef.current.rotation.z = 0;
       }
-      if (materialsMap && materialsMap.CarPaint) {
-        materialsMap.CarPaint.transparent = false;
+      if (
+        materialsMap &&
+        materialsMap.CarPaint &&
+        (materialsMap.CarPaint.opacity < 1.0 || materialsMap.CarPaint.emissiveIntensity > 0)
+      ) {
+        materialsMap.CarPaint.transparent = true;
         materialsMap.CarPaint.opacity = 1.0;
+        materialsMap.CarPaint.depthWrite = true;
         if (materialsMap.CarPaint.emissive) {
           materialsMap.CarPaint.emissive.set('#000000');
           materialsMap.CarPaint.emissiveIntensity = 0.0;
         }
-      }
-      if (materialsMap && materialsMap.CarPaintRear) {
-        materialsMap.CarPaintRear.transparent = false;
-        materialsMap.CarPaintRear.opacity = 1.0;
-        if (materialsMap.CarPaintRear.emissive) {
-          materialsMap.CarPaintRear.emissive.set('#000000');
-          materialsMap.CarPaintRear.emissiveIntensity = 0.0;
+        if (materialsMap.CarPaintRear) {
+          materialsMap.CarPaintRear.transparent = true;
+          materialsMap.CarPaintRear.opacity = 1.0;
+          materialsMap.CarPaintRear.depthWrite = true;
+          if (materialsMap.CarPaintRear.emissive) {
+            materialsMap.CarPaintRear.emissive.set('#000000');
+            materialsMap.CarPaintRear.emissiveIntensity = 0.0;
+          }
         }
       }
     }

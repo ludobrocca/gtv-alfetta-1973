@@ -896,8 +896,8 @@ export function SpiderWebTether({ start, end, color = '#ffffff' }) {
   return (
     <group>
       {/* Taut glowing cylinder strand */}
-      <mesh position={midpoint} quaternion={quaternion}>
-        <cylinderGeometry args={[0.018, 0.028, len, 6]} />
+      <mesh position={midpoint} quaternion={quaternion} scale={[1, len, 1]}>
+        <cylinderGeometry args={[0.018, 0.028, 1, 6]} />
         <meshStandardMaterial
           color={color}
           emissive={color}

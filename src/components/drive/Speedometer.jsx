@@ -51,6 +51,9 @@ export function Speedometer({ onExitDrive }) {
   const [takedownSurge, setTakedownSurge] = useState(
     driveStore.takedownSurge ? { ...driveStore.takedownSurge } : null
   );
+  const [introCamActive, setIntroCamActive] = useState(
+    (driveStore.introCamTimer || 0) > 0
+  );
 
   const touchStartXRef = useRef(0);
   const touchStartYRef = useRef(0);
@@ -103,6 +106,7 @@ export function Speedometer({ onExitDrive }) {
         setTakedownSurge(
           driveStore.takedownSurge ? { ...driveStore.takedownSurge } : null
         );
+        setIntroCamActive((driveStore.introCamTimer || 0) > 0);
       }
     };
     animId = requestAnimationFrame(tick);
@@ -114,11 +118,20 @@ export function Speedometer({ onExitDrive }) {
         if (e.key === ' ' || e.key === 'Enter') {
           e.preventDefault();
           driveStore.resetGame('playing');
+          driveStore.triggerIntroCam();
         }
         return;
       }
 
       if (driveStore.gameState === 'playing') {
+        // Skip intro camera on Space or Enter
+        if ((driveStore.introCamTimer || 0) > 0) {
+          if (e.key === ' ' || e.key === 'Enter') {
+            e.preventDefault();
+            driveStore.skipIntroCam();
+            return;
+          }
+        }
         if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === ' ') {
           e.preventDefault();
           driveStore.triggerPerfectShift();
@@ -147,6 +160,12 @@ export function Speedometer({ onExitDrive }) {
       if (driveStore.gameState !== 'playing') return;
       const dx = e.changedTouches[0].clientX - touchStartXRef.current;
       const dy = e.changedTouches[0].clientY - touchStartYRef.current;
+
+      // Tap on screen to skip intro camera
+      if ((driveStore.introCamTimer || 0) > 0 && Math.abs(dx) < 18 && Math.abs(dy) < 18) {
+        driveStore.skipIntroCam();
+        return;
+      }
 
       // Snappy horizontal swipe (dx < 0 = Left, dx > 0 = Right)
       if (Math.abs(dx) > 22 && Math.abs(dx) > Math.abs(dy) * 0.85) {
@@ -195,6 +214,33 @@ export function Speedometer({ onExitDrive }) {
 
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 sm:p-5 z-20 select-none">
+      {/* PS2 Need for Speed Style Cinematic Letterbox Bars */}
+      <div
+        className={`fixed top-0 left-0 right-0 h-7 sm:h-9 bg-black/90 backdrop-blur-md z-40 flex items-center justify-between px-4 sm:px-6 pointer-events-none transition-transform duration-700 ease-out border-b border-amber-500/20 ${
+          introCamActive ? 'translate-y-0' : '-translate-y-full'
+        }`}
+      >
+        <span className="text-[9px] sm:text-[10px] font-mono tracking-widest text-amber-400 uppercase font-bold flex items-center gap-1.5">
+          <span>🏁</span>
+          <span>AUTODELTA CORSE • 1976 ALFA ROMEO ALFETTA GTV</span>
+        </span>
+        <span className="text-[8px] sm:text-[9px] font-mono tracking-wider text-zinc-400 uppercase hidden xs:inline">
+          BIALBERO 2.0 • MANCHE IN CORSA
+        </span>
+      </div>
+
+      <div
+        className={`fixed bottom-0 left-0 right-0 h-7 sm:h-9 bg-black/90 backdrop-blur-md z-40 flex items-center justify-between px-4 sm:px-6 pointer-events-none transition-transform duration-700 ease-out border-t border-amber-500/20 ${
+          introCamActive ? 'translate-y-0' : 'translate-y-full'
+        }`}
+      >
+        <span className="text-[8px] sm:text-[9px] font-mono tracking-wider text-zinc-400 uppercase">
+          VEGLIA BORLETTI • MILANO
+        </span>
+        <span className="text-[8px] sm:text-[9px] font-mono tracking-wider text-amber-300 font-semibold animate-pulse">
+          TOCCA O PREMI SPAZIO PER SALTARE
+        </span>
+      </div>
       {/* Top Header Bar: Showroom Return, Live Scores, and Audio Toggle */}
       <div className="flex items-center justify-between w-full pointer-events-auto gap-2">
         {/* Return Button */}
@@ -721,7 +767,10 @@ export function Speedometer({ onExitDrive }) {
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-2 w-full">
               <button
-                onClick={() => driveStore.resetGame('playing')}
+                onClick={() => {
+                  driveStore.resetGame('playing');
+                  driveStore.triggerIntroCam();
+                }}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-amber-400 bg-amber-500 hover:bg-amber-400 text-black font-mono text-sm font-bold uppercase tracking-wider shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
               >
                 <RotateCcw className="w-4 h-4" />

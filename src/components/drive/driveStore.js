@@ -47,6 +47,7 @@ export const TAKEDOWN_STREAK_TARGET = 5;
 export const TAKEDOWN_CAM_DURATION = 1.6;
 export const TAKEDOWN_CAM_TIMESCALE = 0.3;
 export const TAKEDOWN_SURGE_POINTS = 2500;
+export const INTRO_CAM_DURATION = 2.6; // PS2 Need for Speed style intro motion camera (s)
 
 // In Three.js with camera at -Z looking toward +Z, +X is Screen-LEFT and -X is Screen-RIGHT.
 // Mapping lane (-1 = Left, 0 = Center, +1 = Right) to -lane * LANE_WIDTH makes Left = Left and Right = Right!
@@ -137,6 +138,7 @@ class DriveStore {
     this.timeScale = 1;         // simulation timescale (0.3 during takedown cam, 1 normal)
     this.takedownSurge = null;  // { points, timer } or null
     this.takedownCamsCount = 0; // takedown cams triggered count
+    this.introCamTimer = 0;     // PS2 Need for Speed style intro motion camera timer (s)
 
     // 3D Diegetic VFX Timers
     this.shiftFlashTimer = 0;
@@ -265,6 +267,18 @@ class DriveStore {
     this.notify();
   }
 
+  triggerIntroCam() {
+    this.introCamTimer = INTRO_CAM_DURATION;
+    this.notify();
+  }
+
+  skipIntroCam() {
+    if (this.introCamTimer > 0) {
+      this.introCamTimer = 0;
+      this.notify();
+    }
+  }
+
   startRaceWithDriver(driverId) {
     if (driverId) {
       this.selectedDriver = driverId;
@@ -274,6 +288,7 @@ class DriveStore {
       driveAudio.setMuted(false);
     }
     this.resetGame('playing');
+    this.triggerIntroCam();
   }
 
   resetGame(initialState = 'playing') {
@@ -327,8 +342,10 @@ class DriveStore {
     this.takedownCamTimer = 0;
     this.takedownCamTarget = null;
     this.timeScale = 1;
+    this.introCamTimer = 0;
     this.takedownSurge = null;
     this.takedownCamsCount = 0;
+    this.introCamTimer = 0;
 
     // 3D Diegetic VFX Timers
     this.shiftFlashTimer = 0;
@@ -727,6 +744,7 @@ class DriveStore {
     this.takedownCamTimer = 0;
     this.takedownCamTarget = null;
     this.timeScale = 1;
+    this.introCamTimer = 0;
     this.takedownSurge = null;
     Object.keys(this.activePowerups).forEach((k) => {
       this.activePowerups[k] = 0;
@@ -928,6 +946,11 @@ class DriveStore {
       if (this.takedownSurge.timer < 0.0001) {
         this.takedownSurge = null;
       }
+    }
+
+    // PS2 Need for Speed intro motion camera countdown (real time)
+    if (this.introCamTimer > 0) {
+      this.introCamTimer = Math.max(0, this.introCamTimer - realDt);
     }
 
     const dt = realDt * this.timeScale;

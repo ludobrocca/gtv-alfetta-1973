@@ -2114,7 +2114,6 @@ function AlfaRomeoModel({
   const hoodOpenProgressRef = useRef(0);
   const bodyGroupRef = useRef();
   const carDriveGroupRef = useRef();
-  const texShieldRef = useRef();
 
   const selectedPaint = useMemo(
     () =>
@@ -2288,19 +2287,37 @@ function AlfaRomeoModel({
         carDriveGroupRef.current.rotation.y = driveStore.carYaw;
       }
 
-      // Diabolik Ghost Cloak (AC-005)
+      // Diabolik Ghost Cloak (AC-005) & Tex/Bond Golden Shield
       const diabolikTime = driveStore.activePowerups.diabolik || 0;
       const isDiabolikGhost =
         sceneMode === 'drive' &&
         diabolikTime > 0 &&
         (diabolikTime > 1.5 || Math.sin(state.clock.elapsedTime * 28) > 0);
+
+      const shieldTime = Math.max(
+        driveStore.activePowerups.tex || 0,
+        driveStore.activePowerups.bond || 0
+      );
+      const isGoldenShield =
+        sceneMode === 'drive' &&
+        shieldTime > 0 &&
+        (shieldTime > 1.5 || Math.sin(state.clock.elapsedTime * 28) > 0);
+
       if (materialsMap && materialsMap.CarPaint) {
         materialsMap.CarPaint.transparent = true; // transparent = isDiabolikGhost
         materialsMap.CarPaint.opacity = isDiabolikGhost ? 0.42 : 1.0;
         materialsMap.CarPaint.depthWrite = !isDiabolikGhost;
         if (materialsMap.CarPaint.emissive) {
-          materialsMap.CarPaint.emissive.set(isDiabolikGhost ? '#0284c7' : '#000000');
-          materialsMap.CarPaint.emissiveIntensity = isDiabolikGhost ? 0.35 : 0.0;
+          if (isDiabolikGhost) {
+            materialsMap.CarPaint.emissive.set('#0284c7');
+            materialsMap.CarPaint.emissiveIntensity = 0.35;
+          } else if (isGoldenShield) {
+            materialsMap.CarPaint.emissive.set('#ffd700');
+            materialsMap.CarPaint.emissiveIntensity = 0.25;
+          } else {
+            materialsMap.CarPaint.emissive.set('#000000');
+            materialsMap.CarPaint.emissiveIntensity = 0.0;
+          }
         }
       }
       if (materialsMap && materialsMap.CarPaintRear) {
@@ -2308,23 +2325,15 @@ function AlfaRomeoModel({
         materialsMap.CarPaintRear.opacity = isDiabolikGhost ? 0.42 : 1.0;
         materialsMap.CarPaintRear.depthWrite = !isDiabolikGhost;
         if (materialsMap.CarPaintRear.emissive) {
-          materialsMap.CarPaintRear.emissive.set(isDiabolikGhost ? '#0284c7' : '#000000');
-          materialsMap.CarPaintRear.emissiveIntensity = isDiabolikGhost ? 0.35 : 0.0;
-        }
-      }
-
-      // Tex Willer / 007 / Diabolik Shield Aura animation
-      if (texShieldRef.current) {
-        const isTex = driveStore.activePowerups.tex > 0 || driveStore.activePowerups.bond > 0;
-        const isDiabolik = driveStore.activePowerups.diabolik > 0;
-        const showAura = isTex || isDiabolik;
-        texShieldRef.current.visible = showAura;
-        if (showAura) {
-          texShieldRef.current.rotation.y += delta * 2.8;
-          texShieldRef.current.rotation.x += delta * 1.4;
-          if (texShieldRef.current.material) {
-            texShieldRef.current.material.color.set(isDiabolik ? '#38bdf8' : '#ffd700');
-            texShieldRef.current.material.emissive.set(isDiabolik ? '#0284c7' : '#ffb700');
+          if (isDiabolikGhost) {
+            materialsMap.CarPaintRear.emissive.set('#0284c7');
+            materialsMap.CarPaintRear.emissiveIntensity = 0.35;
+          } else if (isGoldenShield) {
+            materialsMap.CarPaintRear.emissive.set('#ffd700');
+            materialsMap.CarPaintRear.emissiveIntensity = 0.25;
+          } else {
+            materialsMap.CarPaintRear.emissive.set('#000000');
+            materialsMap.CarPaintRear.emissiveIntensity = 0.0;
           }
         }
       }
@@ -2355,9 +2364,6 @@ function AlfaRomeoModel({
         carDriveGroupRef.current.rotation.x = 0;
         carDriveGroupRef.current.rotation.z = 0;
         carDriveGroupRef.current.rotation.y = 0;
-      }
-      if (texShieldRef.current) {
-        texShieldRef.current.visible = false;
       }
       if (bodyGroupRef.current) {
         bodyGroupRef.current.position.y = 0;
@@ -2406,19 +2412,6 @@ function AlfaRomeoModel({
           </group>
         </group>
       </Center>
-
-      {/* Tex Willer Golden Shield Aura (Visible during invulnerability) */}
-      <mesh ref={texShieldRef} position={[0, 0.42, 0]} visible={false}>
-        <sphereGeometry args={[1.52, 20, 16]} />
-        <meshStandardMaterial
-          color="#ffd700"
-          transparent
-          opacity={0.35}
-          wireframe
-          emissive="#ffb700"
-          emissiveIntensity={0.65}
-        />
-      </mesh>
 
       {/* 3D Diegetic Car Powerup & Mechanical State VFX */}
       {sceneMode === 'drive' && <CarPowerupVFX />}

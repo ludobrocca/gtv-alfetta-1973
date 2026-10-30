@@ -287,13 +287,14 @@ export function DriveWorld({ lightingMode }) {
     }
 
     // Animate knocked-out obstacles (burnout lateral takedown spin & fly-off physics)
+    const effectiveDelta = delta * (driveStore.timeScale ?? 1);
     for (let i = 0; i < driveStore.obstacles.length; i++) {
       const obs = driveStore.obstacles[i];
       if (obs.knockedOut) {
-        obs.knockX = (obs.knockX !== undefined ? obs.knockX : laneToX(obs.lane)) + (obs.vx || 0) * delta;
-        obs.z += (obs.vz || 0) * delta;
-        obs.rotY = (obs.rotY || 0) + (obs.vRot || 0) * delta;
-        obs.rotZ = (obs.rotZ || 0) + (obs.vRot || 0) * 0.35 * delta;
+        obs.knockX = (obs.knockX !== undefined ? obs.knockX : laneToX(obs.lane)) + (obs.vx || 0) * effectiveDelta;
+        obs.z += (obs.vz || 0) * effectiveDelta;
+        obs.rotY = (obs.rotY || 0) + (obs.vRot || 0) * effectiveDelta;
+        obs.rotZ = (obs.rotZ || 0) + (obs.vRot || 0) * 0.35 * effectiveDelta;
       }
     }
 
@@ -398,20 +399,6 @@ export function DriveWorld({ lightingMode }) {
           } else {
             driveStore.collectCoin(coin.id);
           }
-        }
-      }
-
-      // 3. Power-Up Pickups
-      for (let i = 0; i < driveStore.powerups.length; i++) {
-        const pow = driveStore.powerups[i];
-        if (!pow.active) continue;
-
-        const powX = laneToX(pow.lane);
-        const dx = Math.abs(carX - powX);
-        const dz = Math.abs(pow.z);
-
-        if (dz < 1.45 && dx < 0.78) {
-          driveStore.collectPowerup(pow.id);
         }
       }
     }
@@ -573,7 +560,6 @@ export function DriveWorld({ lightingMode }) {
 function TrackEntities() {
   const obstacles = driveStore.obstacles;
   const coins = driveStore.coins;
-  const powerups = driveStore.powerups;
   const isWebMagnet =
     driveStore.activePowerups.spiderman > 0 ||
     driveStore.activePowerups.bond > 0 ||
@@ -634,19 +620,6 @@ function TrackEntities() {
             />
           );
         })}
-
-      {/* Driver-Themed Power-ups */}
-      {powerups.map((p) => {
-        if (!p.active) return null;
-        const x = laneToX(p.lane);
-        const y = driveStore.getRoadElevation(p.z);
-        if (p.type === 'tex') {
-          return <TexStetsonHat key={p.id} x={x} y={y} z={p.z} />;
-        } else if (p.type === 'elvis') {
-          return <ElvisGoldenVinyl key={p.id} x={x} y={y} z={p.z} />;
-        }
-        return <DriverSpecialPowerup key={p.id} type={p.type} x={x} y={y} z={p.z} />;
-      })}
     </group>
   );
 }
@@ -938,113 +911,6 @@ function GoldCoin({ x, y = 0, z, yOffset = 0 }) {
           emissive="#b8860b"
           emissiveIntensity={0.25}
         />
-      </mesh>
-    </group>
-  );
-}
-
-// 🤠 Tex Willer Stetson Cowboy Hat 3D Mesh
-function TexStetsonHat({ x, y = 0, z }) {
-  const hatRef = useRef();
-
-  useFrame((state) => {
-    if (hatRef.current) {
-      hatRef.current.rotation.y = state.clock.elapsedTime * 2.8;
-      hatRef.current.position.y = y + 0.45 + Math.sin(state.clock.elapsedTime * 5.0) * 0.08;
-    }
-  });
-
-  return (
-    <group ref={hatRef} position={[x, y + 0.45, z]}>
-      <mesh castShadow rotation={[0, 0, 0]}>
-        <cylinderGeometry args={[0.36, 0.38, 0.02, 24]} />
-        <meshStandardMaterial color="#ece5d8" roughness={0.7} />
-      </mesh>
-      <mesh position={[0, 0.12, 0]} castShadow>
-        <cylinderGeometry args={[0.18, 0.22, 0.22, 16]} />
-        <meshStandardMaterial color="#ece5d8" roughness={0.7} />
-      </mesh>
-      <mesh position={[0, 0.03, 0]}>
-        <cylinderGeometry args={[0.225, 0.225, 0.04, 16]} />
-        <meshStandardMaterial color="#54371e" roughness={0.6} />
-      </mesh>
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.42, 0.46, 24]} />
-        <meshBasicMaterial color="#ffcc00" side={THREE.DoubleSide} />
-      </mesh>
-    </group>
-  );
-}
-
-// 🎸 Elvis Presley Golden Vinyl Record 3D Mesh
-function ElvisGoldenVinyl({ x, y = 0, z }) {
-  const vinylRef = useRef();
-
-  useFrame((state) => {
-    if (vinylRef.current) {
-      vinylRef.current.rotation.y = state.clock.elapsedTime * 3.5;
-      vinylRef.current.position.y = y + 0.45 + Math.sin(state.clock.elapsedTime * 5.5) * 0.08;
-    }
-  });
-
-  return (
-    <group ref={vinylRef} position={[x, y + 0.45, z]}>
-      <mesh castShadow rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.34, 0.34, 0.02, 32]} />
-        <meshStandardMaterial
-          color="#d4af37"
-          metalness={0.96}
-          roughness={0.12}
-          emissive="#b8860b"
-          emissiveIntensity={0.3}
-        />
-      </mesh>
-      <mesh position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.12, 24]} />
-        <meshStandardMaterial color="#b21818" roughness={0.4} />
-      </mesh>
-      <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.03, 16]} />
-        <meshBasicMaterial color="#111111" />
-      </mesh>
-    </group>
-  );
-}
-
-// 🍸🕸️💎🔫 Signature Power-Ups for Bond, Spider-Man, Diabolik & Callaghan
-function DriverSpecialPowerup({ type, x, y = 0, z }) {
-  const ref = useRef();
-  useFrame((state) => {
-    if (ref.current) {
-      ref.current.rotation.y = state.clock.elapsedTime * 3.2;
-      ref.current.position.y = y + 0.46 + Math.sin(state.clock.elapsedTime * 5.2) * 0.08;
-    }
-  });
-
-  const colorMap = {
-    bond: '#fbbf24',      // Golden 007 Gadget Octahedron
-    spiderman: '#e11d48', // Crimson Spider-Web Orb
-    diabolik: '#38bdf8',  // Sparkling Blue Diamond
-    callaghan: '#f59e0b', // Brass .44 Magnum Star Badge
-  };
-  const col = colorMap[type] || '#fbbf24';
-
-  return (
-    <group ref={ref} position={[x, y + 0.46, z]}>
-      <mesh castShadow>
-        <octahedronGeometry args={[0.3, type === 'spiderman' ? 2 : 0]} />
-        <meshStandardMaterial
-          color={col}
-          metalness={0.85}
-          roughness={0.15}
-          emissive={col}
-          emissiveIntensity={0.35}
-          wireframe={type === 'spiderman'}
-        />
-      </mesh>
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.4, 0.45, 24]} />
-        <meshBasicMaterial color={col} side={THREE.DoubleSide} />
       </mesh>
     </group>
   );

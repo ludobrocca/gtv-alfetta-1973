@@ -8,6 +8,7 @@ import { driveStore } from './driveStore';
 import { getDriverById } from './driversData';
 import { DriverSelectModal } from './DriverSelectModal';
 import { AlfaGearboxConsole } from './AlfaGearboxConsole';
+import { UltimateButton } from './UltimateButton';
 
 export function Speedometer({ onExitDrive }) {
   const [speed, setSpeed] = useState(0);
@@ -44,6 +45,11 @@ export function Speedometer({ onExitDrive }) {
   const [overdriveActive, setOverdriveActive] = useState((driveStore.overdriveTimer || 0) > 0);
   const [shiftFeedback, setShiftFeedback] = useState(
     driveStore.shiftFeedback ? { ...driveStore.shiftFeedback } : null
+  );
+  const [ultimateTimer, setUltimateTimer] = useState(driveStore.ultimateTimer || 0);
+  const [takedownStreak, setTakedownStreak] = useState(driveStore.takedownStreak || 0);
+  const [takedownSurge, setTakedownSurge] = useState(
+    driveStore.takedownSurge ? { ...driveStore.takedownSurge } : null
   );
 
   const touchStartXRef = useRef(0);
@@ -91,6 +97,11 @@ export function Speedometer({ onExitDrive }) {
         setOverdriveActive((driveStore.overdriveTimer || 0) > 0);
         setShiftFeedback(
           driveStore.shiftFeedback ? { ...driveStore.shiftFeedback } : null
+        );
+        setUltimateTimer(driveStore.ultimateTimer || 0);
+        setTakedownStreak(driveStore.takedownStreak || 0);
+        setTakedownSurge(
+          driveStore.takedownSurge ? { ...driveStore.takedownSurge } : null
         );
       }
     };
@@ -185,52 +196,81 @@ export function Speedometer({ onExitDrive }) {
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 sm:p-5 z-20 select-none">
       {/* Top Header Bar: Showroom Return, Live Scores, and Audio Toggle */}
-      <div className="flex items-center justify-between w-full pointer-events-auto">
+      <div className="flex items-center justify-between w-full pointer-events-auto gap-2">
         {/* Return Button */}
         <button
           onClick={onExitDrive}
-          className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl border border-white/20 bg-black/60 backdrop-blur-md text-white text-xs font-mono uppercase tracking-wider hover:border-alfa-gold hover:text-alfa-gold transition-all shadow-xl active:scale-95"
+          className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl border border-white/20 bg-black/60 backdrop-blur-md text-white text-xs font-mono uppercase tracking-wider hover:border-alfa-gold hover:text-alfa-gold transition-all shadow-xl active:scale-95 shrink-0"
         >
           <ArrowLeft className="w-4 h-4" />
           <span className="hidden sm:inline">Showroom</span>
         </button>
 
-        {/* Score & Personal Best Arcade Display */}
-        <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-5 py-1.5 rounded-2xl border border-amber-500/30 bg-black/75 backdrop-blur-md shadow-2xl">
-          {/* Current Score */}
-          <div className="flex flex-col items-center">
-            <span className="text-[9px] font-mono uppercase text-zinc-400 tracking-wider">Punti</span>
-            <span className="text-base sm:text-xl font-bold font-mono text-amber-400">
-              {score.toLocaleString('it-IT')}
-            </span>
+        {/* Center: Score Display + Takedown Surge Chip */}
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-center">
+          {/* Score & Personal Best Arcade Display */}
+          <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-5 py-1.5 rounded-2xl border border-amber-500/30 bg-black/75 backdrop-blur-md shadow-2xl">
+            {/* Current Score & 5 Takedown Streak Dots */}
+            <div className="flex flex-col items-center">
+              <span className="text-[9px] font-mono uppercase text-zinc-400 tracking-wider">Punti</span>
+              <span className="text-base sm:text-xl font-bold font-mono text-amber-400 leading-tight">
+                {score.toLocaleString('it-IT')}
+              </span>
+              {/* 5 Small Streak Dots (filled = takedownStreak % 5) */}
+              <div
+                className="flex items-center gap-1 mt-0.5"
+                title={`Sportellate per Takedown Cam: ${takedownStreak % 5}/5`}
+              >
+                {[0, 1, 2, 3, 4].map((i) => {
+                  const isFilled = i < (takedownStreak % 5);
+                  return (
+                    <div
+                      key={i}
+                      className={`w-1.5 h-1.5 rounded-full border transition-all duration-200 ${
+                        isFilled
+                          ? 'bg-amber-400 border-amber-200 shadow-[0_0_5px_rgba(251,191,36,0.9)] scale-110'
+                          : 'bg-zinc-800/80 border-white/20'
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="w-[1px] h-6 bg-white/15" />
+
+            {/* Alfa Coins */}
+            <div className="flex flex-col items-center">
+              <span className="text-[9px] font-mono uppercase text-zinc-400 tracking-wider">Monete</span>
+              <span className="text-sm sm:text-base font-bold font-mono text-amber-300 flex items-center gap-1">
+                <span>🪙</span>
+                {coins}
+              </span>
+            </div>
+
+            <div className="w-[1px] h-6 bg-white/15" />
+
+            {/* Personal Best */}
+            <div className="flex flex-col items-center">
+              <span className="text-[9px] font-mono uppercase text-zinc-400 tracking-wider flex items-center gap-0.5">
+                <Trophy className="w-2.5 h-2.5 text-alfa-gold" /> Record
+              </span>
+              <span className="text-sm sm:text-base font-bold font-mono text-zinc-200">
+                {bestScore.toLocaleString('it-IT')}
+              </span>
+            </div>
           </div>
 
-          <div className="w-[1px] h-6 bg-white/15" />
-
-          {/* Alfa Coins */}
-          <div className="flex flex-col items-center">
-            <span className="text-[9px] font-mono uppercase text-zinc-400 tracking-wider">Monete</span>
-            <span className="text-sm sm:text-base font-bold font-mono text-amber-300 flex items-center gap-1">
-              <span>🪙</span>
-              {coins}
-            </span>
-          </div>
-
-          <div className="w-[1px] h-6 bg-white/15" />
-
-          {/* Personal Best */}
-          <div className="flex flex-col items-center">
-            <span className="text-[9px] font-mono uppercase text-zinc-400 tracking-wider flex items-center gap-0.5">
-              <Trophy className="w-2.5 h-2.5 text-alfa-gold" /> Record
-            </span>
-            <span className="text-sm sm:text-base font-bold font-mono text-zinc-200">
-              {bestScore.toLocaleString('it-IT')}
-            </span>
-          </div>
+          {/* Takedown Surge Pulsing Chip (Next to score, never screen-centered) */}
+          {takedownSurge && (takedownSurge.timer > 0 || takedownSurge.points > 0) && (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl border border-amber-400 bg-gradient-to-r from-red-600 via-amber-500 to-red-600 text-white font-mono text-[10px] sm:text-xs font-black uppercase tracking-wider shadow-[0_0_18px_rgba(239,68,68,0.85)] animate-pulse whitespace-nowrap">
+              💥 TAKEDOWN x5 +{takedownSurge.points ? takedownSurge.points.toLocaleString('it-IT') : '2.500'} PT
+            </div>
+          )}
         </div>
 
         {/* Driver Switch & Sound Toggle */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => driveStore.openDriverSelect()}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/20 bg-black/60 backdrop-blur-md text-xs font-mono text-white hover:border-amber-400 hover:text-amber-300 transition-all shadow-xl active:scale-95"
@@ -336,9 +376,9 @@ export function Speedometer({ onExitDrive }) {
       <div className="flex flex-col items-center w-full max-w-4xl mx-auto pointer-events-auto gap-2">
         {/* Interactive Redline Shift Prompt & Ultimate Button (Thumb Zone) */}
         {gameState === 'playing' && (
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 w-full max-w-xl px-2">
+          <div className="flex flex-row items-center justify-center gap-2 w-full max-w-xl px-2">
             {/* 1. Transaxle Gearbox Console & Autodelta Tachometer */}
-            <div className="w-full sm:flex-[1.4]">
+            <div className="flex-1 min-w-0">
               <AlfaGearboxConsole
                 gear={gear}
                 rpm={rpm}
@@ -349,32 +389,16 @@ export function Speedometer({ onExitDrive }) {
               />
             </div>
 
-            {/* 2. Barra/Bottone "ULTIMATE PILOTA" */}
-            {ultimateCharge >= 100 ? (
-              <button
-                onClick={() => driveStore.activateUltimate()}
-                className="w-full flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-500 via-fuchsia-600 to-amber-500 text-white font-mono text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(245,158,11,0.8)] animate-pulse active:scale-95 cursor-pointer"
-                title="Tocca o Swipe Giù per Ultimate"
-              >
-                🔥 ULTIMATE PRONTA! • TOCCA O SWIPE GIÙ
-              </button>
-            ) : (
-              <div className="w-full flex-1 flex flex-col justify-center px-3 py-1 rounded-xl border border-white/15 bg-black/60 backdrop-blur-md">
-                <div className="flex items-center justify-between text-[10px] font-mono font-bold text-zinc-300 w-full">
-                  <span className="flex items-center gap-1 truncate text-zinc-300">
-                    <span className="text-amber-400">{getDriverById(selectedDriver).badge || '★'}</span>
-                    <span>{getDriverById(selectedDriver).name}</span>
-                  </span>
-                  <span className="text-amber-400">{ultimateCharge}%</span>
-                </div>
-                <div className="w-full h-1.5 bg-black/60 rounded-full overflow-hidden mt-1 border border-white/10">
-                  <div
-                    className="h-full bg-gradient-to-r from-amber-500 to-fuchsia-500 transition-all duration-200"
-                    style={{ width: `${Math.min(100, Math.max(0, ultimateCharge))}%` }}
-                  />
-                </div>
-              </div>
-            )}
+            {/* 2. 1970s Red Mushroom Ultimate Button */}
+            <div className="w-[68px] h-[68px] shrink-0 flex items-center justify-center">
+              <UltimateButton
+                charge={ultimateCharge}
+                active={ultimateTimer > 0}
+                activeTime={ultimateTimer}
+                driver={selectedDriver}
+                onActivate={() => driveStore.activateUltimate()}
+              />
+            </div>
           </div>
         )}
 

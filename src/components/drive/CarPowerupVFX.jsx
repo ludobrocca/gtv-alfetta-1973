@@ -74,8 +74,8 @@ export function CarPowerupVFX() {
         elvisFlamesRef.current.forEach((f) => f && f.scale.set(1, flicker, 1));
         elvisNotesRef.current.forEach((n, i) => {
           if (!n) return;
-          const cycle = (t * 2.2 + i * 0.43) % 2.6;
-          n.position.set(Math.sin(t * 3.2 + i * 1.5) * 0.28 + (i % 2 === 0 ? -0.16 : 0.16), 0.32 + Math.sin(t * 4 + i) * 0.16 + cycle * 0.12, -1.0 - cycle);
+          const cycle = (t * 2.2 + i * 0.43) % 0.85;
+          n.position.set(Math.sin(t * 3.2 + i * 1.5) * 0.28 + (i % 2 === 0 ? -0.16 : 0.16), 0.32 + Math.sin(t * 4 + i) * 0.12 + cycle * 0.08, -0.95 - cycle);
           n.rotation.set(0, t * 2.5 + i, Math.sin(t * 4 + i) * 0.35);
         });
       }
@@ -88,7 +88,7 @@ export function CarPowerupVFX() {
       if (isTex && texStarRef.current) texStarRef.current.rotation.z += delta * 3.8;
     }
 
-    // 3. Bond
+    // 3. Bond (mobile-safe radar rings: radius <= 1.0, opacity <= 0.35, horizontal on road)
     const isBond = shouldShow(active.bond || 0);
     if (bondGroupRef.current) {
       bondGroupRef.current.visible = isBond;
@@ -96,9 +96,9 @@ export function CarPowerupVFX() {
         bondRingsRef.current.forEach((ring, i) => {
           if (!ring) return;
           const prog = (t * 0.85 + i * 0.33) % 1.0;
-          const r = 0.3 + prog * 1.8;
+          const r = 0.2 + prog * 0.8;
           ring.scale.set(r, r, 1);
-          ring.material.opacity = (1 - prog) * 0.75;
+          ring.material.opacity = (1 - prog) * 0.35;
         });
       }
     }
@@ -110,18 +110,22 @@ export function CarPowerupVFX() {
       if (isSpider && spidermanWebRef.current) spidermanWebRef.current.rotation.z += delta * 1.6;
     }
 
-    // 5. Diabolik
+    // 5. Diabolik (mobile-safe: small, low, faint behind wheels, y<=0.25, scale<=0.25, opacity<=0.25)
     const isDiabolik = shouldShow(active.diabolik || 0);
     if (diabolikGroupRef.current) {
       diabolikGroupRef.current.visible = isDiabolik;
       if (isDiabolik) {
         diabolikSmokeRef.current.forEach((puff, i) => {
           if (!puff) return;
-          const prog = (t * 1.8 + i * 0.28) % 1.0;
-          puff.position.set(Math.sin(t * 2.5 + i * 1.4) * 0.22, 0.18 + prog * 0.22, -1.1 - prog * 1.5);
-          const s = 0.08 + prog * 0.26;
+          const prog = (t * 2.0 + i * 0.25) % 1.0;
+          const wheelX = i % 2 === 0 ? -0.34 : 0.34;
+          const posX = wheelX + Math.sin(t * 3.0 + i) * 0.04;
+          const posY = 0.06 + prog * 0.12;
+          const posZ = -0.92 - prog * 0.38;
+          puff.position.set(posX, posY, posZ);
+          const s = 0.05 + prog * 0.16;
           puff.scale.set(s, s, s);
-          puff.material.opacity = (1 - prog) * 0.45;
+          puff.material.opacity = (1 - prog) * 0.22;
         });
       }
     }
@@ -267,7 +271,7 @@ export function CarPowerupVFX() {
         </mesh>
       </group>
 
-      {/* 3. BOND */}
+      {/* 3. BOND (Mobile-safe radar rings: radius <= 1.0, opacity <= 0.35, horizontal on road) */}
       <group ref={bondGroupRef} visible={false}>
         {[-0.2, 0.2].map((x, idx) => (
           <mesh key={idx} position={[x, 0.14, -1.02]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -277,31 +281,27 @@ export function CarPowerupVFX() {
         ))}
         {[0, 1, 2].map((idx) => (
           <mesh key={idx} ref={(el) => (bondRingsRef.current[idx] = el)} position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[0.08, 0.12, 32]} />
-            <meshBasicMaterial color="#fbbf24" transparent opacity={0.6} side={THREE.DoubleSide} />
+            <ringGeometry args={[0.9, 1.0, 32]} />
+            <meshBasicMaterial color="#fbbf24" transparent opacity={0.35} side={THREE.DoubleSide} />
           </mesh>
         ))}
-        <mesh position={[0, 0.42, 0]}>
-          <cylinderGeometry args={[0.72, 0.72, 0.7, 8, 1, true]} />
-          <meshBasicMaterial color="#f8fafc" wireframe transparent opacity={0.35} />
-        </mesh>
       </group>
 
-      {/* 4. SPIDERMAN */}
+      {/* 4. SPIDERMAN (Mobile-safe web rings: radius <= 1.0, opacity <= 0.35, horizontal on road) */}
       <group ref={spidermanGroupRef} visible={false}>
         <group ref={spidermanWebRef} position={[0, 0.025, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <mesh>
-            <ringGeometry args={[0.65, 0.7, 32]} />
-            <meshBasicMaterial color="#ef4444" transparent opacity={0.7} side={THREE.DoubleSide} />
+            <ringGeometry args={[0.42, 0.46, 32]} />
+            <meshBasicMaterial color="#ef4444" transparent opacity={0.32} side={THREE.DoubleSide} />
           </mesh>
           <mesh>
-            <ringGeometry args={[1.15, 1.2, 32]} />
-            <meshBasicMaterial color="#38bdf8" transparent opacity={0.7} side={THREE.DoubleSide} />
+            <ringGeometry args={[0.92, 0.98, 32]} />
+            <meshBasicMaterial color="#38bdf8" transparent opacity={0.28} side={THREE.DoubleSide} />
           </mesh>
           {[0, 1, 2, 3, 4, 5, 6, 7].map((s) => (
             <mesh key={s} rotation={[0, 0, (s * Math.PI) / 4]}>
-              <planeGeometry args={[0.02, 2.4]} />
-              <meshBasicMaterial color={s % 2 === 0 ? '#ef4444' : '#3b82f6'} transparent opacity={0.6} side={THREE.DoubleSide} />
+              <planeGeometry args={[0.015, 1.95]} />
+              <meshBasicMaterial color={s % 2 === 0 ? '#ef4444' : '#3b82f6'} transparent opacity={0.25} side={THREE.DoubleSide} />
             </mesh>
           ))}
         </group>
@@ -313,12 +313,12 @@ export function CarPowerupVFX() {
         ))}
       </group>
 
-      {/* 5. DIABOLIK */}
+      {/* 5. DIABOLIK (Mobile-safe: small faint smoke behind wheels) */}
       <group ref={diabolikGroupRef} visible={false}>
         {[...Array(6)].map((_, i) => (
-          <mesh key={i} ref={(el) => (diabolikSmokeRef.current[i] = el)} position={[0, 0.2, -1.2]}>
+          <mesh key={i} ref={(el) => (diabolikSmokeRef.current[i] = el)} position={[0, 0.1, -1.0]}>
             <sphereGeometry args={[1, 8, 8]} />
-            <meshBasicMaterial color="#0e7490" transparent opacity={0.4} />
+            <meshBasicMaterial color="#0e7490" transparent opacity={0.22} />
           </mesh>
         ))}
         {[-0.16, 0.16].map((x, idx) => (

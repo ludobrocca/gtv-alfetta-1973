@@ -90,6 +90,11 @@
   .shift-feedback-pop {
     animation: shift-feedback-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
+
+  .animate-ult-ready-glow,
+  .ult-ready-glow {
+    animation: ult-ready-glow 0.85s ease-in-out infinite;
+  }
 }
 
 /* Alfa Romeo Alfetta GTV 1976 Transaxle Console Keyframes */
@@ -130,5 +135,16 @@
   100% {
     opacity: 1;
     transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes ult-ready-glow {
+  0%, 100% {
+    box-shadow: 0 0 14px rgba(239, 68, 68, 0.75), 0 0 28px rgba(220, 38, 38, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.65);
+    filter: brightness(1.05);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(255, 77, 77, 1), 0 0 45px rgba(239, 68, 68, 0.85), 0 0 60px rgba(185, 28, 28, 0.5), inset 0 2px 8px rgba(255, 255, 255, 0.95);
+    filter: brightness(1.22);
   }
 }

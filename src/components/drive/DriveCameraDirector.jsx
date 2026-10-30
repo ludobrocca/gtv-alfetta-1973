@@ -55,29 +55,58 @@ export function DriveCameraDirector({ controlsRef }) {
       lookZ = 0.6;
     }
 
-    // Subtle high-speed road vibration
-    const shakeIntensity = (speed / 200) * 0.008;
+    // Takedown Cam: dramatic slow-mo zoom on knocked-out rival
+    let isTakedownCam = false;
+    const takedownTimer = driveStore.takedownCamTimer || 0;
+    const takedownTarget = driveStore.takedownCamTarget;
+    if (!isGameOver && takedownTimer > 0 && takedownTarget && takedownTarget.id && driveStore.obstacles) {
+      const targetObs = driveStore.obstacles.find((o) => o.id === takedownTarget.id);
+      if (targetObs) {
+        isTakedownCam = true;
+        const side = takedownTarget.side || 1;
+        const obsX = targetObs.knockX !== undefined ? targetObs.knockX : (targetObs.lane || 0) * 1.8;
+        const obsZ = targetObs.z ?? 0;
+
+        // Position camera side*2.2, +1.1, -1.6 relative, lookAt it
+        targetX = obsX + side * 2.2;
+        targetY = carY + 1.1;
+        targetZ = obsZ - 1.6;
+
+        lookX = obsX;
+        lookY = carY + 0.35;
+        lookZ = obsZ;
+      }
+    }
+
+    // Subtle high-speed road vibration (disabled during takedown cam for cinematics)
+    const shakeIntensity = isTakedownCam ? 0 : (speed / 200) * 0.008;
     const shakeX = (Math.random() - 0.5) * shakeIntensity;
     const shakeY = (Math.random() - 0.5) * shakeIntensity;
 
     const targetPos = new THREE.Vector3(targetX + shakeX, targetY + shakeY, targetZ);
     const targetLookAt = new THREE.Vector3(lookX, lookY, lookZ);
 
-    // Dynamic FOV expansion on Nitro, Hill Crest Jump, or high speed
-    const targetFov = isNitro
+    // Dynamic FOV expansion on Nitro, Hill Crest Jump, or cinematic zoom on Takedown (FOV 38)
+    const targetFov = isTakedownCam
+      ? 38
+      : isNitro
       ? 58
       : airY > 0.05
       ? 54
       : speed > 100
       ? 50
       : 46;
-    targetFovRef.current = THREE.MathUtils.lerp(targetFovRef.current, targetFov, 0.09);
+    targetFovRef.current = THREE.MathUtils.lerp(
+      targetFovRef.current,
+      targetFov,
+      isTakedownCam ? 0.22 : 0.09
+    );
     if (Math.abs(camera.fov - targetFovRef.current) > 0.1) {
       camera.fov = targetFovRef.current;
       camera.updateProjectionMatrix();
     }
 
-    const lerpRate = isGameOver ? 3.5 : 10.5;
+    const lerpRate = isGameOver ? 3.5 : isTakedownCam ? 18.0 : 10.5;
     currentPosRef.current.lerp(targetPos, Math.min(1, dt * lerpRate));
     currentTargetRef.current.lerp(targetLookAt, Math.min(1, dt * lerpRate));
 

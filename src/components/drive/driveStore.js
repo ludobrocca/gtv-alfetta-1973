@@ -28,6 +28,26 @@ export const PERFECT_SHIFT_BONUS_KMH = 10; // instant speed kick on a perfect do
 export const GOOD_SHIFT_BONUS_KMH = 5;     // instant speed kick on a good (early) shift
 export const SHIFT_BOOST_ACCEL_MULT = 1.5; // in-gear accel multiplier during boost/drafting
 
+// Section A: Pilot Ultimates & Takedown Cam Constants
+export const ULT_GAIN = {
+  takedown: 12,
+  perfectShift: 8,
+  goodShift: 3,
+  ramp: 10,
+  slingshot: 6,
+  nearMiss: 6,
+  closePass: 5,
+  coin: 1,
+  smash: 4,
+  mgOil: 5,
+};
+export const ULTIMATE_DURATION = 7.0;
+
+export const TAKEDOWN_STREAK_TARGET = 5;
+export const TAKEDOWN_CAM_DURATION = 1.6;
+export const TAKEDOWN_CAM_TIMESCALE = 0.3;
+export const TAKEDOWN_SURGE_POINTS = 2500;
+
 // In Three.js with camera at -Z looking toward +Z, +X is Screen-LEFT and -X is Screen-RIGHT.
 // Mapping lane (-1 = Left, 0 = Center, +1 = Right) to -lane * LANE_WIDTH makes Left = Left and Right = Right!
 export function laneToX(lane) {
@@ -95,6 +115,7 @@ class DriveStore {
     this.furyMultiplier = 1;    // 1..10 dynamic score multiplier
     this.furyTimer = 0;         // countdown before multiplier decays
     this.ultimateCharge = 0;    // 0..100 chargeable pilot ultimate bar
+    this.ultimateTimer = 0;     // countdown timer for active pilot ultimate (s)
     this.isDrafting = false;    // true when slipstreaming behind a Fiat 500
     this.draftTimer = 0;        // time spent in slipstream
     this.shiftWindowActive = false; // true when RPM is in redline shift window
@@ -110,6 +131,12 @@ class DriveStore {
     this.perfectShiftsCount = 0;
     this.rampJumpsCount = 0;
     this.slingshotsCount = 0;
+    this.takedownStreak = 0;    // consecutive takedowns without damage
+    this.takedownCamTimer = 0;  // real-time timer for takedown camera slow-mo (s)
+    this.takedownCamTarget = null; // { id, side } or null
+    this.timeScale = 1;         // simulation timescale (0.3 during takedown cam, 1 normal)
+    this.takedownSurge = null;  // { points, timer } or null
+    this.takedownCamsCount = 0; // takedown cams triggered count
 
     // 3D Diegetic VFX Timers
     this.shiftFlashTimer = 0;
@@ -285,6 +312,7 @@ class DriveStore {
     this.furyMultiplier = 1;
     this.furyTimer = 0;
     this.ultimateCharge = 0;
+    this.ultimateTimer = 0;
     this.isDrafting = false;
     this.draftTimer = 0;
     this.shiftWindowActive = false;
@@ -295,6 +323,12 @@ class DriveStore {
     this.perfectShiftsCount = 0;
     this.rampJumpsCount = 0;
     this.slingshotsCount = 0;
+    this.takedownStreak = 0;
+    this.takedownCamTimer = 0;
+    this.takedownCamTarget = null;
+    this.timeScale = 1;
+    this.takedownSurge = null;
+    this.takedownCamsCount = 0;
 
     // 3D Diegetic VFX Timers
     this.shiftFlashTimer = 0;
@@ -335,7 +369,12 @@ class DriveStore {
     this.furyTimer = 7.5;
   }
 
+  isUltimateActive() {
+    return this.ultimateTimer > 0;
+  }
+
   addUltimateCharge(percent) {
+    if (this.isUltimateActive()) return;
     this.ultimateCharge = Math.min(100, Math.max(0, this.ultimateCharge + percent));
   }
 
@@ -355,11 +394,25 @@ class DriveStore {
       this.takedownSparkSide = direction !== 0 ? Math.sign(direction) : 1;
 
       this.takedownsCount++;
+      this.takedownStreak++;
+
       const pts = 300 * this.furyMultiplier;
       this.score += pts;
-      this.addUltimateCharge(35);
+      this.addUltimateCharge(ULT_GAIN.takedown);
       this.addFury(1);
       this.boostTimer = Math.max(this.boostTimer, 1.1);
+
+      // Takedown Streak & Takedown Cam Trigger (AC-004)
+      if (this.takedownStreak > 0 && this.takedownStreak % TAKEDOWN_STREAK_TARGET === 0) {
+        this.takedownCamTimer = TAKEDOWN_CAM_DURATION;
+        this.takedownCamTarget = { id, side: direction };
+        this.timeScale = TAKEDOWN_CAM_TIMESCALE;
+        const surgePoints = TAKEDOWN_SURGE_POINTS * this.furyMultiplier;
+        this.score += surgePoints;
+        this.takedownSurge = { points: surgePoints, timer: 2.2 };
+        this.takedownCamsCount++;
+        this.addFury(2);
+      }
 
       if (this.armorState === 'damaged') {
         this.repairProgress++;
@@ -376,7 +429,7 @@ class DriveStore {
         } else {
           this.triggerEventBanner(
             `💥 SPORTELLATA TAKEDOWN! (${this.repairProgress}/3 🔧)`,
-            `+${pts} PT • +35% ULTIMATE`,
+            `+${pts} PT • +${ULT_GAIN.takedown}% ULTIMATE`,
             'amber'
           );
           driveAudio.playTakedownSlam();
@@ -384,7 +437,7 @@ class DriveStore {
       } else {
         this.triggerEventBanner(
           `💥 SPORTELLATA TAKEDOWN x${this.furyMultiplier}!`,
-          `+${pts} PT • +35% ULTIMATE`,
+          `+${pts} PT • +${ULT_GAIN.takedown}% ULTIMATE`,
           'amber'
         );
         driveAudio.playTakedownSlam();
@@ -403,6 +456,7 @@ class DriveStore {
     }
     if (this.armorState === 'intact') {
       this.armorState = 'damaged';
+      this.takedownStreak = 0;
       this.gear = Math.max(1, (this.gear || 1) - 2);
       this.overdriveTimer = 0;
       this.repairProgress = 0;
@@ -433,7 +487,7 @@ class DriveStore {
       this.perfectShiftsCount++;
       const pts = 350 * this.furyMultiplier;
       this.score += pts;
-      this.addUltimateCharge(25);
+      this.addUltimateCharge(ULT_GAIN.perfectShift);
       this.addFury(1);
       this.boostTimer = Math.max(this.boostTimer, 1.8);
       this.shiftFlashTimer = 0.55;
@@ -483,7 +537,7 @@ class DriveStore {
       this.speedKmh = Math.min(215, this.speedKmh + GOOD_SHIFT_BONUS_KMH);
       const pts = 150 * this.furyMultiplier;
       this.score += pts;
-      this.addUltimateCharge(10);
+      this.addUltimateCharge(ULT_GAIN.goodShift);
       this.shiftCooldown = 0.6;
       this.shiftTimer = 0.24;
       this.shiftFeedback = {
@@ -510,7 +564,7 @@ class DriveStore {
     this.rampJumpsCount++;
     const pts = 500 * this.furyMultiplier;
     this.score += pts;
-    this.addUltimateCharge(30);
+    this.addUltimateCharge(ULT_GAIN.ramp);
     this.addFury(1);
     const wasDamaged = this.armorState === 'damaged';
     this.armorState = 'intact';
@@ -531,13 +585,14 @@ class DriveStore {
   activateUltimate() {
     if (this.gameState !== 'playing' || this.ultimateCharge < 100) return false;
     this.ultimateCharge = 0;
+    this.ultimateTimer = ULTIMATE_DURATION;
     this.addFury(1);
     const drv = this.selectedDriver || 'elvis';
 
     if (drv === 'mg') {
-      this.activePowerups.mg = 7.0;
-      this.activePowerups.tex = 7.0;
-      this.activePowerups.spiderman = 7.0;
+      this.activePowerups.mg = ULTIMATE_DURATION;
+      this.activePowerups.tex = ULTIMATE_DURATION;
+      this.activePowerups.spiderman = ULTIMATE_DURATION;
       this.triggerEventBanner(
         '👑 MG ULTIMATE • REGINA DELL’OLIO 3X!',
         'Scudo Ranger + Magnete Monete + Sovraprezzo Olio',
@@ -545,31 +600,31 @@ class DriveStore {
       );
       driveAudio.playTexShield();
     } else if (drv === 'tex') {
-      this.activePowerups.tex = 7.0;
+      this.activePowerups.tex = ULTIMATE_DURATION;
       this.triggerEventBanner('🤠 TEX WILLER • SCUDO RANGER!', 'Travolgi ogni ostacolo +150 PT', 'amber');
       driveAudio.playTexShield();
     } else if (drv === 'elvis') {
-      this.activePowerups.elvis = 7.0;
+      this.activePowerups.elvis = ULTIMATE_DURATION;
       this.triggerEventBanner("🎸 ELVIS • ROCK'N'ROLL NITRO 2X!", '175 km/h & Punti Doppi', 'fuchsia');
-      driveAudio.playElvisRockabilly(7.0);
+      driveAudio.playElvisRockabilly(ULTIMATE_DURATION);
     } else if (drv === 'bond') {
-      this.activePowerups.bond = 7.0;
+      this.activePowerups.bond = ULTIMATE_DURATION;
       this.triggerEventBanner('🍸 007 Q-BRANCH • LICENZA DI SORPASSO!', 'Scudo + Calamita Monete + Turbo', 'amber');
       driveAudio.playBondSpyChord();
     } else if (drv === 'spiderman') {
-      this.activePowerups.spiderman = 7.0;
+      this.activePowerups.spiderman = ULTIMATE_DURATION;
       this.triggerEventBanner('🕸️ UOMO RAGNO • RAGNATELA MAGNETICA!', 'Cattura tutte le monete in pista', 'rose');
       driveAudio.playSpidermanThwip();
     } else if (drv === 'diabolik') {
-      this.activePowerups.diabolik = 7.0;
+      this.activePowerups.diabolik = ULTIMATE_DURATION;
       this.triggerEventBanner('💎 DIABOLIK • FUGA INVISIBILE 3X!', 'Attraversa gli ostacoli + Monete 3X', 'cyan');
       driveAudio.playDiabolikStealth();
     } else if (drv === 'callaghan') {
-      this.activePowerups.callaghan = 7.0;
+      this.activePowerups.callaghan = ULTIMATE_DURATION;
       this.triggerEventBanner('🔫 CALLAGHAN • .44 MAGNUM IN AZIONE!', 'Polverizza i blocchi davanti (+200 PT)', 'amber');
       driveAudio.playMagnumShot();
     } else {
-      this.activePowerups.tex = 7.0;
+      this.activePowerups.tex = ULTIMATE_DURATION;
       this.triggerEventBanner('⚡ SUPER PILOTA ULTIMATE!', 'Potenza massima sbloccata', 'amber');
       driveAudio.playTexShield();
     }
@@ -604,13 +659,13 @@ class DriveStore {
         this.isDrafting = false;
         if (closeObstacle) closeObstacle.nearMissed = true;
         this.addFury(1);
-        this.addUltimateCharge(20);
+        this.addUltimateCharge(ULT_GAIN.slingshot);
         this.boostTimer = Math.max(this.boostTimer, 1.4);
         const pts = 250 * this.furyMultiplier;
         this.score += pts;
         this.triggerEventBanner(
           `💨 SORPASSO FIONDA IN SCIA x${this.furyMultiplier}!`,
-          `+${pts} PT • +20% ULTIMATE`,
+          `+${pts} PT • +${ULT_GAIN.slingshot}% ULTIMATE`,
           'cyan'
         );
         driveAudio.playNearMissWhoosh();
@@ -619,7 +674,7 @@ class DriveStore {
         closeObstacle.nearMissed = true;
         this.slingshotsCount++;
         this.addFury(1);
-        this.addUltimateCharge(20);
+        this.addUltimateCharge(ULT_GAIN.nearMiss);
         this.nearMissCombo = Math.min(5, this.nearMissCombo + 1);
         this.nearMissTimer = 4.0;
         this.boostTimer = Math.max(this.boostTimer, 1.4);
@@ -667,6 +722,12 @@ class DriveStore {
     if (this.gameState === 'gameover') return;
     this.gameState = 'gameover';
     this.speedKmh = 0;
+    this.ultimateTimer = 0;
+    this.takedownStreak = 0;
+    this.takedownCamTimer = 0;
+    this.takedownCamTarget = null;
+    this.timeScale = 1;
+    this.takedownSurge = null;
     Object.keys(this.activePowerups).forEach((k) => {
       this.activePowerups[k] = 0;
     });
@@ -708,7 +769,7 @@ class DriveStore {
           : 1;
       const pts = 50 * multiplier * this.furyMultiplier;
       this.score += pts;
-      this.addUltimateCharge(3);
+      this.addUltimateCharge(ULT_GAIN.coin);
       driveAudio.playCoinPickup();
       this.notify();
     }
@@ -762,7 +823,7 @@ class DriveStore {
       obs.active = false;
       const pts = (reason === 'magnum' ? 200 : 150) * this.furyMultiplier;
       this.score += pts;
-      this.addUltimateCharge(15);
+      this.addUltimateCharge(ULT_GAIN.smash);
       this.addFury(1);
       if (reason === 'magnum') {
         this.magnumShotTimer = 0.38;
@@ -792,7 +853,7 @@ class DriveStore {
       if (this.selectedDriver === 'mg') {
         const pts = 150 * this.furyMultiplier;
         this.score += pts;
-        this.addUltimateCharge(15);
+        this.addUltimateCharge(ULT_GAIN.mgOil);
         this.triggerEventBanner('🛢️ CONTROSTERZO MG!', `+${pts} PT • REGINA DEL DRIFT SULL’OLIO`, 'teal');
       }
       driveAudio.playSkid();
@@ -828,11 +889,11 @@ class DriveStore {
 
   // 60fps RequestAnimationFrame Loop
   update(delta) {
-    const dt = Math.min(delta, 0.1);
+    const realDt = Math.min(delta, 0.1);
 
     if (this.mode !== 'drive') {
       if (this.speedKmh > 0) {
-        this.speedKmh = Math.max(0, this.speedKmh - 45.0 * dt);
+        this.speedKmh = Math.max(0, this.speedKmh - 45.0 * realDt);
       }
       this.rpm = 0;
       return;
@@ -845,8 +906,41 @@ class DriveStore {
     }
 
     if (this.gameState === 'gameover') {
-      this.speedKmh = Math.max(0, this.speedKmh - 120 * dt);
+      this.speedKmh = Math.max(0, this.speedKmh - 120 * realDt);
       return;
+    }
+
+    // Takedown Cam & TimeScale (real-time timer decrement)
+    if (this.takedownCamTimer > 0) {
+      this.timeScale = TAKEDOWN_CAM_TIMESCALE;
+      this.takedownCamTimer = Math.max(0, this.takedownCamTimer - realDt);
+      if (this.takedownCamTimer < 0.0001) {
+        this.takedownCamTimer = 0;
+        this.takedownCamTarget = null;
+      }
+    } else {
+      this.timeScale = 1;
+    }
+
+    // Takedown Surge timer decrement (real time)
+    if (this.takedownSurge && this.takedownSurge.timer > 0) {
+      this.takedownSurge.timer = Math.max(0, this.takedownSurge.timer - realDt);
+      if (this.takedownSurge.timer < 0.0001) {
+        this.takedownSurge = null;
+      }
+    }
+
+    const dt = realDt * this.timeScale;
+    if (this.takedownCamTimer === 0) {
+      this.timeScale = 1;
+    }
+
+    // Pilot Ultimate timer decrement (simulation dt)
+    if (this.ultimateTimer > 0) {
+      this.ultimateTimer = Math.max(0, this.ultimateTimer - dt);
+      if (this.ultimateTimer < 0.0001) {
+        this.ultimateTimer = 0;
+      }
     }
 
     // Lane change window decay
@@ -1149,7 +1243,7 @@ class DriveStore {
         this.nearMissCombo = Math.min(5, this.nearMissCombo + 1);
         this.nearMissTimer = 3.5;
         this.addFury(1);
-        this.addUltimateCharge(15);
+        this.addUltimateCharge(ULT_GAIN.closePass);
         const pts = 150 * this.nearMissCombo * this.furyMultiplier;
         this.score += pts;
         this.triggerEventBanner(
@@ -1287,24 +1381,16 @@ class DriveStore {
         active: true,
       });
     } else if (roll < 0.90) {
-      // 4. Driver-Themed Power-up (70% chance for current driver's signature gadget!)
-      const pLane = lanes[Math.floor(Math.random() * lanes.length)];
-      const allPowerups = ['elvis', 'tex', 'bond', 'spiderman', 'diabolik', 'callaghan'];
-      const driverPref = allPowerups.includes(this.selectedDriver)
-        ? this.selectedDriver
-        : allPowerups[Math.floor(Math.random() * allPowerups.length)];
-      const pType =
-        Math.random() < 0.72
-          ? driverPref
-          : allPowerups[Math.floor(Math.random() * allPowerups.length)];
-
-      this.powerups.push({
-        id: `pow_${Date.now()}_${Math.random()}`,
-        type: pType,
-        lane: pLane,
-        z: spawnZ,
-        active: true,
-      });
+      // 4. Formerly Driver-Themed Power-up -> Replaced with coin pack (Section A1: no track powerups)
+      const cLane = lanes[Math.floor(Math.random() * lanes.length)];
+      for (let k = 0; k < 3; k++) {
+        this.coins.push({
+          id: `coin_pack_${Date.now()}_${k}_${Math.random()}`,
+          lane: cLane,
+          z: spawnZ + k * 3.0,
+          active: true,
+        });
+      }
     } else {
       // 5. Pure Coin Highway (2 lanes of gold coins)
       const chosenLanes = [lanes[0], lanes[2]];

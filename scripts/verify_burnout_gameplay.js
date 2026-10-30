@@ -107,7 +107,7 @@ globalThis.performance = {
 // -------------------------------------------------------------
 // Import driveStore and Gameplay Helpers
 // -------------------------------------------------------------
-const { driveStore, getDriverRank, DRIVER_RANKS } = await import(
+const { driveStore, getDriverRank, DRIVER_RANKS, ULT_GAIN } = await import(
   '../src/components/drive/driveStore.js'
 );
 driveStore.setMode('drive');
@@ -178,7 +178,7 @@ runTest('AC-001', 'Sportellata Takedown & Fisica Laterale (knockout velocity, ch
   assert.strictEqual(obs.vz, 9.0, 'Obstacle vz must match expected forward impulse');
   assert.strictEqual(obs.vRot, 10.0, 'Obstacle vRot must impart spin');
   assert.strictEqual(driveStore.takedownsCount, initialTakedowns + 1, 'takedownsCount must increment by 1');
-  assert.strictEqual(driveStore.ultimateCharge, initialUltimate + 35, 'ultimateCharge must increase by 35%');
+  assert.strictEqual(driveStore.ultimateCharge, initialUltimate + ULT_GAIN.takedown, `ultimateCharge must increase by ULT_GAIN.takedown (${ULT_GAIN.takedown}%)`);
   assert.ok(driveStore.score >= initialScore + 300, `Score must increase by at least 300 (got ${driveStore.score - initialScore})`);
   assert.ok(driveStore.boostTimer > 0, 'Sportellata takedown must award micro-turbo boostTimer');
 
@@ -267,7 +267,7 @@ runTest('AC-003', 'Scia Aerodinamica & Sorpasso Fionda (drafting detection, time
   assert.strictEqual(driveStore.targetLane, 1, 'Car must have moved to lane 1');
   assert.strictEqual(driveStore.slingshotsCount, initialSlingshots + 1, 'slingshotsCount must increment');
   assert.ok(driveStore.boostTimer > 0, 'Slingshot must grant boostTimer');
-  assert.ok(driveStore.ultimateCharge >= initialUltimate + 20, 'Slingshot must award at least +20% ultimate charge');
+  assert.ok(driveStore.ultimateCharge >= initialUltimate + ULT_GAIN.slingshot, `Slingshot must award at least +${ULT_GAIN.slingshot}% ultimate charge`);
   assert.strictEqual(driveStore.isDrafting, false, 'isDrafting must clear after slingshot lane change');
   assert.strictEqual(driveStore.draftTimer, 0, 'draftTimer must reset after slingshot');
 
@@ -297,7 +297,7 @@ runTest('AC-004', 'Cambiata Perfetta in Zona Rossa (shift window gating, boost, 
   const success = driveStore.triggerPerfectShift();
   assert.strictEqual(success, true, 'triggerPerfectShift must return true when window is active');
   assert.strictEqual(driveStore.perfectShiftsCount, initialShifts + 1, 'perfectShiftsCount must increment');
-  assert.ok(driveStore.ultimateCharge >= initialUltimate + 25, 'Perfect shift must grant at least +25% ultimate charge');
+  assert.ok(driveStore.ultimateCharge >= initialUltimate + ULT_GAIN.perfectShift, `Perfect shift must grant at least +${ULT_GAIN.perfectShift}% ultimate charge`);
   assert.ok(driveStore.boostTimer > 0, 'Perfect shift must activate boostTimer');
   assert.strictEqual(driveStore.shiftWindowActive, false, 'shiftWindowActive must close after shift');
   assert.ok(driveStore.shiftCooldown > 0, 'shiftCooldown must be initiated');
@@ -324,7 +324,7 @@ runTest('AC-005', 'Rampe di Lancio Stradali & Monete Aeree (vertical velocity, a
   assert.strictEqual(driveStore.rampJumpsCount, initialJumps + 1, 'rampJumpsCount must increment');
   assert.strictEqual(driveStore.armorState, 'intact', 'Launching off a ramp must instantly repair armor to intact');
   assert.strictEqual(driveStore.repairProgress, 0, 'repairProgress must reset to 0');
-  assert.ok(driveStore.ultimateCharge >= 30, 'Ramp launch must grant >= 30% ultimate charge');
+  assert.ok(driveStore.ultimateCharge >= ULT_GAIN.ramp, `Ramp launch must grant >= ${ULT_GAIN.ramp}% ultimate charge`);
 
   // Deterministic Spawner Pack test for Ramps and Aerial Coins
   const origRandom = Math.random;

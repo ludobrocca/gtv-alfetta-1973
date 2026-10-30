@@ -17,7 +17,7 @@ export const GEAR_BANDS = [
   { min: 112, max: 154 }, // 4ª
   { min: 138, max: 195 }, // 5ª
 ];
-export const GEAR_ACCEL = [0, 26, 20, 15, 11, 8]; // km/h/s in-gear acceleration
+export const GEAR_ACCEL = [0, 9, 10, 11, 11, 8]; // km/h/s in-gear acceleration
 export const RPM_IDLE = 1500;
 export const RPM_SHIFT_GOOD = 4200;
 export const RPM_SHIFT_PERFECT = 5200;
@@ -32,7 +32,7 @@ export const SHIFT_BOOST_ACCEL_MULT = 1.5;
 
 ### Nuovo stato
 `overdriveTimer` (s), `limiterTimer` (s), `shiftFeedback` = `{ quality: 'perfect'|'good'|'overdrive'|'auto', label, timer }` oppure `null`.
-`resetGame()` deve impostare: `gear = 1`, `rpm = initialState === 'playing' ? RPM_IDLE : 950`, `overdriveTimer = 0`, `limiterTimer = 0`, `shiftFeedback = null`, e velocità iniziale `playing` = **40 km/h** (in 1ª).
+`resetGame()` deve impostare: `gear = 1`, `rpm = initialState === 'playing' ? RPM_IDLE : 950`, `overdriveTimer = 0`, `limiterTimer = 0`, `shiftFeedback = null`, e velocità iniziale `playing` = **20 km/h** (in 1ª).
 
 ### Loop `update(dt)` (sostituisce la sezione 7 attuale "auto-gear da speed")
 1. **Target speed**:

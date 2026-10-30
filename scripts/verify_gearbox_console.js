@@ -182,7 +182,7 @@ runTest('AC-001', 'Costanti & Reset (GEAR_BANDS 5 bande, GEAR_ACCEL, soglie RPM,
   assert.deepStrictEqual(GEAR_BANDS[5], { min: 138, max: 195 }, '5ª marcia must span 138..195 km/h');
 
   // Validate exported acceleration and RPM constants
-  assert.deepStrictEqual(GEAR_ACCEL, [0, 26, 20, 15, 11, 8], 'GEAR_ACCEL must match spec acceleration rates');
+  assert.deepStrictEqual(GEAR_ACCEL, [0, 9, 10, 11, 11, 8], 'GEAR_ACCEL must match spec acceleration rates');
   assert.strictEqual(RPM_IDLE, 1500, 'RPM_IDLE must be 1500');
   assert.strictEqual(RPM_SHIFT_GOOD, 4200, 'RPM_SHIFT_GOOD must be 4200');
   assert.strictEqual(RPM_SHIFT_PERFECT, 5200, 'RPM_SHIFT_PERFECT must be 5200');
@@ -197,7 +197,7 @@ runTest('AC-001', 'Costanti & Reset (GEAR_BANDS 5 bande, GEAR_ACCEL, soglie RPM,
   driveStore.resetGame('playing');
   assert.strictEqual(driveStore.gear, 1, 'resetGame("playing") must start in gear 1');
   assert.strictEqual(driveStore.rpm, 1500, 'resetGame("playing") must start at RPM_IDLE 1500');
-  assert.strictEqual(driveStore.speedKmh, 40, 'resetGame("playing") must start at speedKmh 40');
+  assert.strictEqual(driveStore.speedKmh, 20, 'resetGame("playing") must start at speedKmh 20');
   assert.strictEqual(driveStore.overdriveTimer, 0, 'resetGame("playing") must reset overdriveTimer to 0');
   assert.strictEqual(driveStore.limiterTimer, 0, 'resetGame("playing") must reset limiterTimer to 0');
   assert.strictEqual(driveStore.shiftFeedback, null, 'resetGame("playing") must reset shiftFeedback to null');

@@ -16,7 +16,7 @@ export const GEAR_BANDS = [
   { min: 112, max: 154 }, // 4ª
   { min: 138, max: 195 }, // 5ª
 ];
-export const GEAR_ACCEL = [0, 26, 20, 15, 11, 8]; // km/h/s in-gear acceleration
+export const GEAR_ACCEL = [0, 9, 10, 11, 11, 8]; // km/h/s in-gear acceleration (gentle low gears to build momentum)
 export const RPM_IDLE = 1500;
 export const RPM_SHIFT_GOOD = 4200;
 export const RPM_SHIFT_PERFECT = 5200;
@@ -293,7 +293,7 @@ class DriveStore {
     this.nearMissTimer = 0;
     this.eventBanner = null;
     this.currentZoneIndex = 0;
-    this.speedKmh = initialState === 'playing' ? 40 : 0;
+    this.speedKmh = initialState === 'playing' ? 20 : 0;
     this.gear = 1;
     this.rpm = initialState === 'playing' ? RPM_IDLE : 950;
     this.overdriveTimer = 0;

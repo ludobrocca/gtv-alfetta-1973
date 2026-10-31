@@ -54,6 +54,9 @@ export function Speedometer({ onExitDrive }) {
   const [introCamActive, setIntroCamActive] = useState(
     (driveStore.introCamTimer || 0) > 0
   );
+  const [trackEvent, setTrackEvent] = useState(
+    driveStore.trackEvent ? { ...driveStore.trackEvent } : null
+  );
 
   const touchStartXRef = useRef(0);
   const touchStartYRef = useRef(0);
@@ -107,6 +110,7 @@ export function Speedometer({ onExitDrive }) {
           driveStore.takedownSurge ? { ...driveStore.takedownSurge } : null
         );
         setIntroCamActive((driveStore.introCamTimer || 0) > 0);
+        setTrackEvent(driveStore.trackEvent ? { ...driveStore.trackEvent } : null);
       }
     };
     animId = requestAnimationFrame(tick);
@@ -348,12 +352,73 @@ export function Speedometer({ onExitDrive }) {
       </div>
 
       {/* Scenic Zone Badge, Dynamic Arcade Callouts & Active Power-Up Timers */}
-      <div className="flex flex-col items-center gap-1.5 w-full max-w-sm mx-auto pointer-events-none mt-2">
+      <div className="flex flex-col items-center gap-1.5 w-full max-w-sm sm:max-w-md mx-auto pointer-events-none mt-2">
         {gameState === 'playing' && currentZone && (
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/15 bg-black/60 backdrop-blur-md text-[10px] font-mono text-zinc-300 uppercase tracking-widest shadow-md">
             <span>{currentZone.icon}</span>
             <span>{currentZone.name}</span>
           </div>
+        )}
+
+        {/* Track Event Rally Funnel & Active Event HUD Pill */}
+        {gameState === 'playing' && trackEvent && (
+          <>
+            {trackEvent.phase === 'funnel' && (() => {
+              const laneLabel =
+                trackEvent.entryLane === -1
+                  ? 'SINISTRA ⬅'
+                  : trackEvent.entryLane === 1
+                  ? 'DESTRA ➔'
+                  : 'CENTRALE ⬆';
+              return (
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border-2 border-amber-400 bg-black/85 backdrop-blur-md text-[9px] sm:text-xs font-mono font-black text-amber-300 uppercase tracking-wider shadow-[0_0_16px_rgba(251,191,36,0.7)] animate-pulse whitespace-nowrap">
+                  <span>⚠️ BIVIO EVENTO: VAI SULLA CORSIA {laneLabel}</span>
+                </div>
+              );
+            })()}
+
+            {(trackEvent.phase === 'active' || trackEvent.phase === 'exiting') && (() => {
+              let title = '🏁 EVENTO SPECIALE IN CORSO';
+              let badgeClasses =
+                'border-amber-400 bg-black/80 text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.5)]';
+              let barClasses = 'bg-amber-400';
+
+              if (trackEvent.type === 'fzero_tunnel') {
+                title = '🚇 TUNNEL MAGNETICO F-Zero • 235 KM/H';
+                badgeClasses =
+                  'border-cyan-400 bg-gradient-to-r from-cyan-950/90 via-fuchsia-950/80 to-cyan-950/90 text-cyan-200 shadow-[0_0_18px_rgba(6,182,212,0.65)]';
+                barClasses = 'bg-gradient-to-r from-cyan-400 to-fuchsia-500';
+              } else if (trackEvent.type === 'parabolic_drift') {
+                title = "⛰️ CURVA PARABOLICA AUTODELTA • TIENI LA CORDA D'ORO";
+                badgeClasses =
+                  'border-amber-400 bg-gradient-to-r from-amber-950/90 via-red-950/80 to-amber-950/90 text-amber-200 shadow-[0_0_18px_rgba(245,158,11,0.65)]';
+                barClasses = 'bg-gradient-to-r from-amber-400 to-red-500';
+              } else if (trackEvent.type === 'viaduct_ramps') {
+                title = '🌉 VIADOTTO AEREO • SALTI CONCATENATI';
+                badgeClasses =
+                  'border-emerald-400 bg-gradient-to-r from-emerald-950/90 via-cyan-950/80 to-emerald-950/90 text-emerald-200 shadow-[0_0_18px_rgba(16,185,129,0.65)]';
+                barClasses = 'bg-gradient-to-r from-emerald-400 to-cyan-400';
+              }
+
+              const progressPct = Math.min(100, Math.max(0, (trackEvent.timer / 7.5) * 100));
+
+              return (
+                <div
+                  className={`w-full max-w-sm sm:max-w-md flex flex-col items-center px-3 py-1 rounded-2xl border backdrop-blur-md ${badgeClasses}`}
+                >
+                  <span className="text-[9px] sm:text-xs font-mono font-bold uppercase tracking-wider whitespace-nowrap">
+                    {title}
+                  </span>
+                  <div className="w-full h-1 bg-black/60 rounded-full overflow-hidden mt-1 border border-white/10">
+                    <div
+                      className={`h-full transition-all duration-100 ${barClasses}`}
+                      style={{ width: `${progressPct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+          </>
         )}
 
         {/* Fury Multiplier & Armor Status Bar */}

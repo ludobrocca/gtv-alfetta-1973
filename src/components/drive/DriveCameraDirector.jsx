@@ -144,6 +144,29 @@ export function DriveCameraDirector({ controlsRef }) {
       }
     }
 
+    // 4. Special Track Event Cinematics (F-Zero Tunnel, Parabolic Drift, Viaduct Ramps)
+    const trackEvent = driveStore.trackEvent;
+    const eventBlend = trackEvent ? (trackEvent.blend || 0) : 0;
+
+    if (!isGameOver && !isIntro && !isTakedownCam && trackEvent && eventBlend > 0.01) {
+      if (trackEvent.type === 'fzero_tunnel') {
+        targetY -= 0.68 * eventBlend;
+        targetZ = THREE.MathUtils.lerp(targetZ, -2.85, eventBlend);
+        targetFov = THREE.MathUtils.lerp(targetFov, 68, eventBlend);
+        roll = -driveStore.targetLane * 0.35 * eventBlend;
+      } else if (trackEvent.type === 'parabolic_drift') {
+        const cDir = trackEvent.curveDir || 1;
+        targetX += cDir * 1.55 * eventBlend;
+        lookX -= cDir * 1.2 * eventBlend;
+        targetFov = THREE.MathUtils.lerp(targetFov, 56, eventBlend);
+        roll = cDir * 0.14 * eventBlend;
+      } else if (trackEvent.type === 'viaduct_ramps') {
+        targetY += 0.85 * eventBlend + airY * 0.45;
+        targetZ = THREE.MathUtils.lerp(targetZ, -4.25, eventBlend);
+        targetFov = THREE.MathUtils.lerp(targetFov, 60, eventBlend);
+      }
+    }
+
     // Road vibration (disabled during cinematics)
     const shakeIntensity = isTakedownCam || isIntro ? 0 : (speed / 200) * 0.008;
     const shakeX = (Math.random() - 0.5) * shakeIntensity;

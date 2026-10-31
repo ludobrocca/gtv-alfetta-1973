@@ -9,6 +9,7 @@ import { driveStore, laneToX } from './driveStore';
 
 const ROAD_WIDTH = 5.2;
 const ROAD_LENGTH = 130;
+const ROAD_X_SEGMENTS = 16;
 const ROAD_Z_SEGMENTS = 72;
 const FENCE_SPACING = 3.5;
 const POLE_SPACING = 16.0;
@@ -163,14 +164,40 @@ export function DriveWorld({ lightingMode }) {
   const archCount = 12;
   const archDummy = useMemo(() => new THREE.Object3D(), []);
 
-  // Helper to deform a horizontal PlaneGeometry (rotated -PI/2 on X) to follow getRoadElevation(z)
-  const updateSurfaceElevation = (meshRef) => {
+  // Helper to deform a horizontal PlaneGeometry (rotated -PI/2 on X) to follow getRoadElevation(z) and 3D event deformation
+  const updateSurfaceElevation = (meshRef, isRoad = false) => {
     if (!meshRef.current || !meshRef.current.geometry) return;
     const pos = meshRef.current.geometry.attributes.position;
+    if (!meshRef.current.userData.baseX) {
+      const arr = new Float32Array(pos.count);
+      for (let i = 0; i < pos.count; i++) {
+        arr[i] = pos.getX(i);
+      }
+      meshRef.current.userData.baseX = arr;
+    }
+    const baseX = meshRef.current.userData.baseX;
+
     for (let i = 0; i < pos.count; i++) {
+      const origX = baseX[i];
       const localY = pos.getY(i);
       const worldZ = -localY;
-      pos.setZ(i, driveStore.getRoadElevation(worldZ));
+      const elev = driveStore.getRoadElevation(worldZ);
+      const curveX = driveStore.getRoadCurveX ? driveStore.getRoadCurveX(worldZ) : 0;
+      const evParams = driveStore.getRoadEventParams
+        ? driveStore.getRoadEventParams(worldZ)
+        : { widthScale: 1, bankAngle: 0, wallCurvature: 0, vergeDropY: 0 };
+
+      if (isRoad) {
+        const scaledX = origX * evParams.widthScale;
+        const normX = origX / (ROAD_WIDTH * 0.5);
+        const wallLift = evParams.wallCurvature * normX * normX;
+        const bankLift = scaledX * Math.sin(evParams.bankAngle);
+        pos.setX(i, scaledX + curveX);
+        pos.setZ(i, elev + wallLift + bankLift);
+      } else {
+        pos.setX(i, origX + curveX);
+        pos.setZ(i, elev + evParams.vergeDropY);
+      }
     }
     pos.needsUpdate = true;
     meshRef.current.geometry.computeVertexNormals();
@@ -190,9 +217,9 @@ export function DriveWorld({ lightingMode }) {
     }
 
     // Deform road and left/right alpine meadows to match rolling hills (salite/discese)
-    updateSurfaceElevation(roadMeshRef);
-    updateSurfaceElevation(vergeLeftRef);
-    updateSurfaceElevation(vergeRightRef);
+    updateSurfaceElevation(roadMeshRef, true);
+    updateSurfaceElevation(vergeLeftRef, false);
+    updateSurfaceElevation(vergeRightRef, false);
 
     // Scroll roadside wooden fences along hills
     if (fencesLeftRef.current && fencesRightRef.current) {
@@ -202,15 +229,16 @@ export function DriveWorld({ lightingMode }) {
         const zPos = localZ < -35 ? localZ + totalSpan : localZ;
         const elev = driveStore.getRoadElevation(zPos);
         const pitch = -Math.atan(driveStore.getRoadSlope(zPos));
+        const curveX = driveStore.getRoadCurveX ? driveStore.getRoadCurveX(zPos) : 0;
 
         // Left fence
-        fenceDummy.position.set(-ROAD_WIDTH * 0.5 - 0.55, elev + 0.42, zPos);
+        fenceDummy.position.set(-ROAD_WIDTH * 0.5 - 0.55 + curveX, elev + 0.42, zPos);
         fenceDummy.rotation.set(pitch, 0, 0);
         fenceDummy.updateMatrix();
         fencesLeftRef.current.setMatrixAt(i, fenceDummy.matrix);
 
         // Right fence
-        fenceDummy.position.set(ROAD_WIDTH * 0.5 + 0.55, elev + 0.42, zPos);
+        fenceDummy.position.set(ROAD_WIDTH * 0.5 + 0.55 + curveX, elev + 0.42, zPos);
         fenceDummy.rotation.set(pitch, 0, 0);
         fenceDummy.updateMatrix();
         fencesRightRef.current.setMatrixAt(i, fenceDummy.matrix);
@@ -226,7 +254,8 @@ export function DriveWorld({ lightingMode }) {
         const localZ = ((i * POLE_SPACING - offset) % totalSpan);
         const zPos = localZ < -35 ? localZ + totalSpan : localZ;
         const elev = driveStore.getRoadElevation(zPos);
-        poleDummy.position.set(ROAD_WIDTH * 0.5 + 2.8, elev + 2.2, zPos);
+        const curveX = driveStore.getRoadCurveX ? driveStore.getRoadCurveX(zPos) : 0;
+        poleDummy.position.set(ROAD_WIDTH * 0.5 + 2.8 + curveX, elev + 2.2, zPos);
         poleDummy.updateMatrix();
         polesRef.current.setMatrixAt(i, poleDummy.matrix);
       }
@@ -241,7 +270,8 @@ export function DriveWorld({ lightingMode }) {
         const localZ = ((i * TREE_SPACING - offset) % totalSpan);
         const zPos = localZ < -40 ? localZ + totalSpan : localZ;
         const elev = driveStore.getRoadElevation(zPos);
-        treeDummy.position.set(item.x, elev + 1.8 * item.scale, zPos);
+        const curveX = driveStore.getRoadCurveX ? driveStore.getRoadCurveX(zPos) : 0;
+        treeDummy.position.set(item.x + curveX, elev + 1.8 * item.scale, zPos);
         treeDummy.scale.set(item.scale, item.scale, item.scale);
         treeDummy.updateMatrix();
         treesRef.current.setMatrixAt(i, treeDummy.matrix);
@@ -249,17 +279,34 @@ export function DriveWorld({ lightingMode }) {
       treesRef.current.instanceMatrix.needsUpdate = true;
     }
 
-    // Scroll illuminated Alpine Tunnel Arches (Galleria zone)
+    // Scroll illuminated Alpine Tunnel Arches (Galleria zone & F-Zero Magnetic Tunnel)
+    const isFZeroTunnel = Boolean(
+      driveStore.trackEvent &&
+      driveStore.trackEvent.type === 'fzero_tunnel' &&
+      driveStore.trackEvent.blend > 0.05
+    );
+    const showArches = isGalleria || isFZeroTunnel;
+
     if (tunnelArchesRef.current) {
-      tunnelArchesRef.current.visible = isGalleria;
-      if (isGalleria) {
+      tunnelArchesRef.current.visible = showArches;
+      if (showArches) {
+        if (tunnelArchesRef.current.material) {
+          if (isFZeroTunnel) {
+            tunnelArchesRef.current.material.emissive.set('#06b6d4');
+            tunnelArchesRef.current.material.emissiveIntensity = 0.85;
+          } else {
+            tunnelArchesRef.current.material.emissive.set('#f59e0b');
+            tunnelArchesRef.current.material.emissiveIntensity = 0.35;
+          }
+        }
         const totalSpan = archCount * ARCH_SPACING;
         for (let i = 0; i < archCount; i++) {
           const localZ = ((i * ARCH_SPACING - offset) % totalSpan);
           const zPos = localZ < -25 ? localZ + totalSpan : localZ;
           const elev = driveStore.getRoadElevation(zPos);
           const pitch = -Math.atan(driveStore.getRoadSlope(zPos));
-          archDummy.position.set(0, elev + 0.1, zPos);
+          const curveX = driveStore.getRoadCurveX ? driveStore.getRoadCurveX(zPos) : 0;
+          archDummy.position.set(curveX, elev + 0.1, zPos);
           archDummy.rotation.set(pitch, 0, 0);
           archDummy.updateMatrix();
           tunnelArchesRef.current.setMatrixAt(i, archDummy.matrix);
@@ -416,7 +463,7 @@ export function DriveWorld({ lightingMode }) {
         position={[0, -0.002, 0]}
         receiveShadow
       >
-        <planeGeometry args={[ROAD_WIDTH, ROAD_LENGTH, 1, ROAD_Z_SEGMENTS]} />
+        <planeGeometry args={[ROAD_WIDTH, ROAD_LENGTH, ROAD_X_SEGMENTS, ROAD_Z_SEGMENTS]} />
         <meshStandardMaterial
           ref={roadMatRef}
           map={roadTexture}
@@ -552,7 +599,192 @@ export function DriveWorld({ lightingMode }) {
 
       {/* 9. Dynamic Track Entities (Obstacles, Coins, Power-ups) */}
       <TrackEntities />
+
+      {/* 10. High-Dopamine Track Event 3D Portal & Ideal Drift Line */}
+      <EventEntryPortal />
+      <IdealLaneRibbon />
     </group>
+  );
+}
+
+// 🚧 High-Dopamine Track Event 3D Entry Portal with Lane Signboards & Gantry
+export function EventEntryPortal() {
+  const trackEvent = driveStore.trackEvent;
+  const isVisible = Boolean(trackEvent && trackEvent.phase === 'funnel');
+
+  if (!isVisible) return null;
+
+  const timer = trackEvent.timer !== undefined ? trackEvent.timer : 3.0;
+  const entryLane = trackEvent.entryLane !== undefined ? trackEvent.entryLane : 0;
+  const z = Math.max(4, timer * 15);
+  const elev = driveStore.getRoadElevation(z);
+  const curveX = driveStore.getRoadCurveX ? driveStore.getRoadCurveX(z) : 0;
+  const pitch = -Math.atan(driveStore.getRoadSlope(z));
+
+  return (
+    <group position={[curveX, elev, z]} rotation={[pitch, 0, 0]}>
+      {/* Heavy Steel Gantry Pillars (Left & Right) */}
+      <mesh position={[-ROAD_WIDTH * 0.5 - 0.28, 1.45, 0]} castShadow>
+        <boxGeometry args={[0.22, 2.9, 0.22]} />
+        <meshStandardMaterial color="#334155" metalness={0.7} roughness={0.3} />
+      </mesh>
+      <mesh position={[ROAD_WIDTH * 0.5 + 0.28, 1.45, 0]} castShadow>
+        <boxGeometry args={[0.22, 2.9, 0.22]} />
+        <meshStandardMaterial color="#334155" metalness={0.7} roughness={0.3} />
+      </mesh>
+
+      {/* Overhead Gantry Crossbar spanning all 3 lanes */}
+      <mesh position={[0, 2.7, 0]} castShadow>
+        <boxGeometry args={[ROAD_WIDTH + 0.95, 0.32, 0.28]} />
+        <meshStandardMaterial color="#1e293b" metalness={0.8} roughness={0.25} />
+      </mesh>
+
+      {/* 3 Overhead Lane Signboards for lanes [-1, 0, 1] */}
+      {[-1, 0, 1].map((lane) => {
+        const laneX = laneToX(lane);
+        const isEntry = lane === entryLane;
+
+        return (
+          <group key={`portal_sign_${lane}`} position={[laneX, 2.22, 0]}>
+            {/* Dark Backing Panel */}
+            <mesh position={[0, 0, 0]}>
+              <boxGeometry args={[1.2, 0.65, 0.08]} />
+              <meshStandardMaterial color="#0f172a" roughness={0.35} metalness={0.6} />
+            </mesh>
+
+            {/* Glowing Outer Border Frame */}
+            <mesh position={[0, 0, 0.044]}>
+              <boxGeometry args={[1.24, 0.69, 0.01]} />
+              <meshStandardMaterial
+                color={isEntry ? '#10b981' : '#ef4444'}
+                emissive={isEntry ? '#10b981' : '#ef4444'}
+                emissiveIntensity={2.0}
+                roughness={0.2}
+              />
+            </mesh>
+
+            {isEntry ? (
+              /* Glowing Green/Gold Chevron Arrow Indicator (Open Event Entry) */
+              <group position={[0, 0, 0.055]}>
+                <mesh position={[-0.14, 0.04, 0]} rotation={[0, 0, -Math.PI / 4]}>
+                  <boxGeometry args={[0.3, 0.08, 0.02]} />
+                  <meshStandardMaterial
+                    color="#fbbf24"
+                    emissive="#10b981"
+                    emissiveIntensity={3.2}
+                  />
+                </mesh>
+                <mesh position={[0.14, 0.04, 0]} rotation={[0, 0, Math.PI / 4]}>
+                  <boxGeometry args={[0.3, 0.08, 0.02]} />
+                  <meshStandardMaterial
+                    color="#fbbf24"
+                    emissive="#10b981"
+                    emissiveIntensity={3.2}
+                  />
+                </mesh>
+                <mesh position={[0, -0.08, 0]}>
+                  <boxGeometry args={[0.08, 0.18, 0.02]} />
+                  <meshStandardMaterial
+                    color="#fbbf24"
+                    emissive="#10b981"
+                    emissiveIntensity={3.2}
+                  />
+                </mesh>
+              </group>
+            ) : (
+              /* Glowing Red Warning Cross (Closed Lane) */
+              <group position={[0, 0, 0.055]}>
+                <mesh rotation={[0, 0, Math.PI / 4]}>
+                  <boxGeometry args={[0.42, 0.08, 0.02]} />
+                  <meshStandardMaterial
+                    color="#ef4444"
+                    emissive="#ef4444"
+                    emissiveIntensity={2.8}
+                  />
+                </mesh>
+                <mesh rotation={[0, 0, -Math.PI / 4]}>
+                  <boxGeometry args={[0.42, 0.08, 0.02]} />
+                  <meshStandardMaterial
+                    color="#ef4444"
+                    emissive="#ef4444"
+                    emissiveIntensity={2.8}
+                  />
+                </mesh>
+              </group>
+            )}
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
+// ⚡ Glowing Golden Ideal-Lane Ribbon on road surface during Parabolic Drift
+export function IdealLaneRibbon() {
+  const SEGMENTS = 36;
+  const RIBBON_LEN = 65;
+  const HALF_W = 0.26;
+
+  const geo = useMemo(() => {
+    const geometry = new THREE.BufferGeometry();
+    const posArr = new Float32Array((SEGMENTS + 1) * 2 * 3);
+    const indices = [];
+
+    for (let i = 0; i < SEGMENTS; i++) {
+      const v0 = i * 2;
+      const v1 = i * 2 + 1;
+      const v2 = (i + 1) * 2;
+      const v3 = (i + 1) * 2 + 1;
+      indices.push(v0, v2, v1);
+      indices.push(v1, v2, v3);
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+    geometry.setIndex(indices);
+    return geometry;
+  }, []);
+
+  const trackEvent = driveStore.trackEvent;
+  const isVisible = Boolean(
+    trackEvent &&
+    trackEvent.type === 'parabolic_drift' &&
+    trackEvent.phase === 'active'
+  );
+
+  useFrame(() => {
+    if (!isVisible) return;
+    const pos = geo.attributes.position;
+    const idealLane = trackEvent && trackEvent.idealLane !== undefined ? trackEvent.idealLane : 0;
+    const baseIdealX = laneToX(idealLane);
+
+    for (let i = 0; i <= SEGMENTS; i++) {
+      const z = (i / SEGMENTS) * RIBBON_LEN;
+      const elev = driveStore.getRoadElevation(z);
+      const curveX = driveStore.getRoadCurveX ? driveStore.getRoadCurveX(z) : 0;
+      const centerX = baseIdealX + curveX;
+      const y = elev + 0.025;
+
+      pos.setXYZ(i * 2, centerX - HALF_W, y, z);
+      pos.setXYZ(i * 2 + 1, centerX + HALF_W, y, z);
+    }
+    pos.needsUpdate = true;
+  });
+
+  if (!isVisible) return null;
+
+  return (
+    <mesh geometry={geo}>
+      <meshStandardMaterial
+        color="#fbbf24"
+        emissive="#f59e0b"
+        emissiveIntensity={2.2}
+        roughness={0.2}
+        metalness={0.4}
+        transparent
+        opacity={0.85}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
   );
 }
 
@@ -570,7 +802,8 @@ function TrackEntities() {
       {/* Obstacles & Stunt Ramps */}
       {obstacles.map((obs) => {
         if (!obs.active && !obs.knockedOut) return null;
-        const xPos = obs.knockedOut && obs.knockX !== undefined ? obs.knockX : laneToX(obs.lane);
+        const curveX = driveStore.getRoadCurveX ? driveStore.getRoadCurveX(obs.z) : 0;
+        const xPos = (obs.knockedOut && obs.knockX !== undefined ? obs.knockX : laneToX(obs.lane)) + curveX;
         const y = driveStore.getRoadElevation(obs.z);
         const pitch = -Math.atan(driveStore.getRoadSlope(obs.z));
 
@@ -600,7 +833,8 @@ function TrackEntities() {
       {/* Gold Quadrifoglio Coins (Ground & Aerial Jump Arcs) */}
       {coins.map((coin) => {
         if (!coin.active) return null;
-        const x = coin.xOverride !== undefined ? coin.xOverride : laneToX(coin.lane);
+        const curveX = driveStore.getRoadCurveX ? driveStore.getRoadCurveX(coin.z) : 0;
+        const x = (coin.xOverride !== undefined ? coin.xOverride : laneToX(coin.lane)) + curveX;
         const y = driveStore.getRoadElevation(coin.z);
         return <GoldCoin key={coin.id} x={x} y={y} z={coin.z} yOffset={coin.yOffset || 0} />;
       })}
@@ -609,7 +843,8 @@ function TrackEntities() {
       {isWebMagnet &&
         coins.map((coin) => {
           if (!coin.active || coin.z <= -0.5 || coin.z >= 16.0) return null;
-          const x = coin.xOverride !== undefined ? coin.xOverride : laneToX(coin.lane);
+          const curveX = driveStore.getRoadCurveX ? driveStore.getRoadCurveX(coin.z) : 0;
+          const x = (coin.xOverride !== undefined ? coin.xOverride : laneToX(coin.lane)) + curveX;
           const y = driveStore.getRoadElevation(coin.z);
           return (
             <SpiderWebTether

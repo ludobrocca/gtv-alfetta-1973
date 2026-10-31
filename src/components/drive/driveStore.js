@@ -49,6 +49,14 @@ export const TAKEDOWN_CAM_TIMESCALE = 0.3;
 export const TAKEDOWN_SURGE_POINTS = 2500;
 export const INTRO_CAM_DURATION = 2.6; // PS2 Need for Speed style intro motion camera (s)
 
+// Track Events Adrenaline Constants
+export const TRACK_EVENT_TYPES = ['fzero_tunnel', 'parabolic_drift', 'viaduct_ramps'];
+export const TRACK_EVENT_INTERVAL_METERS = 1200;
+export const TRACK_EVENT_FUNNEL_DURATION = 3.0;
+export const TRACK_EVENT_ACTIVE_DURATION = 7.5;
+export const TRACK_EVENT_EXIT_DURATION = 1.5;
+export const TRACK_EVENT_COMPLETION_BONUS = 1500;
+
 // In Three.js with camera at -Z looking toward +Z, +X is Screen-LEFT and -X is Screen-RIGHT.
 // Mapping lane (-1 = Left, 0 = Center, +1 = Right) to -lane * LANE_WIDTH makes Left = Left and Right = Right!
 export function laneToX(lane) {
@@ -140,6 +148,12 @@ class DriveStore {
     this.takedownCamsCount = 0; // takedown cams triggered count
     this.introCamTimer = 0;     // PS2 Need for Speed style intro motion camera timer (s)
 
+    // Track Event Adrenaline State
+    this.trackEvent = null;
+    this.nextTrackEventDistance = TRACK_EVENT_INTERVAL_METERS;
+    this.trackEventIndex = 0;
+    this.trackEventsCompleted = 0;
+
     // 3D Diegetic VFX Timers
     this.shiftFlashTimer = 0;
     this.takedownSparkTimer = 0;
@@ -213,6 +227,54 @@ class DriveStore {
     const yAhead = this.getRoadElevation(localZ + eps);
     const yBehind = this.getRoadElevation(localZ - eps);
     return (yAhead - yBehind) / (2 * eps);
+  }
+
+  // Lateral road curve deformation for Parabolic Drift
+  getRoadCurveX(localZ = 0) {
+    if (
+      this.trackEvent &&
+      this.trackEvent.type === 'parabolic_drift' &&
+      this.trackEvent.blend > 0 &&
+      localZ > 0
+    ) {
+      return -this.trackEvent.curveDir * this.trackEvent.blend * 0.0028 * localZ * localZ;
+    }
+    return 0;
+  }
+
+  // 3D Road deformation parameters (width scale, banking angle, wall curvature, verge drop)
+  getRoadEventParams(localZ = 0) {
+    if (!this.trackEvent || !this.trackEvent.blend || this.trackEvent.blend <= 0) {
+      return { widthScale: 1, bankAngle: 0, wallCurvature: 0, vergeDropY: 0 };
+    }
+    const b = this.trackEvent.blend;
+    const type = this.trackEvent.type;
+
+    if (type === 'fzero_tunnel') {
+      return {
+        widthScale: 1 - 0.18 * b,
+        bankAngle: 0,
+        wallCurvature: 0.45 * b,
+        vergeDropY: 0,
+      };
+    }
+    if (type === 'parabolic_drift') {
+      return {
+        widthScale: 1,
+        bankAngle: this.trackEvent.curveDir * 0.22 * b,
+        wallCurvature: 0,
+        vergeDropY: 0,
+      };
+    }
+    if (type === 'viaduct_ramps') {
+      return {
+        widthScale: 1 - 0.12 * b,
+        bankAngle: 0,
+        wallCurvature: 0,
+        vergeDropY: -7.5 * b,
+      };
+    }
+    return { widthScale: 1, bankAngle: 0, wallCurvature: 0, vergeDropY: 0 };
   }
 
   getCurrentZone() {
@@ -346,6 +408,12 @@ class DriveStore {
     this.takedownSurge = null;
     this.takedownCamsCount = 0;
     this.introCamTimer = 0;
+
+    // Reset Track Event Adrenaline State
+    this.trackEvent = null;
+    this.nextTrackEventDistance = TRACK_EVENT_INTERVAL_METERS;
+    this.trackEventIndex = 0;
+    this.trackEventsCompleted = 0;
 
     // 3D Diegetic VFX Timers
     this.shiftFlashTimer = 0;
@@ -746,6 +814,7 @@ class DriveStore {
     this.timeScale = 1;
     this.introCamTimer = 0;
     this.takedownSurge = null;
+    this.trackEvent = null;
     Object.keys(this.activePowerups).forEach((k) => {
       this.activePowerups[k] = 0;
     });
@@ -905,6 +974,220 @@ class DriveStore {
     this.lastUserInteraction = performance.now();
   }
 
+  // --- Track Event Adrenaline State Machine ---
+  startTrackEvent(forcedType, forcedLane) {
+    const type = forcedType || TRACK_EVENT_TYPES[this.trackEventIndex % 3];
+    this.trackEventIndex++;
+    const entryLane = forcedLane !== undefined ? forcedLane : [-1, 0, 1][Math.floor(Math.random() * 3)];
+    const curveDir = entryLane !== 0 ? entryLane : (this.trackEventIndex % 2 === 0 ? 1 : -1);
+    this.trackEvent = {
+      type,
+      phase: 'funnel',
+      timer: TRACK_EVENT_FUNNEL_DURATION,
+      entryLane,
+      curveDir,
+      idealLane: entryLane,
+      blend: 0,
+      driftTickTimer: 0,
+      spawnTickTimer: 0,
+    };
+    this.obstacles = this.obstacles.filter((o) => o.z <= 12);
+    [-1, 0, 1].forEach((l) => {
+      if (l !== entryLane) {
+        this.obstacles.push({
+          id: `funnel_barrier_${Date.now()}_${l}_${Math.random()}`,
+          type: 'barrier',
+          lane: l,
+          z: 34,
+          active: true,
+        });
+      }
+    });
+    driveAudio.playEventWarningBeep();
+    this.notify();
+    return this.trackEvent;
+  }
+
+  updateTrackEvent(dt) {
+    if (!this.trackEvent) {
+      if (this.nextSpawnZ <= 1000 && this.distanceMeters >= this.nextTrackEventDistance) {
+        this.startTrackEvent();
+      }
+      return;
+    }
+
+    const event = this.trackEvent;
+
+    if (event.phase === 'funnel') {
+      event.timer -= dt;
+      if (event.timer <= 0) {
+        event.phase = 'active';
+        event.timer = TRACK_EVENT_ACTIVE_DURATION;
+        event.spawnTickTimer = 0;
+        event.driftTickTimer = 0;
+
+        // Clear all obstacles so player cannot crash inside the event
+        this.obstacles = [];
+
+        this.targetLane = event.entryLane;
+        this.addFury(1);
+        driveAudio.playFZeroBoostHum();
+
+        // Spawn initial event entities
+        if (event.type === 'fzero_tunnel') {
+          const lanes = [-1, 0, 1];
+          let sIdx = 0;
+          for (let z = 12; z <= 60; z += 3.5, sIdx++) {
+            this.coins.push({
+              id: `coin_fzero_init_${z}_${lanes[sIdx % 3]}_${Math.random()}`,
+              lane: lanes[sIdx % 3],
+              z,
+              active: true,
+            });
+          }
+        } else if (event.type === 'parabolic_drift') {
+          for (let z = 12; z <= 54; z += 3.5) {
+            this.coins.push({
+              id: `coin_drift_init_${z}_${Math.random()}`,
+              lane: event.idealLane,
+              z,
+              active: true,
+            });
+          }
+        } else if (event.type === 'viaduct_ramps') {
+          [18, 42, 66].forEach((zRamp, rIdx) => {
+            this.obstacles.push({
+              id: `ramp_viaduct_${zRamp}_${rIdx}_${Math.random()}`,
+              type: 'ramp',
+              lane: 0,
+              z: zRamp,
+              active: true,
+            });
+            for (let k = 0; k < 3; k++) {
+              this.coins.push({
+                id: `coin_air_viaduct_${zRamp}_${k}_${Math.random()}`,
+                lane: 0,
+                z: zRamp + 2.0 + k * 2.2,
+                yOffset: 1.45,
+                active: true,
+              });
+            }
+          });
+        }
+      }
+    } else if (event.phase === 'active') {
+      event.blend = Math.min(1, event.blend + dt * 1.6);
+
+      // Remove any non-ramp obstacles so zero lethal obstacles exist during active
+      this.obstacles = this.obstacles.filter((o) => o.type === 'ramp');
+
+      // Specific event dynamics & spawns
+      if (event.type === 'fzero_tunnel') {
+        if (this.speedKmh < 235) {
+          this.speedKmh = Math.min(235, this.speedKmh + 95 * dt);
+        } else if (this.speedKmh > 235) {
+          this.speedKmh = Math.max(235, this.speedKmh - 95 * dt);
+        }
+        this.shiftFlashTimer = Math.max(this.shiftFlashTimer, 0.2);
+        this.carRoll = -this.targetLane * 0.52 * event.blend;
+
+        event.spawnTickTimer = (event.spawnTickTimer || 0) + dt;
+        if (event.spawnTickTimer >= 0.9) {
+          event.spawnTickTimer -= 0.9;
+          const lanes = [-1, 0, 1];
+          for (let k = 0; k < 3; k++) {
+            this.coins.push({
+              id: `coin_spiral_rep_${Date.now()}_${k}_${Math.random()}`,
+              lane: lanes[k],
+              z: 56 + k * 3.5,
+              active: true,
+            });
+          }
+        }
+      } else if (event.type === 'parabolic_drift') {
+        if (this.speedKmh < 185) {
+          this.speedKmh = Math.min(185, this.speedKmh + 75 * dt);
+        } else if (this.speedKmh > 185) {
+          this.speedKmh = Math.max(185, this.speedKmh - 75 * dt);
+        }
+        this.carYaw = event.curveDir * 0.34 * event.blend;
+
+        event.driftTickTimer = (event.driftTickTimer || 0) + dt;
+        while (event.driftTickTimer >= 0.5) {
+          event.driftTickTimer -= 0.5;
+          if (this.targetLane === event.idealLane) {
+            this.score += 250 * this.furyMultiplier;
+            this.addFury(1);
+            this.addUltimateCharge(4);
+          }
+        }
+
+        event.spawnTickTimer = (event.spawnTickTimer || 0) + dt;
+        if (event.spawnTickTimer >= 0.9) {
+          event.spawnTickTimer -= 0.9;
+          for (let k = 0; k < 3; k++) {
+            this.coins.push({
+              id: `coin_drift_rep_${Date.now()}_${k}_${Math.random()}`,
+              lane: event.idealLane,
+              z: 56 + k * 3.5,
+              active: true,
+            });
+          }
+        }
+      } else if (event.type === 'viaduct_ramps') {
+        if (this.speedKmh < 195) {
+          this.speedKmh = Math.min(195, this.speedKmh + 80 * dt);
+        } else if (this.speedKmh > 195) {
+          this.speedKmh = Math.max(195, this.speedKmh - 80 * dt);
+        }
+
+        event.spawnTickTimer = (event.spawnTickTimer || 0) + dt;
+        if (event.spawnTickTimer >= 2.2) {
+          event.spawnTickTimer -= 2.2;
+          const activeRamps = this.obstacles.filter(
+            (o) => o.type === 'ramp' && o.active && o.z > 0
+          );
+          if (activeRamps.length < 2) {
+            const rampZ = 58;
+            this.obstacles.push({
+              id: `ramp_viaduct_rep_${Date.now()}_${Math.random()}`,
+              type: 'ramp',
+              lane: 0,
+              z: rampZ,
+              active: true,
+            });
+            for (let k = 0; k < 3; k++) {
+              this.coins.push({
+                id: `coin_air_viaduct_rep_${Date.now()}_${k}_${Math.random()}`,
+                lane: 0,
+                z: rampZ + 2.0 + k * 2.2,
+                yOffset: 1.45,
+                active: true,
+              });
+            }
+          }
+        }
+      }
+
+      event.timer -= dt;
+      if (event.timer <= 0) {
+        event.phase = 'exiting';
+        event.timer = TRACK_EVENT_EXIT_DURATION;
+        this.score += TRACK_EVENT_COMPLETION_BONUS * this.furyMultiplier;
+        this.addUltimateCharge(15);
+        this.addFury(1);
+        this.trackEventsCompleted++;
+        this.nextTrackEventDistance = this.distanceMeters + TRACK_EVENT_INTERVAL_METERS;
+      }
+    } else if (event.phase === 'exiting') {
+      event.blend = Math.max(0, event.blend - dt * 0.8);
+      event.timer -= dt;
+      if (event.timer <= 0) {
+        this.trackEvent = null;
+      }
+    }
+  }
+
   // 60fps RequestAnimationFrame Loop
   update(delta) {
     const realDt = Math.min(delta, 0.1);
@@ -1021,10 +1304,12 @@ class DriveStore {
         ? gearAccel * SHIFT_BOOST_ACCEL_MULT
         : gearAccel;
 
-    if (this.speedKmh < targetSpeed) {
-      this.speedKmh = Math.min(targetSpeed, this.speedKmh + accelRate * dt);
-    } else if (this.speedKmh > targetSpeed) {
-      this.speedKmh = Math.max(targetSpeed, this.speedKmh - 32.0 * dt);
+    if (!(this.trackEvent && this.trackEvent.phase === 'active')) {
+      if (this.speedKmh < targetSpeed) {
+        this.speedKmh = Math.min(targetSpeed, this.speedKmh + accelRate * dt);
+      } else if (this.speedKmh > targetSpeed) {
+        this.speedKmh = Math.max(targetSpeed, this.speedKmh - 32.0 * dt);
+      }
     }
 
     if (this.boostTimer > 0) {
@@ -1073,6 +1358,9 @@ class DriveStore {
 
     this.roadOffset += distUnits;
     this.distanceMeters += speedMps * dt;
+
+    // Track Event State Machine & Adrenaline Dynamics
+    this.updateTrackEvent(dt);
 
     // Scenic Zone transition every 420 meters
     const newZoneIndex = Math.floor(this.distanceMeters / 420) % SCENIC_ZONES.length;
@@ -1313,6 +1601,22 @@ class DriveStore {
   }
 
   spawnEntityPack() {
+    // Suppress obstacle spawning during track events (funnel only spawns coins on entryLane)
+    if (this.trackEvent) {
+      if (this.trackEvent.phase === 'funnel') {
+        const lane = this.trackEvent.entryLane !== undefined ? this.trackEvent.entryLane : 0;
+        for (let k = 0; k < 4; k++) {
+          this.coins.push({
+            id: `coin_funnel_${Date.now()}_${k}_${Math.random()}`,
+            lane,
+            z: 58 + k * 3.2,
+            active: true,
+          });
+        }
+      }
+      return;
+    }
+
     const lanes = [-1, 0, 1];
     const spawnZ = 58;
     const roll = Math.random();

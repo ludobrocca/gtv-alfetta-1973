@@ -28,6 +28,7 @@ class DriveAudioManager {
 
   init() {
     if (this.ctx) return;
+    if (typeof window === 'undefined') return;
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
     this.ctx = new AudioCtx();
@@ -877,6 +878,66 @@ class DriveAudioManager {
       warnGain.connect(this.masterGain);
       warnOsc.start(pulseTime);
       warnOsc.stop(pulseTime + 0.12);
+    });
+  }
+
+  // Track Event Warning: Double synthetic rally dashboard warning beep (880Hz -> 1175Hz)
+  playEventWarningBeep() {
+    if (this.isMuted) return;
+    this.ensureContext();
+    if (!this.ctx) return;
+
+    const t = this.ctx.currentTime;
+    const beeps = [
+      { offset: 0.0, freq: 880 },
+      { offset: 0.11, freq: 1175 },
+    ];
+
+    beeps.forEach(({ offset, freq }) => {
+      const start = t + offset;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, start);
+
+      gain.gain.setValueAtTime(0.001, start);
+      gain.gain.linearRampToValueAtTime(0.24, start + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.085);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(start);
+      osc.stop(start + 0.09);
+    });
+  }
+
+  // F-Zero / Adrenaline Event Entry: Ascending electronic turbine chord (220Hz / 330Hz / 660Hz)
+  playFZeroBoostHum() {
+    if (this.isMuted) return;
+    this.ensureContext();
+    if (!this.ctx) return;
+
+    const t = this.ctx.currentTime;
+    const freqs = [220, 330, 660];
+    const dur = 0.85;
+
+    freqs.forEach((baseFreq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = idx === 0 ? 'sawtooth' : 'triangle';
+      osc.frequency.setValueAtTime(baseFreq, t);
+      osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, t + dur);
+
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.linearRampToValueAtTime(0.18 / (idx + 1), t + 0.06);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + dur + 0.02);
     });
   }
 }

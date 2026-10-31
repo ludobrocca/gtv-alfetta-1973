@@ -1255,7 +1255,7 @@ class DriveStore {
     }
 
     // Fury multiplier decay (AC-007)
-    if (this.furyTimer > 0) {
+    if (this.furyTimer > 0 && !(this.trackEvent && this.trackEvent.phase === 'active')) {
       this.furyTimer = Math.max(0, this.furyTimer - dt);
       if (this.furyTimer === 0 && this.furyMultiplier > 1) {
         this.furyMultiplier = Math.max(1, this.furyMultiplier - 1);
